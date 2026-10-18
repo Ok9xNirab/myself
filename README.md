@@ -168,3 +168,7 @@ This works between Macs only. iPhone and iPad builds keep their data on the devi
 ## Contributing
 
 Issues and pull requests are welcome. For larger changes, please open an issue first to discuss what you'd like to change.
+
+## License
+
+MySelf is released under the [MIT License](LICENSE). The bundled Bengali fonts are under the SIL Open Font License; their licence files are in `Myself/Fonts/`.
