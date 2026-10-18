@@ -9,7 +9,7 @@ struct QuickOpenView: View {
     @FocusState private var focused: Bool
 
     private struct Result: Identifiable {
-        enum Target { case page(Page), settings }
+        enum Target { case page(Page), note(ID), settings }
         let id = UUID()
         let group: String
         let title: String
@@ -41,12 +41,16 @@ struct QuickOpenView: View {
         if on(.jobStudy) {
             results += store.jobStudy.flatMap { s in s.topics.map { Result(group: "Job Study", title: $0.name, subtitle: s.subject, systemImage: Page.jobStudy.systemImage, page: .jobStudy) } }
         }
+        if on(.notes) {
+            results += store.notes.map { Result(group: "Notes", title: $0.displayTitle, subtitle: store.noteCategory($0.categoryID)?.name ?? "", systemImage: Page.notes.systemImage, target: .note($0.id)) }
+        }
         return results
     }
 
     private func open(_ r: Result) {
         switch r.target {
         case .page(let page): store.go(page)
+        case .note(let id): store.openNote(id)
         case .settings: store.openSettings(.general)
         }
     }

@@ -78,6 +78,7 @@ private struct PageView: View {
         case .jobStudy: JobStudyView()
         case .products: ProductsView()
         case .workout: WorkoutView()
+        case .notes: NotesView()
         }
     }
 }

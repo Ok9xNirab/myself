@@ -201,3 +201,82 @@ enum SampleData {
         )
     }
 }
+
+// MARK: Notes
+
+extension SampleData {
+    /// Default categories. Fixed IDs and `.distantPast` stop two Macs seeding duplicates or undoing renames.
+    static let noteCategories: [NoteCategory] = [
+        NoteCategory(id: "nc1", name: "University", hex: 0xAF52DE, sortOrder: 0),
+        NoteCategory(id: "nc2", name: "Algorithms", hex: 0x007AFF, sortOrder: 1),
+        NoteCategory(id: "nc3", name: "বাংলা নোট", hex: 0xFF9500, sortOrder: 2),
+        NoteCategory(id: "nc4", name: "Personal", hex: 0x34C759, sortOrder: 3),
+    ]
+
+    static func notes() -> [Note] {
+        typealias B = NoteBlock
+        let ago = { (hours: Double) in Date.now.addingTimeInterval(-hours * 3600) }
+        func note(_ id: ID, _ category: ID, _ title: String, pinned: Bool = false, hoursAgo: Double, font: NoteFont? = nil, _ blocks: [NoteBlock]) -> Note {
+            Note(id: id, categoryID: category, title: title, pinned: pinned, blocks: blocks, font: font, createdAt: ago(hoursAgo + 72), editedAt: ago(hoursAgo), updatedAt: ago(hoursAgo))
+        }
+        return [
+            note("np1", "nc1", "Eigenvalues & Eigenvectors", pinned: true, hoursAgo: 2, [
+                B(.p, #"Lecture 7 · Linear Algebra. For a square matrix $A$, a non-zero vector $\mathbf{v}$ is an **eigenvector** if multiplying by $A$ only scales it:"#),
+                B(.math, #"A\mathbf{v} = \lambda \mathbf{v}, \qquad \mathbf{v} \neq \mathbf{0}"#),
+                B(.h2, "Finding eigenvalues"),
+                B(.p, "Solve the *characteristic equation* — its roots are the eigenvalues."),
+                B(.math, #"\det(A - \lambda I) = 0"#),
+                B(.h3, "Worked example"),
+                B(.math, #"A = \begin{pmatrix} 2 & 1 \\ 1 & 2 \end{pmatrix} \;\Rightarrow\; \lambda^2 - 4\lambda + 3 = 0 \;\Rightarrow\; \lambda \in \{1,\, 3\}"#),
+                B(.bullet, #"Sum of eigenvalues equals the trace: $\operatorname{tr}(A) = \sum_i \lambda_i$"#),
+                B(.bullet, #"Product equals the determinant: $\det A = \prod_i \lambda_i$"#),
+                B(.bullet, "Symmetric matrices have ==real eigenvalues== and orthogonal eigenvectors"),
+                B(.h2, "Check with NumPy"),
+                B(.code, "import numpy as np\n\nA = np.array([[2, 1],\n              [1, 2]])\nvals, vecs = np.linalg.eig(A)\nprint(vals)  # [3. 1.]", lang: .python),
+                B(.todo, "Problem set 4 — questions 1–6", done: false),
+                B(.todo, "Review proof of the spectral theorem", done: true),
+            ]),
+            note("np2", "nc1", "Bayes\u{2019} theorem", hoursAgo: 26, [
+                B(.p, #"Update a prior belief $P(A)$ after observing evidence $B$."#),
+                B(.math, #"P(A \mid B) = \frac{P(B \mid A)\,P(A)}{P(B)}"#),
+                B(.quote, "The denominator is just a normaliser — expand it with the law of total probability."),
+            ]),
+            note("np3", "nc2", "Binary search template", pinned: true, hoursAgo: 5, [
+                B(.p, #"Works on any **monotonic** predicate, not only sorted arrays. Runs in $O(\log n)$ time and $O(1)$ space."#),
+                B(.code, "int lowerBound(const vector<int>& a, int target) {\n    int lo = 0, hi = a.size();\n    while (lo < hi) {\n        int mid = lo + (hi - lo) / 2;\n        if (a[mid] < target) lo = mid + 1;\n        else hi = mid;\n    }\n    return lo;  // first index with a[lo] >= target\n}", lang: .cpp),
+                B(.h3, "Pitfalls"),
+                B(.num, "Use `lo + (hi - lo) / 2` to avoid integer overflow"),
+                B(.num, "Keep the invariant: the answer is always inside `[lo, hi]`"),
+                B(.num, "Pick half-open or closed intervals ~~as you go~~ before writing code"),
+                B(.quote, "If the loop can run forever, one branch isn\u{2019}t shrinking the range."),
+            ]),
+            note("np4", "nc2", "SQL window functions", hoursAgo: 72, [
+                B(.p, "Rank rows inside a group without collapsing them like `GROUP BY` does."),
+                B(.code, "SELECT name, dept, salary,\n       RANK() OVER (PARTITION BY dept ORDER BY salary DESC) AS rnk\nFROM employees\nWHERE active = TRUE;", lang: .sql),
+            ]),
+            note("np5", "nc3", "নিউটনের গতির সূত্র", hoursAgo: 0.66, font: NoteFont(bengali: .hind), [
+                B(.p, "বল ও গতির সম্পর্ক বোঝার জন্য নিউটনের তিনটি সূত্র মৌলিক। পরীক্ষার আগে সংক্ষেপে পুনরাবৃত্তি।"),
+                B(.h2, "দ্বিতীয় সূত্র"),
+                B(.p, "কোনো বস্তুর ভরবেগের পরিবর্তনের হার তার উপর প্রযুক্ত বলের সমানুপাতিক। ভর স্থির থাকলে লেখা যায় $F = ma$।"),
+                B(.math, #"\vec{F} = \frac{d\vec{p}}{dt} = m\,\frac{d\vec{v}}{dt}"#),
+                B(.bullet, "প্রথম সূত্র — জড়তার নিয়ম"),
+                B(.bullet, "দ্বিতীয় সূত্র — **বল = ভর × ত্বরণ**"),
+                B(.bullet, "তৃতীয় সূত্র — প্রতিটি ক্রিয়ার সমান ও বিপরীত প্রতিক্রিয়া আছে"),
+                B(.quote, "মনে রাখো: বলের একক নিউটন (N) = kg·m/s²"),
+                B(.code, "# ত্বরণ নির্ণয়\ndef acceleration(force, mass):\n    return force / mass\n\nprint(acceleration(20, 4))  # 5.0", lang: .python),
+                B(.todo, "অনুশীলনী ৩.২ সমাধান করা", done: false),
+                B(.todo, "ল্যাব রিপোর্ট জমা দেওয়া", done: true),
+            ]),
+            note("np6", "nc3", "সাপ্তাহিক পরিকল্পনা", hoursAgo: 48, [
+                B(.p, "এই সপ্তাহের লক্ষ্য: **তিনটি অধ্যায়** শেষ করা আর প্রতিদিন ৩০ মিনিট পড়া।"),
+                B(.todo, "সোমবার — ক্যালকুলাস অনুশীলন", done: true),
+                B(.todo, "বুধবার — রসায়ন ল্যাবের প্রস্তুতি", done: false),
+                B(.todo, "শুক্রবার — Job Study: System Design", done: false),
+            ]),
+            note("np7", "nc4", "Reading list", hoursAgo: 144, [
+                B(.todo, "Designing Data-Intensive Applications — ch. 5–6", done: false),
+                B(.todo, "The Pragmatic Programmer", done: true),
+            ]),
+        ]
+    }
+}

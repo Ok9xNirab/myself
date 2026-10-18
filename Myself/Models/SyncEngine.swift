@@ -155,7 +155,7 @@ final class SyncEngine {
         watcher?.stop()
         cache = [:]
         let root = root
-        for folder in [Todo.folder, TaskLabel.folder] {
+        for folder in [Todo.folder, TaskLabel.folder, NoteCategory.folder, Note.folder] {
             try? FileManager.default.createDirectory(at: root.appending(path: folder, directoryHint: .isDirectory), withIntermediateDirectories: true)
         }
         let reload: @MainActor () -> Void = { [weak self] in self?.scheduleReload() }

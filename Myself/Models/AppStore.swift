@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Page: String, CaseIterable, Identifiable, Hashable {
-    case dashboard, todos, university, office, jobStudy, products, workout
+    case dashboard, todos, university, office, jobStudy, products, workout, notes
 
     var id: Self { self }
 
@@ -14,6 +14,7 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
         case .jobStudy: "Job Study"
         case .products: "Product Dev"
         case .workout: "Workout"
+        case .notes: "Notes"
         }
     }
 
@@ -26,6 +27,7 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
         case .jobStudy: "Interview prep with revision tracking"
         case .products: "Your solo company, on Kanban boards"
         case .workout: "Programs, streaks & progress"
+        case .notes: "Pages by category — LaTeX, code & বাংলা"
         }
     }
 
@@ -38,6 +40,7 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
         case .jobStudy: "book.closed"
         case .products: "shippingbox"
         case .workout: "dumbbell"
+        case .notes: "note.text"
         }
     }
 
@@ -46,6 +49,7 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
         case .dashboard: "Overview"
         case .todos, .university, .office, .jobStudy: "Plan & Track"
         case .products: "Build"
+        case .notes: "Capture"
         case .workout: "Health"
         }
     }
@@ -63,6 +67,7 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
         case .jobStudy: "Interview prep with revision tracking"
         case .products: "Kanban boards for your products"
         case .workout: "Programs, streaks and progress"
+        case .notes: "Pages by category with LaTeX, code and Bengali"
         }
     }
 
@@ -75,11 +80,14 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
         case .dashboard, .office: Palette.blue
         case .todos: Palette.green
         case .university: Palette.violet
-        case .jobStudy: Palette.amber
+        case .jobStudy, .notes: Palette.amber
         case .products: Palette.cyan
         case .workout: Palette.red
         }
     }
+
+    /// Sidebar section order. `allCases` order can't drive it: new pages go last to keep the ⌘1–⌘9 shortcuts stable.
+    private static let groupOrder = ["Overview", "Plan & Track", "Build", "Capture", "Health"]
 
     /// Sidebar sections, in order, holding only the given pages.
     static func groups(_ pages: [Page]) -> [(name: String, pages: [Page])] {
@@ -87,13 +95,15 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
         for page in pages {
             if let i = out.firstIndex(where: { $0.0 == page.group }) { out[i].1.append(page) } else { out.append((page.group, [page])) }
         }
-        return out
+        return out.sorted { (groupOrder.firstIndex(of: $0.0) ?? .max) < (groupOrder.firstIndex(of: $1.0) ?? .max) }
     }
 }
 
 enum SettingsTab: Hashable { case general, features, iCloud }
 
-/// App state. TODOs and labels are persisted and synced through `SyncEngine`; the other features are still
+enum NoteRequest: Equatable { case open(ID), new }
+
+/// App state. TODOs, labels and notes are persisted and synced through `SyncEngine`; the other features are still
 /// in-memory sample content. Feature visibility is stored in UserDefaults.
 @Observable
 final class AppStore {
@@ -104,6 +114,8 @@ final class AppStore {
     var products: [Product] = []
     var jobStudy: [StudySubject] = []
     var workout = SampleData.workout()
+    private(set) var noteCategories: [NoteCategory] = []
+    private(set) var notes: [Note] = []
 
     // Navigation history (⌘[ / ⌘])
     private(set) var history: [Page] = [.dashboard]
@@ -113,12 +125,18 @@ final class AppStore {
     var settingsTab: SettingsTab = .general
     /// The todo open in the editor sheet; a todo that isn't in `todos` yet is a new one.
     var editingTodo: Todo?
+    /// Asks the Notes page to open or create a note (Quick Open, File › New Note); the page clears it.
+    var noteRequest: NoteRequest?
+
 
     let sync = SyncEngine()
     /// Last appearance/feature snapshot pushed to or pulled from `settings.json`.
     @ObservationIgnored private var syncedSettings: SyncedSettings?
     @ObservationIgnored private var applyingRemoteSettings = false
     @ObservationIgnored private var defaultsObserver: NSObjectProtocol?
+    /// Notes edited in memory but not written yet; typing is saved in one write once it pauses.
+    @ObservationIgnored private var unsavedNotes: Set<ID> = []
+    @ObservationIgnored private var noteSaveTask: Task<Void, Never>?
 
     /// Features turned off in Settings. Their data is kept; they're only hidden.
     private(set) var disabledPages: Set<Page> = Set(
@@ -134,19 +152,30 @@ final class AppStore {
             for label in SampleData.labels { sync.save(label, onlyIfNewer: true) }
             reloadSynced()
         }
+        if noteCategories.isEmpty, !sync.hasFiles(NoteCategory.self) {
+            for category in SampleData.noteCategories { sync.save(category, onlyIfNewer: true) }
+            reloadSynced()
+        }
         syncedSettings = localSettings()
         defaultsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.pushSettings() }
         }
     }
 
-    /// Settings › Reset: replaces todos and labels (in the sync folder too) and every other feature with the samples.
+    /// Settings › Reset: replaces todos, labels and notes (in the sync folder too) and every other feature with the samples.
     func loadSampleData() {
         for todo in todos { sync.delete(Todo.self, id: todo.id) }
         labels = SampleData.labels
         todos = SampleData.todos()
         for label in labels { sync.save(label) }
         for todo in todos { sync.save(todo) }
+        unsavedNotes = []
+        for note in notes { sync.delete(Note.self, id: note.id) }
+        for category in noteCategories { sync.delete(NoteCategory.self, id: category.id) }
+        noteCategories = SampleData.noteCategories
+        notes = SampleData.notes()
+        for category in noteCategories { sync.save(category) }
+        for note in notes { sync.save(note) }
         loadSampleFeatures()
     }
 
@@ -213,7 +242,7 @@ final class AppStore {
     /// Sidebar badge counts.
     func count(for page: Page) -> Int {
         switch page {
-        case .dashboard: 0
+        case .dashboard, .notes: 0
         case .todos: todos.filter { !$0.done }.count
         case .office: office.filter { !$0.done }.count
         case .university: university.assignments.filter { !$0.done }.count
@@ -279,15 +308,162 @@ final class AppStore {
         }
     }
 
+    // MARK: Notes
+
+    func noteCategory(_ id: ID) -> NoteCategory? { noteCategories.first { $0.id == id } }
+
+    /// File › New Note: opens the Notes page and asks it for a new note in the category it shows.
+    func newNote() {
+        go(.notes)
+        noteRequest = .new
+    }
+
+    /// Opens a note from outside the Notes page.
+    func openNote(_ id: ID) {
+        go(.notes)
+        noteRequest = .open(id)
+    }
+
+    @discardableResult
+    func addNote(in categoryID: ID) -> Note {
+        let note = Note(categoryID: categoryID)
+        notes.append(note)
+        sync.save(note)
+        return note
+    }
+
+    /// Edits a note's content. Memory updates straight away; the file is written once typing pauses.
+    func editNote(_ id: ID, _ edit: (inout Note) -> Void) {
+        guard let i = notes.firstIndex(where: { $0.id == id }) else { return }
+        var note = notes[i]
+        edit(&note)
+        guard note != notes[i] else { return }
+        note.editedAt = .now
+        note.updatedAt = .now
+        notes[i] = note
+        unsavedNotes.insert(id)
+        noteSaveTask?.cancel()
+        noteSaveTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            self?.saveUnsavedNotes()
+        }
+    }
+
+    /// Writes notes edited with `editNote` that haven't been saved yet.
+    func saveUnsavedNotes() {
+        noteSaveTask?.cancel()
+        for id in unsavedNotes {
+            if let note = notes.first(where: { $0.id == id }) { sync.save(note) }
+        }
+        unsavedNotes = []
+    }
+
+    /// Changes that aren't edits (pin, move): saved at once and they keep the "Date edited".
+    private func updateNotes(_ ids: [ID], _ change: (inout Note) -> Void) {
+        for i in notes.indices where ids.contains(notes[i].id) {
+            change(&notes[i])
+            notes[i].updatedAt = .now
+            unsavedNotes.remove(notes[i].id)
+            sync.save(notes[i])
+        }
+    }
+
+    func setPinned(_ ids: [ID], _ pinned: Bool) { updateNotes(ids) { $0.pinned = pinned } }
+
+    func moveNotes(_ ids: [ID], to categoryID: ID) { updateNotes(ids) { $0.categoryID = categoryID } }
+
+    @discardableResult
+    func duplicateNote(_ id: ID) -> Note? {
+        guard var copy = notes.first(where: { $0.id == id }) else { return nil }
+        copy.id = newID()
+        copy.title += " copy"
+        copy.pinned = false
+        copy.blocks = copy.blocks.map { var b = $0; b.id = newID(); return b }
+        (copy.createdAt, copy.editedAt, copy.updatedAt) = (.now, .now, .now)
+        notes.append(copy)
+        sync.save(copy)
+        return copy
+    }
+
+    func deleteNotes(_ ids: [ID], undoManager: UndoManager? = nil) {
+        let removed = notes.filter { ids.contains($0.id) }
+        guard !removed.isEmpty else { return }
+        notes.removeAll { ids.contains($0.id) }
+        for note in removed {
+            unsavedNotes.remove(note.id)
+            sync.delete(Note.self, id: note.id)
+        }
+        undoManager?.registerUndo(withTarget: self) { $0.restore(notes: removed, categories: [], undoManager: undoManager) }
+        undoManager?.setActionName(removed.count == 1 ? "Delete Note" : "Delete Notes")
+    }
+
+    @discardableResult
+    func addNoteCategory(name: String) -> NoteCategory? {
+        let name = name.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return nil }
+        let category = NoteCategory(id: newID(), name: name, hex: NoteCategory.palette[noteCategories.count % NoteCategory.palette.count],
+                                    sortOrder: (noteCategories.map(\.sortOrder).max() ?? -1) + 1, updatedAt: .now)
+        noteCategories.append(category)
+        sync.save(category)
+        return category
+    }
+
+    func renameNoteCategory(_ id: ID, to name: String) {
+        let name = name.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty, let i = noteCategories.firstIndex(where: { $0.id == id }), noteCategories[i].name != name else { return }
+        noteCategories[i].name = name
+        noteCategories[i].updatedAt = .now
+        sync.save(noteCategories[i])
+    }
+
+    /// Deletes a category together with its notes.
+    func deleteNoteCategory(_ id: ID, undoManager: UndoManager? = nil) {
+        guard let category = noteCategory(id) else { return }
+        let removed = notes.filter { $0.categoryID == id }
+        noteCategories.removeAll { $0.id == id }
+        sync.delete(NoteCategory.self, id: id)
+        deleteNotes(removed.map(\.id))
+        undoManager?.registerUndo(withTarget: self) { $0.restore(notes: removed, categories: [category], undoManager: undoManager) }
+        undoManager?.setActionName("Delete Category")
+    }
+
+    private func restore(notes restored: [Note], categories: [NoteCategory], undoManager: UndoManager?) {
+        for var category in categories {
+            category.updatedAt = .now
+            noteCategories.append(category)
+            sync.save(category)
+        }
+        noteCategories.sort { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
+        for var note in restored {
+            note.updatedAt = .now
+            notes.append(note)
+            sync.save(note)
+        }
+        undoManager?.registerUndo(withTarget: self) { store in
+            if let category = categories.first {
+                store.deleteNoteCategory(category.id, undoManager: undoManager)
+            } else {
+                store.deleteNotes(restored.map(\.id), undoManager: undoManager)
+            }
+        }
+    }
+
     // MARK: Sync
 
-    /// Re-reads todos and labels from the sync folder and pulls shared settings.
+    /// Re-reads todos, labels and notes from the sync folder and pulls shared settings.
     func reloadSynced() {
+        // Write pending note edits first so the reload can't bring back older text.
+        saveUnsavedNotes()
         sync.scan {
             let todos = sync.load(Todo.self, keeping: todos).sorted { $0.createdAt < $1.createdAt }
             if todos != self.todos { self.todos = todos }
             let labels = sync.load(TaskLabel.self, keeping: labels).sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
             if labels != self.labels { self.labels = labels }
+            let categories = sync.load(NoteCategory.self, keeping: noteCategories).sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
+            if categories != self.noteCategories { self.noteCategories = categories }
+            let notes = sync.load(Note.self, keeping: notes).sorted { $0.createdAt < $1.createdAt }
+            if notes != self.notes { self.notes = notes }
         }
         pullSettings()
     }
@@ -302,10 +478,13 @@ final class AppStore {
 
     /// Switches the sync folder and copies over what's in memory, without overwriting newer files already there.
     private func carryData(_ change: () throws -> Void) rethrows {
-        let (todos, labels) = (todos, labels)
+        saveUnsavedNotes()
+        let (todos, labels, categories, notes) = (todos, labels, noteCategories, notes)
         try change()
         for label in labels { sync.save(label, onlyIfNewer: true) }
         for todo in todos { sync.save(todo, onlyIfNewer: true) }
+        for category in categories { sync.save(category, onlyIfNewer: true) }
+        for note in notes { sync.save(note, onlyIfNewer: true) }
         syncedSettings = nil
         reloadSynced()
     }

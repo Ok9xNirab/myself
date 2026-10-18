@@ -15,10 +15,14 @@ import SwiftUI
         .defaultSize(width: 1240, height: 820)
         .commands {
             SidebarCommands()
-            // MySelf is a single-window app with one shared store, so ⌘N makes a todo instead of a window.
+            // MySelf is a single-window app with one shared store, so ⌘N makes a todo (⌥⌘N a note) instead of a window.
             CommandGroup(replacing: .newItem) {
                 Button("New Todo", action: store.newTodo)
                     .keyboardShortcut("n")
+                if store.isEnabled(.notes) {
+                    Button("New Note", action: store.newNote)
+                        .keyboardShortcut("n", modifiers: [.command, .option])
+                }
                 Button("Quick Open…") { store.isQuickOpenPresented = true }
                     .keyboardShortcut("k")
             }
@@ -37,7 +41,7 @@ import SwiftUI
                     .keyboardShortcut("]")
                     .disabled(!store.canGoForward)
                 Divider()
-                // Shortcuts stay tied to a page's position, so ⌘7 is always Workout even when others are hidden.
+                // Shortcuts stay tied to a page's position, so ⌘7 is always Workout (⌘8 Notes) even when others are hidden.
                 ForEach(Array(Page.allCases.enumerated()), id: \.element) { index, page in
                     if store.isEnabled(page) {
                         Button(page.title) { store.go(page) }

@@ -52,7 +52,7 @@ private struct GeneralSettings: View {
                     Button("Reset…") { confirmingReset = true }
                 } label: {
                     Text("Reset sample data")
-                    Text("Replaces everything with the original sample content, including synced todos and labels.")
+                    Text("Replaces everything with the original sample content, including synced todos, labels and notes.")
                 }
             }
         }
@@ -61,7 +61,7 @@ private struct GeneralSettings: View {
         .confirmationDialog("Reset sample data?", isPresented: $confirmingReset) {
             Button("Reset", role: .destructive, action: store.loadSampleData)
         } message: {
-            Text("Your todos, labels, classes, boards and workouts will be replaced with the original sample content. Todos and labels are replaced on every Mac that syncs this folder.")
+            Text("Your todos, labels, notes, classes, boards and workouts will be replaced with the original sample content. Todos, labels and notes are replaced on every Mac that syncs this folder.")
         }
     }
 }
@@ -194,7 +194,7 @@ private struct ICloudSettings: View {
                         .foregroundStyle(Palette.amber)
                 }
             } footer: {
-                Text("Choose the same folder on each Mac. Your todos are copied into it, and changes made on any Mac appear on the others within a minute.")
+                Text("Choose the same folder on each Mac. Your todos and notes are copied into it, and changes made on any Mac appear on the others within a minute.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -212,7 +212,7 @@ private struct ICloudSettings: View {
             } header: {
                 Text("Also sync")
             } footer: {
-                Text("Todos and labels sync when iCloud is on. Classes, boards, study topics and workouts stay on this Mac for now.")
+                Text("Todos, labels and notes sync when iCloud is on. Classes, boards, study topics and workouts stay on this Mac for now.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -253,7 +253,7 @@ private struct ICloudSettings: View {
     private func statusDetail(_ sync: SyncEngine, now: Date) -> String {
         switch sync.status {
         case .local: return "Data stays on this Mac."
-        case .needsFolder: return "Todos are saved on this Mac until you choose a folder."
+        case .needsFolder: return "Todos and notes are saved on this Mac until you choose a folder."
         case .failed(let message): return message
         case .syncing, .upToDate:
             guard let date = sync.lastSynced else { return "Waiting for iCloud Drive" }

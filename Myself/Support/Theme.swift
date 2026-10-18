@@ -1,8 +1,14 @@
 import SwiftUI
 #if os(macOS)
 import AppKit
+typealias PlatformColor = NSColor
+typealias PlatformFont = NSFont
+typealias PlatformImage = NSImage
 #else
 import UIKit
+typealias PlatformColor = UIColor
+typealias PlatformFont = UIFont
+typealias PlatformImage = UIImage
 #endif
 
 /// Colour tokens ported from the design's `native.css` (light / dark pairs).
@@ -36,14 +42,25 @@ extension Color {
 
     static func dynamic(light: UInt32, dark: UInt32) -> Color {
         #if os(macOS)
-        Color(nsColor: NSColor(name: nil) { appearance in
+        Color(nsColor: .dynamic(light: light, dark: dark))
+        #else
+        Color(uiColor: .dynamic(light: light, dark: dark))
+        #endif
+    }
+}
+
+extension PlatformColor {
+    /// AppKit/UIKit version of `Color.dynamic`, for text views.
+    static func dynamic(light: UInt32, dark: UInt32) -> PlatformColor {
+        #if os(macOS)
+        NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             return platformColor(isDark ? dark : light)
-        })
+        }
         #else
-        Color(uiColor: UIColor { traits in
+        UIColor { traits in
             platformColor(traits.userInterfaceStyle == .dark ? dark : light)
-        })
+        }
         #endif
     }
 }
