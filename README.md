@@ -5,14 +5,14 @@ A personal OS for macOS, built in SwiftUI. One window for the things you track d
 ![MySelf showing the TODOs page with the sidebar, summary tiles and task list](screenshot.png)
 
 > [!NOTE]
-> MySelf is in early development. The interface is complete, but the app runs on sample data held in memory. **Anything you add or change is lost when you quit.** Only your settings (appearance, accent, enabled features) are saved. Some editor sheets (such as "Add todo" and "Add class") are placeholders for now.
+> MySelf is in early development. **TODOs are saved and can sync between your Macs through iCloud Drive.** The other sections still run on sample data held in memory, so changes there are lost when you quit. Some editor sheets (such as "Add class") are placeholders for now.
 
 ## Features
 
 | Section | What it does |
 | --- | --- |
 | **Dashboard** | Today's focus (todos and office tasks due today or overdue, plus assignments due by tomorrow) and summary tiles for every enabled section. |
-| **TODOs** | Tasks with priorities, labels and due dates ("Today", "Tomorrow", "2d overdue"). |
+| **TODOs** | Tasks with priorities, labels and due dates ("Today", "Tomorrow", "2d overdue"). Add with ⌘N, edit with a double-click, undo with ⌘Z. Saved and synced. |
 | **University** | Classes, weekly schedule, syllabus progress, assignments and exams. |
 | **Office Tasks** | Work tasks. These are always high priority. |
 | **Job Study** | Interview topics with revision tracking. Ticking a topic logs a revision for today. |
@@ -154,11 +154,16 @@ Myself/
 └── AppIcon.icon/        Icon Composer app icon
 ```
 
+## iCloud sync
+
+MySelf syncs through a folder in iCloud Drive rather than CloudKit, so it works without a paid Apple Developer account. Open Settings › iCloud, choose (or create) a folder such as **iCloud Drive › MySelf**, and choose the same folder on each Mac. Each todo and label is saved there as its own small JSON file, and iCloud Drive copies the files between Macs. With sync off, the files live in the app's Application Support folder instead.
+
+This works between Macs only. iPhone and iPad builds keep their data on the device.
+
 ## Roadmap
 
-- Persist app data between launches
-- Working editors for adding and editing items
-- Real iCloud sync (the iCloud settings are simulated for now)
+- Save and sync the other sections the same way TODOs are
+- Working editors for the remaining sections
 
 ## Contributing
 

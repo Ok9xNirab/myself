@@ -4,7 +4,7 @@ typealias ID = String
 
 func newID() -> ID { UUID().uuidString }
 
-enum Priority: String, CaseIterable, Identifiable {
+enum Priority: String, CaseIterable, Identifiable, Codable {
     case high, medium, low
 
     var id: Self { self }
@@ -20,14 +20,22 @@ enum Priority: String, CaseIterable, Identifiable {
     }
 }
 
-struct TaskLabel: Identifiable, Hashable {
+/// Synced as `labels/<id>.json`.
+struct TaskLabel: Identifiable, Hashable, Codable, SyncRecord {
+    static let folder = "labels"
+
     let id: ID
     var name: String
     var hex: UInt32
+    var sortOrder = 0
+    var updatedAt = Date.distantPast
     var color: Color { Color(hex: hex) }
 }
 
-struct Todo: Identifiable {
+/// Synced as `todos/<id>.json`.
+struct Todo: Identifiable, Equatable, Codable, SyncRecord {
+    static let folder = "todos"
+
     var id = newID()
     var title: String
     var desc = ""
@@ -35,6 +43,9 @@ struct Todo: Identifiable {
     var priority: Priority = .medium
     var due: Date?
     var done = false
+    var completedAt: Date?
+    var createdAt = Date.now
+    var updatedAt = Date.now
 }
 
 /// Office tasks are always high priority and carry a reference link.

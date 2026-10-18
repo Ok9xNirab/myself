@@ -6,6 +6,7 @@ struct ContentView: View {
     #if os(macOS)
     @Environment(\.openSettings) private var openSettings
     #endif
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage(PrefKey.appearance) private var appearance = ""
 
     var body: some View {
@@ -22,6 +23,8 @@ struct ContentView: View {
                 #endif
                 .toolbar { toolbar }
         }
+        // Pick up changes made on other Macs while the app was in the background.
+        .onChange(of: scenePhase) { if scenePhase == .active { store.reloadSynced() } }
         .sheet(isPresented: $store.isQuickOpenPresented) {
             QuickOpenView()
         }
@@ -83,7 +86,6 @@ private struct Sidebar: View {
     @Environment(AppStore.self) private var store
     @Environment(\.rowDensity) private var density
     @AppStorage(PrefKey.sidebarStyle) private var style = SidebarStyle.floating
-    @AppStorage(PrefKey.iCloudSync) private var syncOn = true
 
     var body: some View {
         List(selection: Binding(get: { store.page }, set: { if let page = $0 { store.go(page) } })) {
@@ -103,20 +105,26 @@ private struct Sidebar: View {
         .safeAreaInset(edge: .bottom, spacing: 0) { footer }
     }
 
+    /// iCloud sync status; clicking it opens Settings › iCloud.
     private var footer: some View {
-        HStack(spacing: 9) {
-            Text("ME")
-                .font(.system(size: 10.5, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 26, height: 26)
-                .background(LinearGradient(colors: [Color(hex: 0xA3A3AA), Color(hex: 0x7B7B83)], startPoint: .top, endPoint: .bottom), in: Circle())
+        let sync = store.sync
+        return HStack(spacing: 9) {
             Button { store.openSettings(.iCloud) } label: {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("My Workspace").font(.system(size: 12.5, weight: .semibold))
-                    Label(syncOn ? "Synced with iCloud" : "On this Mac only", systemImage: syncOn ? "icloud" : "desktopcomputer")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Palette.ink3)
-                        .labelStyle(SyncStatusLabelStyle())
+                HStack(spacing: 9) {
+                    Image(systemName: sync.status.systemImage)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(sync.status.color)
+                        .frame(width: 26, height: 26)
+                        .background(sync.status.color.opacity(0.14), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(sync.status.title).font(.system(size: 12.5, weight: .semibold))
+                        TimelineView(.periodic(from: .now, by: 30)) { context in
+                            Text(detail(sync, now: context.date))
+                                .font(.system(size: 11))
+                                .foregroundStyle(Palette.ink3)
+                        }
+                    }
+                    .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -133,13 +141,16 @@ private struct Sidebar: View {
         .padding(.vertical, 10)
         .overlay(alignment: .top) { Divider() }
     }
-}
 
-private struct SyncStatusLabelStyle: LabelStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        HStack(spacing: 4) {
-            configuration.icon.font(.system(size: 9.5))
-            configuration.title
+    private func detail(_ sync: SyncEngine, now: Date) -> String {
+        switch sync.status {
+        case .local: return "Turn on in Settings"
+        case .needsFolder: return "Click to set up sync"
+        case .failed: return "Click for details"
+        case .syncing, .upToDate:
+            guard let date = sync.lastSynced else { return "Waiting for iCloud Drive" }
+            if now.timeIntervalSince(date) < 45 { return "Updated just now" }
+            return "Updated " + RelativeDateTimeFormatter().localizedString(for: date, relativeTo: now)
         }
     }
 }

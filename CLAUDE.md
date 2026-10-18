@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 MySelf is a "personal OS" SwiftUI app: dashboard, TODOs, University (classes, syllabus, assignments, exams), Office Tasks, Job Study, Product Dev (Kanban), and Workout. The UI is a native port of a Claude Design HTML/React prototype (`MySelf.zip`; the macOS variant is `MySelf macOS.html` + `native-app.jsx` + `native.css`). When adding or changing screens, treat that prototype as the visual spec.
 
-Current state is a **static design implementation**: all data comes from `SampleData` and lives in memory (`AppStore`). Only settings are persisted (UserDefaults); app data is not, and editor sheets ("Add todo", "Add class", edit/delete pencils on some rows) are placeholders with no action yet.
+Current state: **TODOs and labels are persisted and synced** (see "Sync" below). Every other feature still comes from `SampleData` and lives in memory (`AppStore`). Settings are in UserDefaults. Editor sheets outside TODOs ("Add class", edit/delete pencils on some rows) are placeholders with no action yet.
 
 ## Build & run
 
@@ -29,6 +29,8 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
 - `ContentView.swift` is the `NavigationSplitView` shell: sidebar (sections from `Page.groups`, badge counts from `store.count(for:)`), toolbar (back/forward, appearance toggle, search), and a switch from `store.page` to a page view.
 - `Models/AppStore.swift` holds the `Page` enum (title, subtitle, SF Symbol, sidebar group), all app data, navigation history (`go`/`back`/`forward`), and all mutations. Views call store methods rather than mutating nested arrays directly.
 - `Models/SampleData.swift` is the seed ported from the prototype's `store.js`. Dates are relative to today (`Day.offset(n)`) so the app always looks current.
+- `Models/SyncEngine.swift`: file-based persistence and sync (see "Sync").
+- `Pages/TodoEditorSheet.swift`: the add/edit sheet, opened by setting `store.editingTodo` (`store.newTodo()` for a new one; ⌘N).
 - `Support/Dates.swift`: `Day` helpers (`fromToday`, `sessions(on:count:)`, which generates class dates from weekdays), `DueMeta` (the "Today / Tomorrow / 2d overdue" badge text and tone), `Weekday`, `ClockTime`.
 - `Support/Theme.swift`: `Palette` holds the design tokens from `native.css` as adaptive light/dark colors, built with `Color.dynamic(light:dark:)`. Use `Palette.*` and `Color.accentColor` instead of hard-coded colors. User-chosen colors (labels, classes, projects) are stored as `UInt32` hex in the models.
 - `Components/Components.swift` contains the shared design-system pieces: `PageScroll` (page padding/max width; it also publishes `pageWidth` into the environment), `AdaptiveColumns` (two columns when wide, stacked when narrow), `Card`, `StatTile`, `Badge`/`PriorityBadge`/`DueBadge`/`LabelChip`, `CheckCircle`, `ProgressBar`, `Donut`, `ColorTabs`, `RowActions` (hover-revealed edit/delete), `FlowLayout`, `ListRow`.
@@ -37,7 +39,17 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
 
 ## Feature visibility
 
-University, Office Tasks, Job Study, Product Dev and Workout can be turned off in Settings › Features (`store.isEnabled`, `store.setEnabled`, persisted as `disabledFeatures` in UserDefaults). A disabled feature must be hidden everywhere: sidebar (`Page.groups(store.enabledPages)`), Dashboard cards and tiles, Quick Open, and the Go menu. Its data stays in the store. Dashboard and TODOs can't be turned off. When adding UI that surfaces a feature's data outside its own page, guard it with `store.isEnabled(_:)`. iCloud sync is simulated for now: the toggles and the last-synced time are stored locally, and nothing leaves the device.
+University, Office Tasks, Job Study, Product Dev and Workout can be turned off in Settings › Features (`store.isEnabled`, `store.setEnabled`, persisted as `disabledFeatures` in UserDefaults). A disabled feature must be hidden everywhere: sidebar (`Page.groups(store.enabledPages)`), Dashboard cards and tiles, Quick Open, and the Go menu. Its data stays in the store. Dashboard and TODOs can't be turned off. When adding UI that surfaces a feature's data outside its own page, guard it with `store.isEnabled(_:)`. Feature visibility and appearance can also sync (see below).
+
+## Sync
+
+There's no paid developer account, so there's no CloudKit or iCloud entitlement. Sync goes through **a folder the user picks in iCloud Drive** (Settings › iCloud). The app reaches it with a security-scoped bookmark, which is why `ENABLE_USER_SELECTED_FILES = readwrite`. It is Mac-to-Mac only.
+
+- Each record is its own JSON file: `todos/<id>.json`, `labels/<id>.json`, plus `settings.json` for appearance and feature visibility. A type opts in by conforming to `SyncRecord` (`static folder`, `updatedAt`). With sync off, or before a folder is chosen, the same layout lives in `Application Support/<bundle id>/`.
+- The folder is the source of truth. Store mutations (`saveTodo`, `toggleTodo`, `deleteTodo`, `addLabel`, `deleteLabel`) update memory and write the file straight away. `reloadSynced()` re-reads the folder when a file presenter reports a change, when the app becomes active, and on a 30 s poll (5 s while iCloud is still transferring). Never assign `store.todos`/`labels` directly; they're `private(set)`.
+- When two copies of a record conflict, the newer `updatedAt` wins: duplicate files like `<id> 2.json` are merged and leftover `NSFileVersion` conflicts are dropped. Files iCloud hasn't downloaded are skipped, and the in-memory copy is kept until they arrive.
+- New installs start with no todos. The default labels use fixed IDs (`l1`…`l6`) with `updatedAt = .distantPast`, so two Macs seeding them can't create duplicates or overwrite renames. Settings › Reset loads the sample todos into the folder.
+- Changing the folder or turning sync on/off copies the in-memory records across (`carryData`), never overwriting a newer file.
 
 ## Domain rules carried over from the design
 

@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Settings window (⌘,): General, Features and iCloud tabs.
 struct SettingsView: View {
@@ -51,7 +52,7 @@ private struct GeneralSettings: View {
                     Button("Reset…") { confirmingReset = true }
                 } label: {
                     Text("Reset sample data")
-                    Text("Replaces everything with the original sample content.")
+                    Text("Replaces everything with the original sample content, including synced todos and labels.")
                 }
             }
         }
@@ -60,7 +61,7 @@ private struct GeneralSettings: View {
         .confirmationDialog("Reset sample data?", isPresented: $confirmingReset) {
             Button("Reset", role: .destructive, action: store.loadSampleData)
         } message: {
-            Text("Your changes to todos, classes, boards and workouts will be replaced with the original sample content.")
+            Text("Your todos, labels, classes, boards and workouts will be replaced with the original sample content. Todos and labels are replaced on every Mac that syncs this folder.")
         }
     }
 }
@@ -136,18 +137,19 @@ private struct FeatureSettings: View {
 
 // MARK: iCloud
 
-/// iCloud sync is simulated for now: the toggles are stored locally and "Sync Now" only updates the timestamp.
+/// Sync goes through a folder the user picks in iCloud Drive (see `SyncEngine`), so it needs no iCloud entitlement.
 private struct ICloudSettings: View {
-    @AppStorage(PrefKey.iCloudSync) private var syncOn = true
+    @Environment(AppStore.self) private var store
     @AppStorage(PrefKey.syncFeatures) private var syncFeatures = true
     @AppStorage(PrefKey.syncAppearance) private var syncAppearance = true
-    @AppStorage(PrefKey.lastSynced) private var lastSynced = Date.now.addingTimeInterval(-60).timeIntervalSince1970
-    @State private var syncing = false
+    @State private var choosingFolder = false
+    @State private var folderError: String?
 
     var body: some View {
+        let sync = store.sync
         Form {
             Section {
-                Toggle(isOn: $syncOn.animation()) {
+                Toggle(isOn: Binding(get: { sync.isCloudEnabled }, set: { on in withAnimation { store.setICloudSync(on) } })) {
                     HStack(spacing: 10) {
                         Image(systemName: "icloud.fill")
                             .font(.system(size: 11, weight: .semibold))
@@ -156,89 +158,108 @@ private struct ICloudSettings: View {
                             .background(Palette.blue.gradient, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                         VStack(alignment: .leading, spacing: 1) {
                             Text("Sync with iCloud")
-                            Text("Keeps MySelf up to date on your Mac, iPhone and iPad.").font(.system(size: 11)).foregroundStyle(.secondary)
+                            Text("Keeps your Macs in step through a folder in iCloud Drive.").font(.system(size: 11)).foregroundStyle(.secondary)
                         }
                     }
                 }
                 .toggleStyle(.switch)
 
                 LabeledContent {
-                    Button("Sync Now", action: syncNow).disabled(!syncOn || syncing)
+                    Button("Sync Now", action: store.reloadSynced).disabled(!sync.usesCloud)
                 } label: {
                     HStack(spacing: 6) {
-                        Circle().fill(syncOn ? (syncing ? Palette.amber : Palette.green) : Palette.ink3).frame(width: 7, height: 7)
-                        Text(syncOn ? (syncing ? "Syncing…" : "Up to date") : "Sync is off")
+                        Circle().fill(sync.status.color).frame(width: 7, height: 7)
+                        Text(statusTitle(sync.status))
                     }
                     TimelineView(.periodic(from: .now, by: 30)) { context in
-                        Text(syncOn ? "Last synced \(relative(context.date))" : "Data stays on this Mac.")
+                        Text(statusDetail(sync, now: context.date))
                     }
                 }
             }
+
+            Section {
+                LabeledContent {
+                    Button(sync.cloudFolder == nil ? "Choose…" : "Change…") { choosingFolder = true }
+                } label: {
+                    Text("Sync folder")
+                    if let name = sync.cloudFolderDisplayName {
+                        Text(name)
+                    } else {
+                        Text("Pick or create a folder in iCloud Drive, such as iCloud Drive › MySelf.")
+                    }
+                }
+                if sync.cloudFolder != nil, !sync.cloudFolderIsInICloud {
+                    Label("This folder isn\u{2019}t in iCloud Drive, so it won\u{2019}t sync between Macs.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Palette.amber)
+                }
+            } footer: {
+                Text("Choose the same folder on each Mac. Your todos are copied into it, and changes made on any Mac appear on the others within a minute.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .disabled(!sync.isCloudEnabled)
 
             Section {
                 Toggle(isOn: $syncFeatures) {
                     Text("Feature visibility")
-                    Text("Use the same features on all your devices.")
+                    Text("Use the same features on all your Macs.")
                 }
                 Toggle(isOn: $syncAppearance) {
                     Text("Appearance")
-                    Text("Theme, accent color and sidebar style.")
+                    Text("Theme, accent color, sidebar style and row density.")
                 }
             } header: {
                 Text("Also sync")
             } footer: {
-                Text("Tasks, classes, boards and workouts always sync when iCloud is on.")
+                Text("Todos and labels sync when iCloud is on. Classes, boards, study topics and workouts stay on this Mac for now.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .toggleStyle(.switch)
-            .disabled(!syncOn)
-
-            Section {
-                LabeledContent {
-                    Button("Manage…", action: manageAccount)
-                } label: {
-                    HStack(spacing: 10) {
-                        Text("ME")
-                            .font(.system(size: 9.5, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 22, height: 22)
-                            .background(LinearGradient(colors: [Color(hex: 0xA3A3AA), Color(hex: 0x7B7B83)], startPoint: .top, endPoint: .bottom), in: Circle())
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("Apple Account")
-                            Text(verbatim: "me@icloud.com").font(.system(size: 11)).foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
+            .disabled(!sync.usesCloud)
         }
         .formStyle(.grouped)
         .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private func relative(_ now: Date) -> String {
-        let date = Date(timeIntervalSince1970: lastSynced)
-        if now.timeIntervalSince(date) < 45 { return "just now" }
-        return RelativeDateTimeFormatter().localizedString(for: date, relativeTo: now)
-    }
-
-    private func syncNow() {
-        withAnimation { syncing = true }
-        Task {
-            try? await Task.sleep(for: .seconds(1.2))
-            lastSynced = Date.now.timeIntervalSince1970
-            withAnimation { syncing = false }
+        .fileImporter(isPresented: $choosingFolder, allowedContentTypes: [.folder]) { result in
+            do {
+                try store.useICloudFolder(result.get())
+            } catch {
+                folderError = error.localizedDescription
+            }
         }
-    }
-
-    private func manageAccount() {
         #if os(macOS)
-        if let url = URL(string: "x-apple.systempreferences:com.apple.systempreferences.AppleIDSettings") {
-            NSWorkspace.shared.open(url)
-        }
-        #elseif os(iOS)
-        if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+        .fileDialogDefaultDirectory(sync.cloudFolder ?? SyncEngine.iCloudDriveURL)
+        .fileDialogMessage("Choose a folder in iCloud Drive for MySelf to sync through. Pick the same folder on each Mac.")
+        .fileDialogConfirmationLabel("Use Folder")
         #endif
+        .alert("Couldn\u{2019}t use that folder", isPresented: Binding(get: { folderError != nil }, set: { if !$0 { folderError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(folderError ?? "")
+        }
+    }
+
+    private func statusTitle(_ status: SyncEngine.Status) -> String {
+        switch status {
+        case .local: "Sync is off"
+        case .needsFolder: "No sync folder chosen"
+        case .syncing: "Syncing\u{2026}"
+        case .upToDate: "Up to date"
+        case .failed: "Sync problem"
+        }
+    }
+
+    private func statusDetail(_ sync: SyncEngine, now: Date) -> String {
+        switch sync.status {
+        case .local: return "Data stays on this Mac."
+        case .needsFolder: return "Todos are saved on this Mac until you choose a folder."
+        case .failed(let message): return message
+        case .syncing, .upToDate:
+            guard let date = sync.lastSynced else { return "Waiting for iCloud Drive" }
+            if now.timeIntervalSince(date) < 45 { return "Last synced just now" }
+            return "Last synced " + RelativeDateTimeFormatter().localizedString(for: date, relativeTo: now)
+        }
     }
 }
 

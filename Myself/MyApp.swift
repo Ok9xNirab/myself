@@ -15,7 +15,10 @@ import SwiftUI
         .defaultSize(width: 1240, height: 820)
         .commands {
             SidebarCommands()
-            CommandGroup(after: .newItem) {
+            // MySelf is a single-window app with one shared store, so ⌘N makes a todo instead of a window.
+            CommandGroup(replacing: .newItem) {
+                Button("New Todo", action: store.newTodo)
+                    .keyboardShortcut("n")
                 Button("Quick Open…") { store.isQuickOpenPresented = true }
                     .keyboardShortcut("k")
             }

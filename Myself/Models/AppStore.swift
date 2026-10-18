@@ -90,11 +90,12 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
 
 enum SettingsTab: Hashable { case general, features, iCloud }
 
-/// In-memory app state seeded with sample content. Only settings (feature visibility) are persisted.
+/// App state. TODOs and labels are persisted and synced through `SyncEngine`; the other features are still
+/// in-memory sample content. Feature visibility is stored in UserDefaults.
 @Observable
 final class AppStore {
-    var labels: [TaskLabel] = []
-    var todos: [Todo] = []
+    private(set) var labels: [TaskLabel] = []
+    private(set) var todos: [Todo] = []
     var office: [OfficeTask] = []
     var university = SampleData.university()
     var products: [Product] = []
@@ -107,17 +108,46 @@ final class AppStore {
     var isQuickOpenPresented = false
     var isSettingsPresented = false
     var settingsTab: SettingsTab = .general
+    /// The todo open in the editor sheet; a todo that isn't in `todos` yet is a new one.
+    var editingTodo: Todo?
+
+    let sync = SyncEngine()
+    /// Last appearance/feature snapshot pushed to or pulled from `settings.json`.
+    @ObservationIgnored private var syncedSettings: SyncedSettings?
+    @ObservationIgnored private var applyingRemoteSettings = false
+    @ObservationIgnored private var defaultsObserver: NSObjectProtocol?
 
     /// Features turned off in Settings. Their data is kept; they're only hidden.
     private(set) var disabledPages: Set<Page> = Set(
         (UserDefaults.standard.stringArray(forKey: "disabledFeatures") ?? []).compactMap(Page.init(rawValue:))
     )
 
-    init() { loadSampleData() }
+    init() {
+        loadSampleFeatures()
+        sync.onChange = { [weak self] in self?.reloadSynced() }
+        reloadSynced()
+        // Fresh folder: create the default labels. Their fixed IDs stop two Macs from seeding duplicates.
+        if labels.isEmpty, !sync.hasFiles(TaskLabel.self) {
+            for label in SampleData.labels { sync.save(label, onlyIfNewer: true) }
+            reloadSynced()
+        }
+        syncedSettings = localSettings()
+        defaultsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pushSettings() }
+        }
+    }
 
+    /// Settings › Reset: replaces todos and labels (in the sync folder too) and every other feature with the samples.
     func loadSampleData() {
+        for todo in todos { sync.delete(Todo.self, id: todo.id) }
         labels = SampleData.labels
         todos = SampleData.todos()
+        for label in labels { sync.save(label) }
+        for todo in todos { sync.save(todo) }
+        loadSampleFeatures()
+    }
+
+    private func loadSampleFeatures() {
         office = SampleData.office()
         university = SampleData.university()
         products = SampleData.products()
@@ -192,9 +222,156 @@ final class AppStore {
 
     // MARK: Mutations
 
-    func toggleTodo(_ id: ID) {
-        if let i = todos.firstIndex(where: { $0.id == id }) { todos[i].done.toggle() }
+    func newTodo() {
+        go(.todos)
+        editingTodo = Todo(title: "")
     }
+
+    /// Adds or updates a todo and writes it to the sync folder.
+    func saveTodo(_ todo: Todo, undoManager: UndoManager? = nil) {
+        var todo = todo
+        todo.updatedAt = .now
+        let old = todos.first { $0.id == todo.id }
+        if let i = todos.firstIndex(where: { $0.id == todo.id }) { todos[i] = todo } else { todos.append(todo) }
+        sync.save(todo)
+        undoManager?.registerUndo(withTarget: self) { store in
+            if let old { store.saveTodo(old, undoManager: undoManager) } else { store.deleteTodo(todo.id, undoManager: undoManager) }
+        }
+        undoManager?.setActionName(old == nil ? "Add Todo" : "Edit Todo")
+    }
+
+    func toggleTodo(_ id: ID, undoManager: UndoManager? = nil) {
+        guard var todo = todos.first(where: { $0.id == id }) else { return }
+        todo.done.toggle()
+        todo.completedAt = todo.done ? .now : nil
+        saveTodo(todo, undoManager: undoManager)
+        undoManager?.setActionName(todo.done ? "Complete Todo" : "Reopen Todo")
+    }
+
+    func deleteTodo(_ id: ID, undoManager: UndoManager? = nil) {
+        guard let todo = todos.first(where: { $0.id == id }) else { return }
+        todos.removeAll { $0.id == id }
+        sync.delete(Todo.self, id: id)
+        undoManager?.registerUndo(withTarget: self) { $0.saveTodo(todo, undoManager: undoManager) }
+        undoManager?.setActionName("Delete Todo")
+    }
+
+    @discardableResult
+    func addLabel(name: String, hex: UInt32) -> TaskLabel? {
+        let name = name.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return nil }
+        let label = TaskLabel(id: newID(), name: name, hex: hex, sortOrder: (labels.map(\.sortOrder).max() ?? -1) + 1, updatedAt: .now)
+        labels.append(label)
+        sync.save(label)
+        return label
+    }
+
+    /// Deletes a label and takes it off every todo.
+    func deleteLabel(_ id: ID) {
+        labels.removeAll { $0.id == id }
+        sync.delete(TaskLabel.self, id: id)
+        for var todo in todos where todo.labelIDs.contains(id) {
+            todo.labelIDs.removeAll { $0 == id }
+            saveTodo(todo)
+        }
+    }
+
+    // MARK: Sync
+
+    /// Re-reads todos and labels from the sync folder and pulls shared settings.
+    func reloadSynced() {
+        sync.scan {
+            let todos = sync.load(Todo.self, keeping: todos).sorted { $0.createdAt < $1.createdAt }
+            if todos != self.todos { self.todos = todos }
+            let labels = sync.load(TaskLabel.self, keeping: labels).sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
+            if labels != self.labels { self.labels = labels }
+        }
+        pullSettings()
+    }
+
+    func setICloudSync(_ on: Bool) {
+        carryData { sync.setCloudEnabled(on) }
+    }
+
+    func useICloudFolder(_ url: URL) throws {
+        try carryData { try sync.useCloudFolder(url) }
+    }
+
+    /// Switches the sync folder and copies over what's in memory, without overwriting newer files already there.
+    private func carryData(_ change: () throws -> Void) rethrows {
+        let (todos, labels) = (todos, labels)
+        try change()
+        for label in labels { sync.save(label, onlyIfNewer: true) }
+        for todo in todos { sync.save(todo, onlyIfNewer: true) }
+        syncedSettings = nil
+        reloadSynced()
+    }
+
+    private static let appearanceKeys = [PrefKey.appearance, PrefKey.accent, PrefKey.sidebarStyle, PrefKey.rowDensity]
+    private static let settingsSyncedAtKey = "settingsSyncedAt"
+
+    /// This Mac's share of `settings.json`: only the groups turned on under Settings › iCloud › Also sync.
+    private func localSettings() -> SyncedSettings {
+        let defaults = UserDefaults.standard
+        var settings = SyncedSettings()
+        if defaults.object(forKey: PrefKey.syncAppearance) as? Bool ?? true {
+            settings.appearance = Dictionary(uniqueKeysWithValues: Self.appearanceKeys.compactMap { key in defaults.string(forKey: key).map { (key, $0) } })
+        }
+        if defaults.object(forKey: PrefKey.syncFeatures) as? Bool ?? true {
+            settings.disabledFeatures = disabledPages.map(\.rawValue).sorted()
+        }
+        return settings
+    }
+
+    /// Writes local appearance/feature changes to `settings.json`.
+    private func pushSettings() {
+        guard sync.usesCloud, !applyingRemoteSettings else { return }
+        let local = localSettings()
+        guard local != syncedSettings else { return }
+        syncedSettings = local
+        var out = local
+        out.updatedAt = .now
+        // Keep the groups this Mac doesn't sync as other Macs left them.
+        if let remote = sync.readSettings() {
+            out.appearance = out.appearance ?? remote.appearance
+            out.disabledFeatures = out.disabledFeatures ?? remote.disabledFeatures
+        }
+        sync.writeSettings(out)
+        UserDefaults.standard.set(out.updatedAt.timeIntervalSince1970, forKey: Self.settingsSyncedAtKey)
+    }
+
+    /// Applies `settings.json` when another Mac changed it since this one last synced.
+    private func pullSettings() {
+        guard sync.usesCloud else { return }
+        guard let remote = sync.readSettings() else {
+            if syncedSettings == nil { syncedSettings = SyncedSettings() }
+            pushSettings()
+            return
+        }
+        let defaults = UserDefaults.standard
+        guard remote.updatedAt.timeIntervalSince1970 > defaults.double(forKey: Self.settingsSyncedAtKey) else {
+            if syncedSettings == nil { syncedSettings = localSettings() }
+            return
+        }
+        applyingRemoteSettings = true
+        defer {
+            applyingRemoteSettings = false
+            syncedSettings = localSettings()
+        }
+        if defaults.object(forKey: PrefKey.syncAppearance) as? Bool ?? true, let appearance = remote.appearance {
+            for (key, value) in appearance where Self.appearanceKeys.contains(key) && defaults.string(forKey: key) != value {
+                defaults.set(value, forKey: key)
+            }
+        }
+        if defaults.object(forKey: PrefKey.syncFeatures) as? Bool ?? true, let disabled = remote.disabledFeatures {
+            for page in Page.allCases where page.isOptional && isEnabled(page) == disabled.contains(page.rawValue) {
+                setEnabled(page, !disabled.contains(page.rawValue))
+            }
+        }
+        defaults.set(remote.updatedAt.timeIntervalSince1970, forKey: Self.settingsSyncedAtKey)
+    }
+
+    // MARK: Other features
 
     func toggleOffice(_ id: ID) {
         if let i = office.firstIndex(where: { $0.id == id }) { office[i].done.toggle() }

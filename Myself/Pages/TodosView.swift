@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TodosView: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.undoManager) private var undoManager
     @State private var query = ""
     @State private var labelFilter: ID?
     @State private var priorityFilter: Priority?
@@ -17,6 +18,7 @@ struct TodosView: View {
     }
 
     var body: some View {
+        @Bindable var store = store
         let todos = store.todos
         let active = filtered.filter { !$0.done }.sorted { $0.priority.rank < $1.priority.rank }
         let done = filtered.filter(\.done)
@@ -37,8 +39,9 @@ struct TodosView: View {
                 .labelsHidden()
                 .fixedSize()
                 Spacer()
-                Button("Add todo", systemImage: "plus") {}
+                Button("Add todo", systemImage: "plus", action: store.newTodo)
                     .buttonStyle(.borderedProminent)
+                    .help("Add todo (⌘N)")
             }
 
             StatGrid(minimum: 140) {
@@ -54,7 +57,11 @@ struct TodosView: View {
                 CountText(value: active.count)
             } content: {
                 if active.isEmpty {
-                    EmptyStateView(systemImage: "checkmark", title: "All clear", subtitle: "Nothing on your plate matching these filters.")
+                    if todos.isEmpty {
+                        EmptyStateView(systemImage: "checklist", title: "No todos yet", subtitle: "Press ⌘N or Add todo to create your first one.")
+                    } else {
+                        EmptyStateView(systemImage: "checkmark", title: "All clear", subtitle: "Nothing on your plate matching these filters.")
+                    }
                 } else {
                     ForEach(active) { TodoRow(todo: $0) }
                 }
@@ -85,18 +92,20 @@ struct TodosView: View {
                 .cardBackground()
             }
         }
+        .sheet(item: $store.editingTodo) { TodoEditorSheet(todo: $0, undoManager: undoManager) }
     }
 }
 
 struct TodoRow: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.undoManager) private var undoManager
     var todo: Todo
     @State private var hovering = false
 
     var body: some View {
         ListRow {
             HStack(alignment: .top, spacing: 10) {
-                CheckCircle(isOn: todo.done) { withAnimation { store.toggleTodo(todo.id) } }
+                CheckCircle(isOn: todo.done) { withAnimation { store.toggleTodo(todo.id, undoManager: undoManager) } }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(todo.title)
                         .font(.system(size: 13, weight: .medium))
@@ -112,13 +121,27 @@ struct TodoRow: View {
                     .padding(.top, 4)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                RowActions(isHovering: hovering, onDelete: {
-                    store.todos.removeAll { $0.id == todo.id }
-                })
+                RowActions(isHovering: hovering, onEdit: edit, onDelete: delete)
             }
             .opacity(todo.done ? 0.55 : 1)
         }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2, perform: edit)
         .onHover { hovering = $0 }
+        .contextMenu {
+            Button("Edit…", systemImage: "pencil", action: edit)
+            Button(todo.done ? "Mark as Not Done" : "Mark as Done", systemImage: todo.done ? "circle" : "checkmark.circle") {
+                withAnimation { store.toggleTodo(todo.id, undoManager: undoManager) }
+            }
+            Divider()
+            Button("Delete", systemImage: "trash", role: .destructive, action: delete)
+        }
+    }
+
+    private func edit() { store.editingTodo = todo }
+
+    private func delete() {
+        withAnimation { store.deleteTodo(todo.id, undoManager: undoManager) }
     }
 }
 

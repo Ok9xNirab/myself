@@ -3,12 +3,12 @@ import Foundation
 /// Seed content ported from the design's `store.js`. All dates are relative to today.
 enum SampleData {
     static let labels: [TaskLabel] = [
-        TaskLabel(id: "l1", name: "Work", hex: 0x2B7BBF),
-        TaskLabel(id: "l2", name: "Personal", hex: 0x6F8F24),
-        TaskLabel(id: "l3", name: "Health", hex: 0x1F9D8F),
-        TaskLabel(id: "l4", name: "Urgent", hex: 0xCB4733),
-        TaskLabel(id: "l5", name: "Learning", hex: 0x6A63C4),
-        TaskLabel(id: "l6", name: "Finance", hex: 0xBC8A1C),
+        TaskLabel(id: "l1", name: "Work", hex: 0x2B7BBF, sortOrder: 0),
+        TaskLabel(id: "l2", name: "Personal", hex: 0x6F8F24, sortOrder: 1),
+        TaskLabel(id: "l3", name: "Health", hex: 0x1F9D8F, sortOrder: 2),
+        TaskLabel(id: "l4", name: "Urgent", hex: 0xCB4733, sortOrder: 3),
+        TaskLabel(id: "l5", name: "Learning", hex: 0x6A63C4, sortOrder: 4),
+        TaskLabel(id: "l6", name: "Finance", hex: 0xBC8A1C, sortOrder: 5),
     ]
 
     static func todos() -> [Todo] {
