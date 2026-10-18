@@ -32,16 +32,17 @@ enum Day {
     }
 }
 
-enum Weekday: Int, CaseIterable, Hashable {
+enum Weekday: Int, CaseIterable, Hashable, Codable {
     case sun = 1, mon, tue, wed, thu, fri, sat
 
     var code: String { ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][rawValue - 1] }
+    var initial: String { ["S", "M", "T", "W", "T", "F", "S"][rawValue - 1] }
 
     static var today: Weekday { Weekday(rawValue: Day.calendar.component(.weekday, from: .now))! }
     static func of(_ date: Date) -> Weekday { Weekday(rawValue: Day.calendar.component(.weekday, from: date))! }
 }
 
-struct ClockTime: Hashable, Comparable {
+struct ClockTime: Hashable, Comparable, Codable {
     var hour: Int
     var minute: Int
 

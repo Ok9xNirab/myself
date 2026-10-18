@@ -103,14 +103,29 @@ enum SettingsTab: Hashable { case general, features, iCloud }
 
 enum NoteRequest: Equatable { case open(ID), new }
 
-/// App state. TODOs, labels and notes are persisted and synced through `SyncEngine`; the other features are still
+/// A University record open in its editor sheet; one that isn't in the store yet is a new one.
+enum UniversityEditor: Identifiable {
+    case klass(UniClass), assignment(Assignment), exam(Exam), subject(SyllabusSubject)
+
+    var id: ID {
+        switch self {
+        case .klass(let r): r.id
+        case .assignment(let r): r.id
+        case .exam(let r): r.id
+        case .subject(let r): r.id
+        }
+    }
+}
+
+/// App state. TODOs, labels, notes and University are persisted and synced through `SyncEngine`; the other features are still
 /// in-memory sample content. Feature visibility is stored in UserDefaults.
 @Observable
 final class AppStore {
     private(set) var labels: [TaskLabel] = []
     private(set) var todos: [Todo] = []
     var office: [OfficeTask] = []
-    var university = SampleData.university()
+    private(set) var university = University()
+    private(set) var universityNotes = UniversityNotes()
     var products: [Product] = []
     var jobStudy: [StudySubject] = []
     var workout = SampleData.workout()
@@ -127,6 +142,7 @@ final class AppStore {
     var editingTodo: Todo?
     /// Asks the Notes page to open or create a note (Quick Open, File › New Note); the page clears it.
     var noteRequest: NoteRequest?
+    var editingUniversity: UniversityEditor?
 
 
     let sync = SyncEngine()
@@ -137,6 +153,8 @@ final class AppStore {
     /// Notes edited in memory but not written yet; typing is saved in one write once it pauses.
     @ObservationIgnored private var unsavedNotes: Set<ID> = []
     @ObservationIgnored private var noteSaveTask: Task<Void, Never>?
+    @ObservationIgnored private var universityNotesUnsaved = false
+    @ObservationIgnored private var universityNotesSaveTask: Task<Void, Never>?
 
     /// Features turned off in Settings. Their data is kept; they're only hidden.
     private(set) var disabledPages: Set<Page> = Set(
@@ -162,7 +180,7 @@ final class AppStore {
         }
     }
 
-    /// Settings › Reset: replaces todos, labels and notes (in the sync folder too) and every other feature with the samples.
+    /// Settings › Reset: replaces todos, labels, notes and University (in the sync folder too) and every other feature with the samples.
     func loadSampleData() {
         for todo in todos { sync.delete(Todo.self, id: todo.id) }
         labels = SampleData.labels
@@ -176,15 +194,31 @@ final class AppStore {
         notes = SampleData.notes()
         for category in noteCategories { sync.save(category) }
         for note in notes { sync.save(note) }
+        loadSampleUniversity()
         loadSampleFeatures()
     }
 
     private func loadSampleFeatures() {
         office = SampleData.office()
-        university = SampleData.university()
         products = SampleData.products()
         jobStudy = SampleData.jobStudy()
         workout = SampleData.workout()
+    }
+
+    private func loadSampleUniversity() {
+        let u = university
+        for r in u.classes { sync.delete(UniClass.self, id: r.id) }
+        for r in u.syllabus { sync.delete(SyllabusSubject.self, id: r.id) }
+        for r in u.assignments { sync.delete(Assignment.self, id: r.id) }
+        for r in u.exams { sync.delete(Exam.self, id: r.id) }
+        university = SampleData.university()
+        for r in university.classes { sync.save(r) }
+        for r in university.syllabus { sync.save(r) }
+        for r in university.assignments { sync.save(r) }
+        for r in university.exams { sync.save(r) }
+        universityNotesUnsaved = false
+        universityNotes = UniversityNotes(text: SampleData.universityNotes, updatedAt: .now)
+        sync.save(universityNotes)
     }
 
     // MARK: Navigation
@@ -449,12 +483,157 @@ final class AppStore {
         }
     }
 
+    // MARK: University
+
+    func newClass() {
+        let hex = Palette.swatches[university.classes.count % Palette.swatches.count]
+        editingUniversity = .klass(UniClass(subject: "", code: "", days: [], time: ClockTime(hour: 9, minute: 0), room: "", hex: hex))
+    }
+
+    func newAssignment() {
+        editingUniversity = .assignment(Assignment(title: "", subject: university.subjects.first ?? "", due: Day.offset(7)))
+    }
+
+    func newExam() {
+        editingUniversity = .exam(Exam(subject: university.subjects.first ?? "", kind: .midterm, date: Day.offset(14), prep: 0))
+    }
+
+    func newSyllabusSubject() {
+        let taken = Set(university.syllabus.map(\.subject))
+        editingUniversity = .subject(SyllabusSubject(subject: university.classes.map(\.subject).first { !taken.contains($0) } ?? "", topics: []))
+    }
+
+    /// Adds or updates a class. Renaming its subject renames it on assignments, exams and the syllabus too.
+    func saveClass(_ klass: UniClass, undoManager: UndoManager? = nil) {
+        let old = university.classes.first { $0.id == klass.id }
+        put(klass, in: \.university.classes, undoManager: undoManager, action: old == nil ? "Add Class" : "Edit Class")
+        if let old, old.subject != klass.subject { renameSubject(old.subject, to: klass.subject, undoManager: undoManager) }
+    }
+
+    func deleteClass(_ id: ID, undoManager: UndoManager? = nil) {
+        remove(id, from: \.university.classes, undoManager: undoManager, action: "Delete Class")
+    }
+
+    func saveAssignment(_ assignment: Assignment, undoManager: UndoManager? = nil) {
+        let isNew = !university.assignments.contains { $0.id == assignment.id }
+        put(assignment, in: \.university.assignments, undoManager: undoManager, action: isNew ? "Add Assignment" : "Edit Assignment")
+    }
+
+    func toggleAssignment(_ id: ID, undoManager: UndoManager? = nil) {
+        guard var assignment = university.assignments.first(where: { $0.id == id }) else { return }
+        assignment.done.toggle()
+        put(assignment, in: \.university.assignments, undoManager: undoManager, action: assignment.done ? "Complete Assignment" : "Reopen Assignment")
+    }
+
+    func deleteAssignment(_ id: ID, undoManager: UndoManager? = nil) {
+        remove(id, from: \.university.assignments, undoManager: undoManager, action: "Delete Assignment")
+    }
+
+    func saveExam(_ exam: Exam, undoManager: UndoManager? = nil) {
+        let isNew = !university.exams.contains { $0.id == exam.id }
+        put(exam, in: \.university.exams, undoManager: undoManager, action: isNew ? "Add Exam" : "Edit Exam")
+    }
+
+    func deleteExam(_ id: ID, undoManager: UndoManager? = nil) {
+        remove(id, from: \.university.exams, undoManager: undoManager, action: "Delete Exam")
+    }
+
+    func saveSyllabusSubject(_ subject: SyllabusSubject, undoManager: UndoManager? = nil) {
+        let isNew = !university.syllabus.contains { $0.id == subject.id }
+        put(subject, in: \.university.syllabus, undoManager: undoManager, action: isNew ? "Add Subject" : "Edit Subject")
+    }
+
+    func deleteSyllabusSubject(_ id: ID, undoManager: UndoManager? = nil) {
+        remove(id, from: \.university.syllabus, undoManager: undoManager, action: "Delete Subject")
+    }
+
+    func toggleSyllabusTopic(subject: ID, topic: ID) {
+        editSyllabus(subject) { s in
+            if let t = s.topics.firstIndex(where: { $0.id == topic }) { s.topics[t].done.toggle() }
+        }
+    }
+
+    func addSyllabusTopic(subject: ID, name: String) {
+        let name = name.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        editSyllabus(subject) { $0.topics.append(SyllabusTopic(name: name)) }
+    }
+
+    func deleteSyllabusTopic(subject: ID, topic: ID) {
+        editSyllabus(subject) { $0.topics.removeAll { $0.id == topic } }
+    }
+
+    private func editSyllabus(_ id: ID, _ change: (inout SyllabusSubject) -> Void) {
+        guard var subject = university.syllabus.first(where: { $0.id == id }) else { return }
+        change(&subject)
+        put(subject, in: \.university.syllabus, undoManager: nil, action: "")
+    }
+
+    private func renameSubject(_ old: String, to new: String, undoManager: UndoManager?) {
+        for var a in university.assignments where a.subject == old {
+            a.subject = new
+            put(a, in: \.university.assignments, undoManager: undoManager, action: "Edit Class")
+        }
+        for var e in university.exams where e.subject == old {
+            e.subject = new
+            put(e, in: \.university.exams, undoManager: undoManager, action: "Edit Class")
+        }
+        for var s in university.syllabus where s.subject == old {
+            s.subject = new
+            put(s, in: \.university.syllabus, undoManager: undoManager, action: "Edit Class")
+        }
+    }
+
+    /// Adds or replaces a record in one of the University lists and writes its file.
+    private func put<T: SyncRecord & Equatable>(_ record: T, in list: ReferenceWritableKeyPath<AppStore, [T]>, undoManager: UndoManager?, action: String) {
+        var record = record
+        record.updatedAt = .now
+        let old = self[keyPath: list].first { $0.id == record.id }
+        if let i = self[keyPath: list].firstIndex(where: { $0.id == record.id }) { self[keyPath: list][i] = record } else { self[keyPath: list].append(record) }
+        sync.save(record)
+        guard let undoManager else { return }
+        undoManager.registerUndo(withTarget: self) { store in
+            if let old { store.put(old, in: list, undoManager: undoManager, action: action) } else { store.remove(record.id, from: list, undoManager: undoManager, action: action) }
+        }
+        undoManager.setActionName(action)
+    }
+
+    private func remove<T: SyncRecord & Equatable>(_ id: ID, from list: ReferenceWritableKeyPath<AppStore, [T]>, undoManager: UndoManager?, action: String) {
+        guard let record = self[keyPath: list].first(where: { $0.id == id }) else { return }
+        self[keyPath: list].removeAll { $0.id == id }
+        sync.delete(T.self, id: id)
+        undoManager?.registerUndo(withTarget: self) { $0.put(record, in: list, undoManager: undoManager, action: action) }
+        undoManager?.setActionName(action)
+    }
+
+    /// Edits the University notes. Memory updates straight away; the file is written once typing pauses.
+    func editUniversityNotes(_ text: String) {
+        guard text != universityNotes.text else { return }
+        universityNotes.text = text
+        universityNotes.updatedAt = .now
+        universityNotesUnsaved = true
+        universityNotesSaveTask?.cancel()
+        universityNotesSaveTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            self?.saveUniversityNotes()
+        }
+    }
+
+    func saveUniversityNotes() {
+        universityNotesSaveTask?.cancel()
+        guard universityNotesUnsaved else { return }
+        universityNotesUnsaved = false
+        sync.save(universityNotes)
+    }
+
     // MARK: Sync
 
     /// Re-reads todos, labels and notes from the sync folder and pulls shared settings.
     func reloadSynced() {
         // Write pending note edits first so the reload can't bring back older text.
         saveUnsavedNotes()
+        saveUniversityNotes()
         sync.scan {
             let todos = sync.load(Todo.self, keeping: todos).sorted { $0.createdAt < $1.createdAt }
             if todos != self.todos { self.todos = todos }
@@ -464,6 +643,15 @@ final class AppStore {
             if categories != self.noteCategories { self.noteCategories = categories }
             let notes = sync.load(Note.self, keeping: notes).sorted { $0.createdAt < $1.createdAt }
             if notes != self.notes { self.notes = notes }
+
+            var u = University()
+            u.classes = sync.load(UniClass.self, keeping: university.classes).sorted { $0.createdAt < $1.createdAt }
+            u.syllabus = sync.load(SyllabusSubject.self, keeping: university.syllabus).sorted { $0.createdAt < $1.createdAt }
+            u.assignments = sync.load(Assignment.self, keeping: university.assignments).sorted { $0.createdAt < $1.createdAt }
+            u.exams = sync.load(Exam.self, keeping: university.exams).sorted { $0.date < $1.date }
+            if u != university { university = u }
+            let uniNotes = sync.load(UniversityNotes.self, keeping: [universityNotes]).first ?? UniversityNotes()
+            if uniNotes != universityNotes { universityNotes = uniNotes }
         }
         pullSettings()
     }
@@ -479,8 +667,15 @@ final class AppStore {
     /// Switches the sync folder and copies over what's in memory, without overwriting newer files already there.
     private func carryData(_ change: () throws -> Void) rethrows {
         saveUnsavedNotes()
+        saveUniversityNotes()
         let (todos, labels, categories, notes) = (todos, labels, noteCategories, notes)
+        let (u, uniNotes) = (university, universityNotes)
         try change()
+        for r in u.classes { sync.save(r, onlyIfNewer: true) }
+        for r in u.syllabus { sync.save(r, onlyIfNewer: true) }
+        for r in u.assignments { sync.save(r, onlyIfNewer: true) }
+        for r in u.exams { sync.save(r, onlyIfNewer: true) }
+        if uniNotes.updatedAt > .distantPast { sync.save(uniNotes, onlyIfNewer: true) }
         for label in labels { sync.save(label, onlyIfNewer: true) }
         for todo in todos { sync.save(todo, onlyIfNewer: true) }
         for category in categories { sync.save(category, onlyIfNewer: true) }
@@ -557,27 +752,6 @@ final class AppStore {
 
     func toggleOffice(_ id: ID) {
         if let i = office.firstIndex(where: { $0.id == id }) { office[i].done.toggle() }
-    }
-
-    func toggleAssignment(_ id: ID) {
-        if let i = university.assignments.firstIndex(where: { $0.id == id }) { university.assignments[i].done.toggle() }
-    }
-
-    func toggleSyllabusTopic(subject: ID, topic: ID) {
-        guard let s = university.syllabus.firstIndex(where: { $0.id == subject }),
-              let t = university.syllabus[s].topics.firstIndex(where: { $0.id == topic }) else { return }
-        university.syllabus[s].topics[t].done.toggle()
-    }
-
-    func addSyllabusTopic(subject: ID, name: String) {
-        let name = name.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty, let s = university.syllabus.firstIndex(where: { $0.id == subject }) else { return }
-        university.syllabus[s].topics.append(SyllabusTopic(name: name))
-    }
-
-    func deleteSyllabusTopic(subject: ID, topic: ID) {
-        guard let s = university.syllabus.firstIndex(where: { $0.id == subject }) else { return }
-        university.syllabus[s].topics.removeAll { $0.id == topic }
     }
 
     /// Ticking a topic logs one revision for today; un-ticking the same day undoes it.

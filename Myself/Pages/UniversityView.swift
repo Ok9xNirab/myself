@@ -2,7 +2,8 @@ import SwiftUI
 
 struct UniversityView: View {
     @Environment(AppStore.self) private var store
-    @State private var openSyllabus: ID? = "s1"
+    @Environment(\.undoManager) private var undoManager
+    @State private var openSyllabus: ID?
 
     private struct Session: Identifiable {
         let date: Date
@@ -26,7 +27,8 @@ struct UniversityView: View {
         let openAssignments = u.assignments.filter { !$0.done }.sorted { (Day.fromToday($0.due) ?? 999) < (Day.fromToday($1.due) ?? 999) }
         let nextExam = u.exams.sorted { $0.date < $1.date }.first { (Day.fromToday($0.date) ?? -1) >= 0 }
 
-        PageScroll {
+        @Bindable var store = store
+        return PageScroll {
             StatGrid {
                 StatTile(systemImage: "calendar", label: "Classes / week", value: "\(u.classes.reduce(0) { $0 + $1.days.count })",
                          foot: "\(u.classes.count) subjects", color: Palette.blue)
@@ -47,6 +49,7 @@ struct UniversityView: View {
 
             syllabusCard
         }
+        .sheet(item: $store.editingUniversity) { UniversityEditorSheet(editor: $0, undoManager: undoManager) }
     }
 
     // MARK: Cards
@@ -54,8 +57,11 @@ struct UniversityView: View {
     private var classesCard: some View {
         Card(title: "Upcoming classes", systemImage: "calendar") {
             Spacer()
-            GhostButton(title: "Add class", systemImage: "plus")
+            GhostButton(title: "Add class", systemImage: "plus", action: store.newClass)
         } content: {
+            if store.university.classes.isEmpty {
+                EmptyStateView(systemImage: "calendar", title: "No classes yet", subtitle: "Add a class with its weekdays and time to see upcoming sessions.")
+            }
             ForEach(sessions) { s in
                 ListRow {
                     HStack(spacing: 12) {
@@ -90,18 +96,25 @@ struct UniversityView: View {
                     HStack(spacing: 6) {
                         ColorDot(color: c.color, size: 7)
                         Text(c.subject)
-                        Text(c.days.map(\.code).joined(separator: "·")).font(.system(size: 10, weight: .medium)).foregroundStyle(Palette.ink3)
-                        Image(systemName: "pencil").foregroundStyle(Palette.ink3)
-                        Image(systemName: "xmark").foregroundStyle(Palette.ink3)
+                        Text(c.days.sorted { $0.rawValue < $1.rawValue }.map(\.code).joined(separator: "·"))
+                            .font(.system(size: 10, weight: .medium)).foregroundStyle(Palette.ink3)
+                        Button { store.editingUniversity = .klass(c) } label: { Image(systemName: "pencil") }
+                            .help("Edit class")
+                        Button { withAnimation { store.deleteClass(c.id, undoManager: undoManager) } } label: { Image(systemName: "xmark") }
+                            .help("Delete class")
                     }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(Palette.ink3)
                     .font(.system(size: 12))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
                     .overlay(Capsule().strokeBorder(c.color.opacity(0.4), lineWidth: 0.5))
+                    .contentShape(Capsule())
+                    .onTapGesture(count: 2) { store.editingUniversity = .klass(c) }
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.vertical, store.university.classes.isEmpty ? 0 : 12)
         }
     }
 
@@ -110,34 +123,16 @@ struct UniversityView: View {
         return Card(title: "Assignments", systemImage: "flag", tint: Palette.red) {
             CountText(value: open.count)
             Spacer()
-            GhostButton(title: "Add", systemImage: "plus")
+            GhostButton(title: "Add", systemImage: "plus", action: store.newAssignment)
         } content: {
             if open.isEmpty && done.isEmpty {
                 EmptyStateView(systemImage: "checkmark", title: "No assignments", subtitle: "Add one and it'll be flagged high priority.")
             }
             ForEach(open) { a in
-                ListRow {
-                    HStack(alignment: .top, spacing: 10) {
-                        CheckCircle(isOn: false) { withAnimation { store.toggleAssignment(a.id) } }
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(a.title).font(.system(size: 13, weight: .medium))
-                            FlowLayout {
-                                PriorityBadge(priority: .high, locked: true)
-                                Badge(text: a.subject)
-                                DueBadge(date: a.due)
-                            }
-                        }
-                    }
-                }
+                AssignmentRow(assignment: a)
             }
             ForEach(done) { a in
-                ListRow {
-                    HStack(spacing: 10) {
-                        CheckCircle(isOn: true) { withAnimation { store.toggleAssignment(a.id) } }
-                        Text(a.title).font(.system(size: 13, weight: .medium)).strikethrough()
-                    }
-                    .opacity(0.55)
-                }
+                AssignmentRow(assignment: a)
             }
         }
     }
@@ -148,32 +143,13 @@ struct UniversityView: View {
                 Image(systemName: "target").foregroundStyle(Palette.amber)
                 Text("Exam countdown").font(.system(size: 15, weight: .semibold))
                 Spacer()
-                GhostButton(title: "Add exam", systemImage: "plus")
+                GhostButton(title: "Add exam", systemImage: "plus", action: store.newExam)
             }
             if store.university.exams.isEmpty {
                 EmptyStateView(systemImage: "target", title: "No exams scheduled", subtitle: "Add a Class Test, Midterm or Final.")
             }
-            ForEach(store.university.exams.sorted { $0.date < $1.date }) { e in
-                let d = Day.fromToday(e.date) ?? 0
-                HStack(alignment: .top, spacing: 14) {
-                    VStack(spacing: 0) {
-                        Text(d < 0 ? "✓" : "\(d)").font(.numeral(26))
-                        Text(d < 0 ? "done" : "days").font(.system(size: 10, weight: .medium)).foregroundStyle(Palette.ink3)
-                    }
-                    .foregroundStyle(d <= 5 ? Palette.red : d <= 10 ? Palette.amber : .primary)
-                    .frame(width: 54)
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(e.subject).font(.system(size: 13, weight: .medium))
-                        HStack(spacing: 8) {
-                            Badge(text: e.kind.rawValue, color: e.kind.color)
-                            Text(e.date.monthDay).font(.system(size: 11.5)).foregroundStyle(Palette.ink3)
-                        }
-                        .padding(.top, 5)
-                        LabeledProgress(label: "Prep", value: e.prep,
-                                        color: e.prep >= 70 ? Palette.green : e.prep >= 40 ? Palette.amber : Palette.red)
-                            .padding(.top, 8)
-                    }
-                }
+            ForEach(store.university.exams) { e in
+                ExamRow(exam: e)
             }
         }
         .padding(16)
@@ -181,15 +157,14 @@ struct UniversityView: View {
     }
 
     private var notesCard: some View {
-        @Bindable var store = store
-        return VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Image(systemName: "note.text").foregroundStyle(Palette.violet)
                 Text("Notes").font(.system(size: 15, weight: .semibold))
                 Spacer()
                 Text("autosaved").font(.system(size: 11.5)).foregroundStyle(Palette.ink3)
             }
-            TextEditor(text: $store.university.notes)
+            TextEditor(text: Binding(get: { store.universityNotes.text }, set: store.editUniversityNotes))
                 .font(.system(size: 13))
                 .scrollContentBackground(.hidden)
                 .padding(6)
@@ -205,8 +180,11 @@ struct UniversityView: View {
         return Card(title: "Syllabus completion", systemImage: "book.closed") {
             Spacer()
             Text("\(u.syllabusPercent)% overall").font(.system(size: 11.5)).foregroundStyle(Palette.ink3)
-            GhostButton(title: "Add subject", systemImage: "plus")
+            GhostButton(title: "Add subject", systemImage: "plus", action: store.newSyllabusSubject)
         } content: {
+            if u.syllabus.isEmpty {
+                EmptyStateView(systemImage: "book.closed", title: "No subjects yet", subtitle: "Add a subject and tick off its topics as you cover them.")
+            }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 0, alignment: .top)], spacing: 0) {
                 ForEach(u.syllabus) { s in
                     SyllabusCell(subject: s, isOpen: openSyllabus == s.id) {
@@ -223,6 +201,8 @@ struct UniversityView: View {
 
 private struct SyllabusCell: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.undoManager) private var undoManager
+    @State private var hovering = false
     var subject: SyllabusSubject
     var isOpen: Bool
     var onToggleOpen: () -> Void
@@ -233,7 +213,16 @@ private struct SyllabusCell: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(subject.subject).font(.system(size: 13, weight: .medium))
+                    HStack(spacing: 4) {
+                        Text(subject.subject).font(.system(size: 13, weight: .medium))
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(Palette.ink3)
+                            .rotationEffect(.degrees(isOpen ? 90 : 0))
+                        Spacer(minLength: 0)
+                        RowActions(isHovering: hovering, onEdit: edit, onDelete: delete)
+                            .frame(height: 16)
+                    }
                     ProgressBar(value: Double(pct), color: color)
                 }
                 .contentShape(Rectangle())
@@ -269,6 +258,125 @@ private struct SyllabusCell: View {
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Palette.surface)
+        .onHover { hovering = $0 }
+        .contextMenu {
+            Button("Edit…", systemImage: "pencil", action: edit)
+            Divider()
+            Button("Delete", systemImage: "trash", role: .destructive, action: delete)
+        }
+    }
+
+    private func edit() { store.editingUniversity = .subject(subject) }
+
+    private func delete() {
+        withAnimation { store.deleteSyllabusSubject(subject.id, undoManager: undoManager) }
+    }
+}
+
+private struct AssignmentRow: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.undoManager) private var undoManager
+    @State private var hovering = false
+    var assignment: Assignment
+
+    var body: some View {
+        let a = assignment
+        ListRow {
+            HStack(alignment: a.done ? .center : .top, spacing: 10) {
+                CheckCircle(isOn: a.done) { withAnimation { store.toggleAssignment(a.id, undoManager: undoManager) } }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(a.title).font(.system(size: 13, weight: .medium)).strikethrough(a.done)
+                    if !a.done {
+                        FlowLayout {
+                            PriorityBadge(priority: .high, locked: true)
+                            if !a.subject.isEmpty { Badge(text: a.subject) }
+                            DueBadge(date: a.due)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                RowActions(isHovering: hovering, onEdit: edit, onDelete: delete)
+            }
+            .opacity(a.done ? 0.55 : 1)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2, perform: edit)
+        .onHover { hovering = $0 }
+        .contextMenu {
+            Button("Edit…", systemImage: "pencil", action: edit)
+            Button(a.done ? "Mark as Not Done" : "Mark as Done", systemImage: a.done ? "circle" : "checkmark.circle") {
+                withAnimation { store.toggleAssignment(a.id, undoManager: undoManager) }
+            }
+            Divider()
+            Button("Delete", systemImage: "trash", role: .destructive, action: delete)
+        }
+    }
+
+    private func edit() { store.editingUniversity = .assignment(assignment) }
+
+    private func delete() {
+        withAnimation { store.deleteAssignment(assignment.id, undoManager: undoManager) }
+    }
+}
+
+private struct ExamRow: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.undoManager) private var undoManager
+    @State private var hovering = false
+    var exam: Exam
+
+    var body: some View {
+        let e = exam
+        let d = Day.fromToday(e.date) ?? 0
+        HStack(alignment: .top, spacing: 14) {
+            VStack(spacing: 0) {
+                Text(d < 0 ? "✓" : "\(d)").font(.numeral(26))
+                Text(d < 0 ? "done" : "days").font(.system(size: 10, weight: .medium)).foregroundStyle(Palette.ink3)
+            }
+            .foregroundStyle(d <= 5 ? Palette.red : d <= 10 ? Palette.amber : .primary)
+            .frame(width: 54)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .top) {
+                    Text(e.subject).font(.system(size: 13, weight: .medium))
+                    Spacer(minLength: 0)
+                    RowActions(isHovering: hovering, onEdit: edit, onDelete: delete)
+                        .frame(height: 16)
+                }
+                HStack(spacing: 8) {
+                    Badge(text: e.kind.rawValue, color: e.kind.color)
+                    Text(e.date.monthDay).font(.system(size: 11.5)).foregroundStyle(Palette.ink3)
+                }
+                .padding(.top, 5)
+                LabeledProgress(label: "Prep", value: e.prep,
+                                color: e.prep >= 70 ? Palette.green : e.prep >= 40 ? Palette.amber : Palette.red)
+                    .padding(.top, 8)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2, perform: edit)
+        .onHover { hovering = $0 }
+        .contextMenu {
+            Button("Edit…", systemImage: "pencil", action: edit)
+            Menu("Prep") {
+                ForEach([0, 25, 50, 75, 100], id: \.self) { value in
+                    Button("\(value)%") { setPrep(value) }
+                }
+            }
+            Divider()
+            Button("Delete", systemImage: "trash", role: .destructive, action: delete)
+        }
+    }
+
+    private func edit() { store.editingUniversity = .exam(exam) }
+
+    private func setPrep(_ value: Int) {
+        var e = exam
+        e.prep = value
+        withAnimation { store.saveExam(e, undoManager: undoManager) }
+    }
+
+    private func delete() {
+        withAnimation { store.deleteExam(exam.id, undoManager: undoManager) }
     }
 }
 

@@ -4,7 +4,7 @@ import SwiftUI
 /// different records on two Macs never conflict, and deleting a record is just removing its file.
 protocol SyncRecord: Codable, Identifiable where ID == String {
     static var folder: String { get }
-    var updatedAt: Date { get }
+    var updatedAt: Date { get set }
 }
 
 /// Appearance and feature visibility, shared through `settings.json` (Settings › iCloud › Also sync).
@@ -155,7 +155,8 @@ final class SyncEngine {
         watcher?.stop()
         cache = [:]
         let root = root
-        for folder in [Todo.folder, TaskLabel.folder, NoteCategory.folder, Note.folder] {
+        for folder in [Todo.folder, TaskLabel.folder, NoteCategory.folder, Note.folder,
+                       UniClass.folder, SyllabusSubject.folder, Assignment.folder, Exam.folder, UniversityNotes.folder] {
             try? FileManager.default.createDirectory(at: root.appending(path: folder, directoryHint: .isDirectory), withIntermediateDirectories: true)
         }
         let reload: @MainActor () -> Void = { [weak self] in self?.scheduleReload() }

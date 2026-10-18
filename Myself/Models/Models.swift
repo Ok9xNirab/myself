@@ -59,7 +59,10 @@ struct OfficeTask: Identifiable {
 
 // MARK: University
 
-struct UniClass: Identifiable {
+/// Synced as `classes/<id>.json`.
+struct UniClass: Identifiable, Equatable, Codable, SyncRecord {
+    static let folder = "classes"
+
     var id = newID()
     var subject: String
     var code: String
@@ -67,34 +70,46 @@ struct UniClass: Identifiable {
     var time: ClockTime
     var room: String
     var hex: UInt32
+    var createdAt = Date.now
+    var updatedAt = Date.now
     var color: Color { Color(hex: hex) }
 }
 
-struct SyllabusTopic: Identifiable {
+struct SyllabusTopic: Identifiable, Equatable, Codable {
     var id = newID()
     var name: String
     var done = false
 }
 
-struct SyllabusSubject: Identifiable {
+/// Synced as `syllabus/<id>.json`, topics included.
+struct SyllabusSubject: Identifiable, Equatable, Codable, SyncRecord {
+    static let folder = "syllabus"
+
     var id = newID()
     var subject: String
     var topics: [SyllabusTopic]
+    var createdAt = Date.now
+    var updatedAt = Date.now
 
     var percent: Int {
         topics.isEmpty ? 0 : Int((100 * Double(topics.filter(\.done).count) / Double(topics.count)).rounded())
     }
 }
 
-struct Assignment: Identifiable {
+/// Synced as `assignments/<id>.json`. Always high priority.
+struct Assignment: Identifiable, Equatable, Codable, SyncRecord {
+    static let folder = "assignments"
+
     var id = newID()
     var title: String
     var subject: String
     var due: Date?
     var done = false
+    var createdAt = Date.now
+    var updatedAt = Date.now
 }
 
-enum ExamKind: String, CaseIterable {
+enum ExamKind: String, CaseIterable, Codable {
     case classTest = "Class Test", midterm = "Midterm", final = "Final"
 
     var color: Color {
@@ -106,24 +121,43 @@ enum ExamKind: String, CaseIterable {
     }
 }
 
-struct Exam: Identifiable {
+/// Synced as `exams/<id>.json`.
+struct Exam: Identifiable, Equatable, Codable, SyncRecord {
+    static let folder = "exams"
+
     var id = newID()
     var subject: String
     var kind: ExamKind
     var date: Date
+    /// Preparation, 0–100.
     var prep: Int
+    var updatedAt = Date.now
 }
 
-struct University {
-    var notes: String
-    var classes: [UniClass]
-    var syllabus: [SyllabusSubject]
-    var assignments: [Assignment]
-    var exams: [Exam]
+/// The University page's free-text notes, synced as the single file `university/notes.json`.
+struct UniversityNotes: Equatable, Codable, SyncRecord {
+    static let folder = "university"
+
+    var id = "notes"
+    var text = ""
+    var updatedAt = Date.distantPast
+}
+
+struct University: Equatable {
+    var classes: [UniClass] = []
+    var syllabus: [SyllabusSubject] = []
+    var assignments: [Assignment] = []
+    var exams: [Exam] = []
 
     var syllabusPercent: Int {
         let all = syllabus.flatMap(\.topics)
         return Int((100 * Double(all.filter(\.done).count) / Double(max(1, all.count))).rounded())
+    }
+
+    /// Subject names from classes and syllabus, for the subject pickers.
+    var subjects: [String] {
+        var seen = Set<String>()
+        return (classes.map(\.subject) + syllabus.map(\.subject)).filter { seen.insert($0).inserted }
     }
 }
 

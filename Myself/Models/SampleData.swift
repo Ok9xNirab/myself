@@ -75,16 +75,16 @@ enum SampleData {
             Exam(subject: "Linear Algebra", kind: .midterm, date: Day.offset(18), prep: 15),
         ]
 
-        let notes = """
+        return University(classes: classes, syllabus: syllabus, assignments: assignments, exams: exams)
+    }
+
+    static let universityNotes = """
         Sem 4 priorities:
         • DSA midterm is the big one — start graph problems early.
         • Ask Prof. Rahman about the DB project extension.
         • Form a study group for Linear Algebra (weakest subject).
         • Library has the 4th ed. of CLRS on reserve.
         """
-
-        return University(notes: notes, classes: classes, syllabus: syllabus, assignments: assignments, exams: exams)
-    }
 
     static func products() -> [Product] {
         [
