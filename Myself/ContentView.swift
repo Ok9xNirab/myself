@@ -93,7 +93,7 @@ private struct Sidebar: View {
                 Section(group.name) {
                     ForEach(group.pages) { page in
                         Label(page.title, systemImage: page.systemImage)
-                            .badge(store.count(for: page))
+                            .badge(badge(for: page))
                             .tag(page)
                     }
                 }
@@ -103,6 +103,12 @@ private struct Sidebar: View {
         .environment(\.defaultMinListRowHeight, 28 + density.paddingDelta * 2)
         .modifier(SidebarBackground(style: style))
         .safeAreaInset(edge: .bottom, spacing: 0) { footer }
+    }
+
+    private func badge(for page: Page) -> Text? {
+        if page.isComingSoon { return Text("Soon") }
+        let count = store.count(for: page)
+        return count > 0 ? Text("\(count)") : nil
     }
 
     /// iCloud sync status; clicking it opens Settings › iCloud.

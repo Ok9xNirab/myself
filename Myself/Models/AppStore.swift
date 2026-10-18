@@ -66,6 +66,9 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
+    /// Pages that render as a blurred, non-interactive preview behind a "Coming soon" card.
+    var isComingSoon: Bool { self == .workout }
+
     /// Icon tile colour in Settings › Features.
     var featureColor: Color {
         switch self {

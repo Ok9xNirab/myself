@@ -8,6 +8,14 @@ struct WorkoutView: View {
         let w = store.workout
         let selected = w.programs.first { $0.id == selection } ?? w.programs.first
 
+        content(w, selected: selected)
+            .blur(radius: 8)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .overlay { ComingSoonCard(page: .workout) }
+    }
+
+    private func content(_ w: WorkoutData, selected: WorkoutProgram?) -> some View {
         PageScroll {
             hero(w)
 

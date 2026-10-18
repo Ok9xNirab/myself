@@ -526,3 +526,29 @@ struct ListRow<Content: View>: View {
             .overlay(alignment: .bottom) { Rectangle().fill(Palette.border).frame(height: 0.5) }
     }
 }
+
+/// Centered card shown over a blurred page that isn't ready yet (`Page.isComingSoon`).
+struct ComingSoonCard: View {
+    var page: Page
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: page.systemImage)
+                .font(.system(size: 22, weight: .medium))
+                .foregroundStyle(page.featureColor)
+                .frame(width: 48, height: 48)
+                .background(page.featureColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            Badge(text: "Coming soon", systemImage: "sparkles", color: Color.accentColor)
+            Text(page.title).font(.system(size: 17, weight: .bold))
+            Text("\(page.featureDescription) are on the way.")
+                .font(.system(size: 12.5))
+                .foregroundStyle(Palette.ink2)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, 28)
+        .padding(.vertical, 24)
+        .frame(maxWidth: 300)
+        .cardBackground()
+        .shadow(color: .black.opacity(0.08), radius: 20, y: 8)
+    }
+}
