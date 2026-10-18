@@ -28,7 +28,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
 ## Architecture
 
 - `MyApp.swift` creates the single `AppStore` (`@Observable`), injects it via `.environment(store)`, applies the light/dark override stored in `@AppStorage("appearance")`, and defines the menu commands (Quick Open ⌘K, Go menu with ⌘[ / ⌘] and ⌘1–⌘8).
-- `ContentView.swift` is the `NavigationSplitView` shell: sidebar (sections from `Page.groups`, badge counts from `store.count(for:)`), toolbar (back/forward, appearance toggle, search), and a switch from `store.page` to a page view.
+- `ContentView.swift` is the `NavigationSplitView` shell: sidebar (sections from `Page.groups`, badge counts from `store.count(for:)`), toolbar (back/forward, search), and a switch from `store.page` to a page view.
 - `Models/AppStore.swift` holds the `Page` enum (title, subtitle, SF Symbol, sidebar group), all app data, navigation history (`go`/`back`/`forward`), and all mutations. Views call store methods rather than mutating nested arrays directly.
 - `Models/SampleData.swift` is the seed ported from the prototype's `store.js`. Dates are relative to today (`Day.offset(n)`) so the app always looks current.
 - `Models/SyncEngine.swift`: file-based persistence and sync (see "Sync").

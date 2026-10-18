@@ -2,12 +2,10 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(AppStore.self) private var store
-    @Environment(\.colorScheme) private var colorScheme
     #if os(macOS)
     @Environment(\.openSettings) private var openSettings
     #endif
     @Environment(\.scenePhase) private var scenePhase
-    @AppStorage(PrefKey.appearance) private var appearance = ""
 
     var body: some View {
         @Bindable var store = store
@@ -52,12 +50,6 @@ struct ContentView: View {
                 .disabled(!store.canGoBack)
             Button("Forward", systemImage: "chevron.right", action: store.forward)
                 .disabled(!store.canGoForward)
-        }
-        ToolbarItem(placement: .primaryAction) {
-            let dark = colorScheme == .dark
-            Button(dark ? "Light Appearance" : "Dark Appearance", systemImage: dark ? "sun.max" : "moon") {
-                appearance = dark ? "light" : "dark"
-            }
         }
         ToolbarItem(placement: .primaryAction) {
             Button("Search", systemImage: "magnifyingglass") { store.isQuickOpenPresented = true }
