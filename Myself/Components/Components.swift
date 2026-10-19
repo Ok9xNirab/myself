@@ -380,6 +380,8 @@ struct ColorTabs<Item: Identifiable>: View {
     var title: (Item) -> String
     var color: (Item) -> Color
     var onSelect: (Item.ID) -> Void
+    var addHelp = "Add"
+    var onAdd: () -> Void = {}
 
     var body: some View {
         FlowLayout(spacing: 4, lineSpacing: 4) {
@@ -405,12 +407,13 @@ struct ColorTabs<Item: Identifiable>: View {
                 }
                 .buttonStyle(.plain)
             }
-            Button {} label: {
+            Button(action: onAdd) {
                 Image(systemName: "plus").font(.system(size: 12, weight: .medium)).foregroundStyle(Palette.ink3)
                     .frame(width: 28, height: 26)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Add")
+            .help(addHelp)
         }
     }
 }

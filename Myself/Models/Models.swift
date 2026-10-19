@@ -169,32 +169,51 @@ struct University: Equatable {
 
 // MARK: Product dev (kanban)
 
-struct KanbanCard: Identifiable {
+/// A board's four fixed columns.
+enum KanbanStatus: String, CaseIterable, Identifiable, Codable {
+    case backlog, inProgress, review, done
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .backlog: "Backlog"
+        case .inProgress: "In Progress"
+        case .review: "Review"
+        case .done: "Done"
+        }
+    }
+}
+
+/// Synced as `products/<id>.json`. Its cards are records of their own, so two Macs can change different cards on one board.
+struct Product: Identifiable, Equatable, Codable, SyncRecord {
+    static let folder = "products"
+
     var id = newID()
+    var name: String
+    var tagline = ""
+    var hex: UInt32
+    var createdAt = Date.now
+    var updatedAt = Date.now
+    var color: Color { Color(hex: hex) }
+}
+
+/// Synced as `kanban/<id>.json`.
+struct KanbanCard: Identifiable, Equatable, Codable, SyncRecord {
+    static let folder = "kanban"
+
+    var id = newID()
+    var productID: ID
+    var status: KanbanStatus = .backlog
     var title: String
     var desc = ""
     var labelIDs: [ID] = []
     var priority: Priority = .medium
     var due: Date?
-}
-
-struct KanbanColumn: Identifiable {
-    var id = newID()
-    var title: String
-    var cards: [KanbanCard]
-}
-
-struct Product: Identifiable {
-    var id = newID()
-    var name: String
-    var tagline: String
-    var hex: UInt32
-    var columns: [KanbanColumn]
-    var color: Color { Color(hex: hex) }
-
-    func column(titled title: String) -> KanbanColumn? {
-        columns.first { $0.title.lowercased() == title.lowercased() }
-    }
+    /// Position in its column, lowest first. Moving a card between two others gives it the midpoint.
+    var order: Double = 0
+    var createdAt = Date.now
+    var updatedAt = Date.now
 }
 
 // MARK: Job study

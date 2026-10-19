@@ -214,9 +214,7 @@ struct DashboardView: View {
     }
 
     private var productCard: some View {
-        let inProgress = store.products.flatMap { p in
-            (p.column(titled: "In Progress")?.cards ?? []).map { (card: $0, project: p) }
-        }
+        let inProgress = store.cards(in: .inProgress).compactMap { card in store.product(card.productID).map { (card: card, project: $0) } }
         return Card(title: "Product activity", systemImage: "shippingbox", tint: Palette.cyan) {
             Spacer()
             GhostButton(title: "Open boards", trailingChevron: true) { store.go(.products) }
@@ -241,7 +239,10 @@ struct DashboardView: View {
                             }
                         }
                     }
-                    .onTapGesture { store.go(.products) }
+                    .onTapGesture {
+                        store.selectedProduct = item.project.id
+                        store.go(.products)
+                    }
                 }
             }
         }

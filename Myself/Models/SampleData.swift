@@ -86,40 +86,30 @@ enum SampleData {
         • Library has the 4th ed. of CLRS on reserve.
         """
 
-    static func products() -> [Product] {
-        [
-            Product(id: "p1", name: "FormFlow", tagline: "No-code form builder SaaS", hex: 0xC15F3C, columns: [
-                KanbanColumn(title: "Backlog", cards: [
-                    KanbanCard(title: "Stripe billing integration", desc: "Metered usage + free tier cap.", labelIDs: ["l1"], priority: .medium, due: Day.offset(12)),
-                    KanbanCard(title: "Dark mode for the builder", labelIDs: ["l5"], priority: .low),
-                    KanbanCard(title: "Webhook delivery retries", desc: "Exponential backoff, 5 attempts.", labelIDs: ["l1"], priority: .medium, due: Day.offset(20)),
-                ]),
-                KanbanColumn(title: "In Progress", cards: [
-                    KanbanCard(title: "Drag-and-drop field reordering", desc: "Using pointer events, no library.", labelIDs: ["l1"], priority: .high, due: Day.offset(2)),
-                    KanbanCard(title: "Onboarding email sequence", desc: "3 emails over first week.", labelIDs: ["l2"], priority: .medium, due: Day.offset(4)),
-                ]),
-                KanbanColumn(title: "Review", cards: [
-                    KanbanCard(title: "Landing page redesign", desc: "Hero + pricing + testimonials.", labelIDs: ["l1"], priority: .high, due: Day.offset(1)),
-                ]),
-                KanbanColumn(title: "Done", cards: [
-                    KanbanCard(title: "Set up CI/CD pipeline", labelIDs: ["l1"], priority: .low, due: Day.offset(-5)),
-                    KanbanCard(title: "Domain + DNS configuration", labelIDs: ["l1"], priority: .low, due: Day.offset(-8)),
-                ]),
-            ]),
-            Product(id: "p2", name: "Pocket Recipes", tagline: "Recipe app for home cooks", hex: 0x6F8F24, columns: [
-                KanbanColumn(title: "Backlog", cards: [
-                    KanbanCard(title: "Grocery list auto-generation", desc: "From selected recipes.", labelIDs: ["l5"], priority: .medium),
-                    KanbanCard(title: "Offline recipe caching", labelIDs: ["l1"], priority: .low),
-                ]),
-                KanbanColumn(title: "In Progress", cards: [
-                    KanbanCard(title: "Recipe import from URL", desc: "Parse schema.org/Recipe JSON-LD.", labelIDs: ["l1"], priority: .high, due: Day.offset(6)),
-                ]),
-                KanbanColumn(title: "Review", cards: []),
-                KanbanColumn(title: "Done", cards: [
-                    KanbanCard(title: "App icon & splash screen", labelIDs: ["l2"], priority: .low, due: Day.offset(-3)),
-                ]),
-            ]),
+    static func products() -> (products: [Product], cards: [KanbanCard]) {
+        let products = [
+            Product(id: "p1", name: "FormFlow", tagline: "No-code form builder SaaS", hex: 0xC15F3C, createdAt: .now),
+            Product(id: "p2", name: "Pocket Recipes", tagline: "Recipe app for home cooks", hex: 0x6F8F24, createdAt: .now.addingTimeInterval(1)),
         ]
+        var cards: [KanbanCard] = []
+        func add(_ product: ID, _ status: KanbanStatus, _ title: String, desc: String = "", label: ID, _ priority: Priority, due: Int? = nil) {
+            let order = Double(cards.filter { $0.productID == product && $0.status == status }.count)
+            cards.append(KanbanCard(productID: product, status: status, title: title, desc: desc, labelIDs: [label],
+                                    priority: priority, due: due.map(Day.offset), order: order))
+        }
+        add("p1", .backlog, "Stripe billing integration", desc: "Metered usage + free tier cap.", label: "l1", .medium, due: 12)
+        add("p1", .backlog, "Dark mode for the builder", label: "l5", .low)
+        add("p1", .backlog, "Webhook delivery retries", desc: "Exponential backoff, 5 attempts.", label: "l1", .medium, due: 20)
+        add("p1", .inProgress, "Drag-and-drop field reordering", desc: "Using pointer events, no library.", label: "l1", .high, due: 2)
+        add("p1", .inProgress, "Onboarding email sequence", desc: "3 emails over first week.", label: "l2", .medium, due: 4)
+        add("p1", .review, "Landing page redesign", desc: "Hero + pricing + testimonials.", label: "l1", .high, due: 1)
+        add("p1", .done, "Set up CI/CD pipeline", label: "l1", .low, due: -5)
+        add("p1", .done, "Domain + DNS configuration", label: "l1", .low, due: -8)
+        add("p2", .backlog, "Grocery list auto-generation", desc: "From selected recipes.", label: "l5", .medium)
+        add("p2", .backlog, "Offline recipe caching", label: "l1", .low)
+        add("p2", .inProgress, "Recipe import from URL", desc: "Parse schema.org/Recipe JSON-LD.", label: "l1", .high, due: 6)
+        add("p2", .done, "App icon & splash screen", label: "l2", .low, due: -3)
+        return (products, cards)
     }
 
     static func jobStudy() -> [StudySubject] {

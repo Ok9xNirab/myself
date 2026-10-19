@@ -211,7 +211,7 @@ private struct ICloudSettings: View {
             } header: {
                 Text("Also sync")
             } footer: {
-                Text("Todos, labels and notes sync when iCloud is on. Classes, boards, study topics and workouts stay on this Mac for now.")
+                Text("Todos, office tasks, notes, University, Job Study and Product Dev sync when iCloud is on. Workouts stay on this Mac for now.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }

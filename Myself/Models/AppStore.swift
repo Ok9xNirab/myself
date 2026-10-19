@@ -126,7 +126,8 @@ final class AppStore {
     private(set) var office: [OfficeTask] = []
     private(set) var university = University()
     private(set) var universityNotes = UniversityNotes()
-    var products: [Product] = []
+    private(set) var products: [Product] = []
+    private(set) var cards: [KanbanCard] = []
     private(set) var jobStudy: [StudySubject] = []
     var workout = SampleData.workout()
     private(set) var noteCategories: [NoteCategory] = []
@@ -145,6 +146,8 @@ final class AppStore {
     var editingUniversity: UniversityEditor?
     /// The office task open in the editor sheet; one that isn't in `office` yet is a new one.
     var editingOffice: OfficeTask?
+    /// The board Product Dev shows; nil means the first one.
+    var selectedProduct: ID?
 
 
     let sync = SyncEngine()
@@ -182,7 +185,7 @@ final class AppStore {
         }
     }
 
-    /// Settings › Reset: replaces todos, labels, office tasks, notes, University and Job Study (in the sync folder too) and every other feature with the samples.
+    /// Settings › Reset: replaces todos, labels, office tasks, notes, University, Job Study and Product Dev (in the sync folder too) and every other feature with the samples.
     func loadSampleData() {
         for todo in todos { sync.delete(Todo.self, id: todo.id) }
         labels = SampleData.labels
@@ -203,11 +206,15 @@ final class AppStore {
         for subject in jobStudy { sync.delete(StudySubject.self, id: subject.id) }
         jobStudy = SampleData.jobStudy()
         for subject in jobStudy { sync.save(subject) }
+        for product in products { sync.delete(Product.self, id: product.id) }
+        for card in cards { sync.delete(KanbanCard.self, id: card.id) }
+        (products, cards) = SampleData.products()
+        for product in products { sync.save(product) }
+        for card in cards { sync.save(card) }
         loadSampleFeatures()
     }
 
     private func loadSampleFeatures() {
-        products = SampleData.products()
         workout = SampleData.workout()
     }
 
@@ -286,7 +293,7 @@ final class AppStore {
         case .todos: todos.filter { !$0.done }.count
         case .office: office.filter { !$0.done }.count
         case .university: university.assignments.filter { !$0.done }.count
-        case .products: products.reduce(0) { $0 + ($1.column(titled: "In Progress")?.cards.count ?? 0) }
+        case .products: cards(in: .inProgress).count
         case .workout: workout.streak
         case .jobStudy: jobStudy.reduce(0) { $0 + $1.dueCount }
         }
@@ -613,7 +620,7 @@ final class AppStore {
         }
     }
 
-    /// Adds or replaces a record in one of the synced lists (office tasks, University) and writes its file.
+    /// Adds or replaces a record in one of the synced lists (office tasks, University, Product Dev) and writes its file.
     private func put<T: SyncRecord & Equatable>(_ record: T, in list: ReferenceWritableKeyPath<AppStore, [T]>, undoManager: UndoManager?, action: String) {
         var record = record
         record.updatedAt = .now
@@ -749,9 +756,85 @@ final class AppStore {
         put(subject, in: \.jobStudy, undoManager: undoManager, action: action)
     }
 
+    // MARK: Product Dev
+
+    /// A board's cards in one column, in order.
+    func cards(of product: ID, in status: KanbanStatus) -> [KanbanCard] {
+        cards.filter { $0.productID == product && $0.status == status }
+    }
+
+    /// Every board's cards in one column (a card whose product was deleted elsewhere is left out).
+    func cards(in status: KanbanStatus) -> [KanbanCard] {
+        let products = Set(products.map(\.id))
+        return cards.filter { $0.status == status && products.contains($0.productID) }
+    }
+
+    func product(_ id: ID) -> Product? { products.first { $0.id == id } }
+
+    func saveProduct(_ product: Product, undoManager: UndoManager? = nil) {
+        let isNew = !products.contains { $0.id == product.id }
+        put(product, in: \.products, undoManager: undoManager, action: isNew ? "Add Project" : "Edit Project")
+    }
+
+    /// Deletes a project together with its cards.
+    func deleteProduct(_ id: ID, undoManager: UndoManager? = nil) {
+        guard let product = product(id) else { return }
+        let removed = cards.filter { $0.productID == id }
+        for card in removed { remove(card.id, from: \.cards, undoManager: nil, action: "") }
+        remove(id, from: \.products, undoManager: nil, action: "")
+        undoManager?.registerUndo(withTarget: self) { store in
+            store.put(product, in: \.products, undoManager: nil, action: "")
+            for card in removed { store.put(card, in: \.cards, undoManager: nil, action: "") }
+            store.cards.sort(by: Self.cardOrder)
+            undoManager?.registerUndo(withTarget: store) { $0.deleteProduct(id, undoManager: undoManager) }
+        }
+        undoManager?.setActionName("Delete Project")
+    }
+
+    /// A new card for the add-card sheet, placed at the bottom of its column.
+    func newCard(in product: ID, status: KanbanStatus) -> KanbanCard {
+        KanbanCard(productID: product, status: status, title: "", order: nextOrder(product, status))
+    }
+
+    /// Adds or updates a card. One that changed column in the sheet goes to the bottom of its new column.
+    func saveCard(_ card: KanbanCard, undoManager: UndoManager? = nil) {
+        var card = card
+        let old = cards.first { $0.id == card.id }
+        if let old, old.status != card.status { card.order = nextOrder(card.productID, card.status) }
+        put(card, in: \.cards, undoManager: undoManager, action: old == nil ? "Add Card" : "Edit Card")
+        cards.sort(by: Self.cardOrder)
+    }
+
+    func deleteCard(_ id: ID, undoManager: UndoManager? = nil) {
+        remove(id, from: \.cards, undoManager: undoManager, action: "Delete Card")
+    }
+
+    /// Moves a card to a column, just above `before` or at the bottom when that's nil. Only the moved card's file changes.
+    func moveCard(_ id: ID, to status: KanbanStatus, before: ID? = nil, undoManager: UndoManager? = nil) {
+        guard var card = cards.first(where: { $0.id == id }), before != id else { return }
+        let column = cards(of: card.productID, in: status).filter { $0.id != id }
+        if let before, let i = column.firstIndex(where: { $0.id == before }) {
+            let above = i > 0 ? column[i - 1].order : column[i].order - 1
+            card.order = (above + column[i].order) / 2
+        } else if card.status != status || column.last.map({ $0.order > card.order }) == true {
+            card.order = (column.last?.order ?? -1) + 1
+        } else {
+            return
+        }
+        card.status = status
+        put(card, in: \.cards, undoManager: undoManager, action: "Move Card")
+        cards.sort(by: Self.cardOrder)
+    }
+
+    private func nextOrder(_ product: ID, _ status: KanbanStatus) -> Double {
+        (cards(of: product, in: status).last?.order ?? -1) + 1
+    }
+
+    private static func cardOrder(_ a: KanbanCard, _ b: KanbanCard) -> Bool { (a.order, a.createdAt) < (b.order, b.createdAt) }
+
     // MARK: Sync
 
-    /// Re-reads todos, labels, office tasks, notes, University and Job Study from the sync folder and pulls shared settings.
+    /// Re-reads todos, labels, office tasks, notes, University, Job Study and Product Dev from the sync folder and pulls shared settings.
     func reloadSynced() {
         // Write pending note edits first so the reload can't bring back older text.
         saveUnsavedNotes()
@@ -778,6 +861,10 @@ final class AppStore {
             if uniNotes != universityNotes { universityNotes = uniNotes }
             let jobStudy = sync.load(StudySubject.self, keeping: jobStudy).sorted { $0.createdAt < $1.createdAt }
             if jobStudy != self.jobStudy { self.jobStudy = jobStudy }
+            let products = sync.load(Product.self, keeping: products).sorted { $0.createdAt < $1.createdAt }
+            if products != self.products { self.products = products }
+            let cards = sync.load(KanbanCard.self, keeping: cards).sorted(by: Self.cardOrder)
+            if cards != self.cards { self.cards = cards }
         }
         pullSettings()
     }
@@ -796,7 +883,10 @@ final class AppStore {
         saveUniversityNotes()
         let (todos, labels, office, categories, notes) = (todos, labels, office, noteCategories, notes)
         let (u, uniNotes, jobStudy) = (university, universityNotes, jobStudy)
+        let (products, cards) = (products, cards)
         try change()
+        for r in products { sync.save(r, onlyIfNewer: true) }
+        for r in cards { sync.save(r, onlyIfNewer: true) }
         for r in jobStudy { sync.save(r, onlyIfNewer: true) }
         for r in u.classes { sync.save(r, onlyIfNewer: true) }
         for r in u.syllabus { sync.save(r, onlyIfNewer: true) }
@@ -877,17 +967,6 @@ final class AppStore {
     }
 
     // MARK: Other features
-
-    func moveCard(_ cardID: ID, to columnID: ID, in productID: ID) {
-        guard let p = products.firstIndex(where: { $0.id == productID }) else { return }
-        var columns = products[p].columns
-        guard let from = columns.firstIndex(where: { $0.cards.contains { $0.id == cardID } }),
-              let to = columns.firstIndex(where: { $0.id == columnID }), from != to,
-              let c = columns[from].cards.firstIndex(where: { $0.id == cardID }) else { return }
-        let card = columns[from].cards.remove(at: c)
-        columns[to].cards.append(card)
-        products[p].columns = columns
-    }
 
     func toggleTrainedToday() {
         let already = workout.trainedToday

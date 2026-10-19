@@ -167,7 +167,7 @@ struct TodoEditorSheet: View {
 }
 
 /// A label chip that can be switched on and off.
-private struct LabelToggle: View {
+struct LabelToggle: View {
     var label: TaskLabel
     var isOn: Bool
     var action: () -> Void
