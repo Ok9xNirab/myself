@@ -16,8 +16,8 @@ struct UniversityEditorSheet: View {
     }
 }
 
-/// Shared sheet chrome: grouped form, title, Cancel and Add/Save.
-private struct EditorForm<Content: View>: View {
+/// Shared sheet chrome: grouped form, title, Cancel and Add/Save. Also used by the Job Study subject sheet.
+struct EditorForm<Content: View>: View {
     @Environment(\.dismiss) private var dismiss
     var title: String
     var isNew: Bool
@@ -49,7 +49,7 @@ private struct EditorForm<Content: View>: View {
     }
 }
 
-private func trimmed(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNewlines) }
+func trimmed(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNewlines) }
 
 /// Text field for a subject name with a menu of the subjects already in use.
 private struct SubjectField: View {
@@ -145,7 +145,7 @@ private struct ClassEditor: View {
     }
 }
 
-private struct SwatchPicker: View {
+struct SwatchPicker: View {
     @Binding var hex: UInt32
 
     var body: some View {

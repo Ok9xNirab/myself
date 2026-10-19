@@ -373,7 +373,7 @@ extension Donut where Content == Text {
     }
 }
 
-/// Segmented-style tab strip used for products and job-study subjects.
+/// Segmented-style tab strip used for products.
 struct ColorTabs<Item: Identifiable>: View {
     var items: [Item]
     var selection: Item.ID?

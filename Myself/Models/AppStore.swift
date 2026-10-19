@@ -117,7 +117,7 @@ enum UniversityEditor: Identifiable {
     }
 }
 
-/// App state. TODOs, labels, office tasks, notes and University are persisted and synced through `SyncEngine`; the other features are still
+/// App state. TODOs, labels, office tasks, notes, University and Job Study are persisted and synced through `SyncEngine`; the other features are still
 /// in-memory sample content. Feature visibility is stored in UserDefaults.
 @Observable
 final class AppStore {
@@ -127,7 +127,7 @@ final class AppStore {
     private(set) var university = University()
     private(set) var universityNotes = UniversityNotes()
     var products: [Product] = []
-    var jobStudy: [StudySubject] = []
+    private(set) var jobStudy: [StudySubject] = []
     var workout = SampleData.workout()
     private(set) var noteCategories: [NoteCategory] = []
     private(set) var notes: [Note] = []
@@ -182,7 +182,7 @@ final class AppStore {
         }
     }
 
-    /// Settings › Reset: replaces todos, labels, office tasks, notes and University (in the sync folder too) and every other feature with the samples.
+    /// Settings › Reset: replaces todos, labels, office tasks, notes, University and Job Study (in the sync folder too) and every other feature with the samples.
     func loadSampleData() {
         for todo in todos { sync.delete(Todo.self, id: todo.id) }
         labels = SampleData.labels
@@ -200,12 +200,14 @@ final class AppStore {
         for category in noteCategories { sync.save(category) }
         for note in notes { sync.save(note) }
         loadSampleUniversity()
+        for subject in jobStudy { sync.delete(StudySubject.self, id: subject.id) }
+        jobStudy = SampleData.jobStudy()
+        for subject in jobStudy { sync.save(subject) }
         loadSampleFeatures()
     }
 
     private func loadSampleFeatures() {
         products = SampleData.products()
-        jobStudy = SampleData.jobStudy()
         workout = SampleData.workout()
     }
 
@@ -286,7 +288,7 @@ final class AppStore {
         case .university: university.assignments.filter { !$0.done }.count
         case .products: products.reduce(0) { $0 + ($1.column(titled: "In Progress")?.cards.count ?? 0) }
         case .workout: workout.streak
-        case .jobStudy: jobStudy.reduce(0) { $0 + $1.topics.filter { $0.revisions == 0 }.count }
+        case .jobStudy: jobStudy.reduce(0) { $0 + $1.dueCount }
         }
     }
 
@@ -654,9 +656,102 @@ final class AppStore {
         sync.save(universityNotes)
     }
 
+    // MARK: Job Study
+
+    /// Adds or updates a subject (name and colour; topics are changed with the methods below).
+    func saveStudySubject(_ subject: StudySubject, undoManager: UndoManager? = nil) {
+        let isNew = !jobStudy.contains { $0.id == subject.id }
+        put(subject, in: \.jobStudy, undoManager: undoManager, action: isNew ? "Add Subject" : "Edit Subject")
+    }
+
+    func deleteStudySubject(_ id: ID, undoManager: UndoManager? = nil) {
+        remove(id, from: \.jobStudy, undoManager: undoManager, action: "Delete Subject")
+    }
+
+    /// Ticking a topic logs one revision for today; un-ticking the same day undoes it.
+    func reviseTopic(subject: ID, topic: ID) {
+        editStudyTopic(subject, topic) { t in
+            if t.revisedToday {
+                t.revisions = max(0, t.revisions - 1)
+                t.lastRevised = t.previousRevised
+                t.previousRevised = nil
+            } else {
+                t.revisions += 1
+                t.previousRevised = t.lastRevised
+                t.lastRevised = Day.offset(0)
+            }
+        }
+    }
+
+    /// The ± stepper: corrects the revision count. Adding dates the revision today; removing the last one clears the date.
+    func adjustRevisions(subject: ID, topic: ID, by delta: Int) {
+        editStudyTopic(subject, topic) { t in
+            t.revisions = max(0, t.revisions + delta)
+            if delta > 0 {
+                if !t.revisedToday { t.previousRevised = t.lastRevised }
+                t.lastRevised = Day.offset(0)
+            } else if t.revisions == 0 {
+                t.lastRevised = nil
+                t.previousRevised = nil
+            }
+        }
+    }
+
+    func addStudyTopic(subject: ID, name: String) {
+        let name = name.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        editStudySubject(subject) { $0.topics.append(StudyTopic(name: name)) }
+    }
+
+    func renameStudyTopic(subject: ID, topic: ID, to name: String) {
+        let name = name.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        editStudyTopic(subject, topic) { $0.name = name }
+    }
+
+    func deleteStudyTopic(subject: ID, topic: ID, undoManager: UndoManager? = nil) {
+        editStudySubject(subject, undoManager: undoManager, action: "Delete Topic") { $0.topics.removeAll { $0.id == topic } }
+    }
+
+    /// Links a note to a topic, or unlinks it if it's linked already.
+    func toggleTopicNote(subject: ID, topic: ID, note: ID) {
+        editStudyTopic(subject, topic) { t in
+            if t.noteIDs.contains(note) { t.noteIDs.removeAll { $0 == note } } else { t.noteIDs.append(note) }
+        }
+    }
+
+    /// Creates a note in the "Job Study" category (added if missing) and links it to the topic.
+    @discardableResult
+    func addTopicNote(subject: ID, topic: ID, title: String) -> Note {
+        let category = noteCategories.first { $0.name == "Job Study" } ?? {
+            let category = NoteCategory(id: newID(), name: "Job Study", hex: 0xFF9500,
+                                        sortOrder: (noteCategories.map(\.sortOrder).max() ?? -1) + 1, updatedAt: .now)
+            noteCategories.append(category)
+            sync.save(category)
+            return category
+        }()
+        let note = Note(categoryID: category.id, title: title)
+        notes.append(note)
+        sync.save(note)
+        toggleTopicNote(subject: subject, topic: topic, note: note.id)
+        return note
+    }
+
+    private func editStudyTopic(_ subject: ID, _ topic: ID, _ change: (inout StudyTopic) -> Void) {
+        editStudySubject(subject) { s in
+            if let t = s.topics.firstIndex(where: { $0.id == topic }) { change(&s.topics[t]) }
+        }
+    }
+
+    private func editStudySubject(_ id: ID, undoManager: UndoManager? = nil, action: String = "", _ change: (inout StudySubject) -> Void) {
+        guard var subject = jobStudy.first(where: { $0.id == id }) else { return }
+        change(&subject)
+        put(subject, in: \.jobStudy, undoManager: undoManager, action: action)
+    }
+
     // MARK: Sync
 
-    /// Re-reads todos, labels, office tasks, notes and University from the sync folder and pulls shared settings.
+    /// Re-reads todos, labels, office tasks, notes, University and Job Study from the sync folder and pulls shared settings.
     func reloadSynced() {
         // Write pending note edits first so the reload can't bring back older text.
         saveUnsavedNotes()
@@ -681,6 +776,8 @@ final class AppStore {
             if u != university { university = u }
             let uniNotes = sync.load(UniversityNotes.self, keeping: [universityNotes]).first ?? UniversityNotes()
             if uniNotes != universityNotes { universityNotes = uniNotes }
+            let jobStudy = sync.load(StudySubject.self, keeping: jobStudy).sorted { $0.createdAt < $1.createdAt }
+            if jobStudy != self.jobStudy { self.jobStudy = jobStudy }
         }
         pullSettings()
     }
@@ -698,8 +795,9 @@ final class AppStore {
         saveUnsavedNotes()
         saveUniversityNotes()
         let (todos, labels, office, categories, notes) = (todos, labels, office, noteCategories, notes)
-        let (u, uniNotes) = (university, universityNotes)
+        let (u, uniNotes, jobStudy) = (university, universityNotes, jobStudy)
         try change()
+        for r in jobStudy { sync.save(r, onlyIfNewer: true) }
         for r in u.classes { sync.save(r, onlyIfNewer: true) }
         for r in u.syllabus { sync.save(r, onlyIfNewer: true) }
         for r in u.assignments { sync.save(r, onlyIfNewer: true) }
@@ -779,34 +877,6 @@ final class AppStore {
     }
 
     // MARK: Other features
-
-    /// Ticking a topic logs one revision for today; un-ticking the same day undoes it.
-    func reviseTopic(subject: ID, topic: ID) {
-        guard let s = jobStudy.firstIndex(where: { $0.id == subject }),
-              let t = jobStudy[s].topics.firstIndex(where: { $0.id == topic }) else { return }
-        var item = jobStudy[s].topics[t]
-        if Day.isToday(item.lastRevised) {
-            item.revisions = max(0, item.revisions - 1)
-            item.lastRevised = item.previousRevised
-            item.previousRevised = nil
-        } else {
-            item.revisions += 1
-            item.previousRevised = item.lastRevised
-            item.lastRevised = Day.offset(0)
-        }
-        jobStudy[s].topics[t] = item
-    }
-
-    func addStudyTopic(subject: ID, name: String) {
-        let name = name.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty, let s = jobStudy.firstIndex(where: { $0.id == subject }) else { return }
-        jobStudy[s].topics.append(StudyTopic(name: name, revisions: 0))
-    }
-
-    func deleteStudyTopic(subject: ID, topic: ID) {
-        guard let s = jobStudy.firstIndex(where: { $0.id == subject }) else { return }
-        jobStudy[s].topics.removeAll { $0.id == topic }
-    }
 
     func moveCard(_ cardID: ID, to columnID: ID, in productID: ID) {
         guard let p = products.firstIndex(where: { $0.id == productID }) else { return }

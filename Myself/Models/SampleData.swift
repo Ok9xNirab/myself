@@ -126,18 +126,20 @@ enum SampleData {
         func t(_ name: String, _ revisions: Int, _ daysAgo: Int?) -> StudyTopic {
             StudyTopic(name: name, revisions: revisions, lastRevised: daysAgo.map { Day.offset(-$0) })
         }
+        // Staggered so the subjects keep this order (the store sorts them by creation date).
+        func created(_ i: Int) -> Date { Date.now.addingTimeInterval(Double(i)) }
         return [
             StudySubject(id: "j1", subject: "System Design", hex: 0x2B7BBF, topics: [
                 t("Rate limiter design", 0, nil), t("Distributed message queue", 0, nil), t("Consistent hashing", 1, 2),
-                t("CAP theorem & trade-offs", 3, 1), t("Caching strategies", 2, 4), t("Load balancing basics", 5, 6),
-            ]),
+                t("CAP theorem & trade-offs", 3, 1), t("Caching strategies", 2, 4), t("Load balancing basics", 5, 9),
+            ], createdAt: created(0)),
             StudySubject(id: "j2", subject: "DSA", hex: 0x6A63C4, topics: [
                 t("Segment trees", 0, nil), t("Dynamic programming on trees", 1, 3), t("Sliding window", 4, 1),
-                t("Two pointers", 3, 2), t("Binary search variants", 6, 5),
-            ]),
+                t("Two pointers", 3, 2), t("Binary search variants", 6, 12),
+            ], createdAt: created(1)),
             StudySubject(id: "j3", subject: "Behavioral", hex: 0x1F9D8F, topics: [
                 t("Conflict with a teammate", 0, nil), t("Biggest failure", 2, 3), t("Tell me about yourself", 7, 2),
-            ]),
+            ], createdAt: created(2)),
         ]
     }
 

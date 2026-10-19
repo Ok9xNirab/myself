@@ -199,25 +199,56 @@ struct Product: Identifiable {
 
 // MARK: Job study
 
-struct StudyTopic: Identifiable {
+struct StudyTopic: Identifiable, Equatable, Codable {
+    /// A topic counts as due once this many days have passed since its last revision (or if it was never revised).
+    static let dueDays = 7
+
     var id = newID()
     var name: String
-    var revisions: Int
+    var revisions = 0
     var lastRevised: Date?
     /// Remembered so un-ticking today's revision can restore the previous date.
     var previousRevised: Date?
+    /// Notes linked to the topic; ones that have since been deleted are ignored.
+    var noteIDs: [ID] = []
+
+    var revisedToday: Bool { Day.isToday(lastRevised) }
+
+    var isDue: Bool {
+        guard let days = Day.fromToday(lastRevised) else { return true }
+        return days <= -Self.dueDays
+    }
+
+    /// "Today", "Yesterday", "3d ago", a date, or "Not revised".
+    var lastRevisedText: String {
+        guard let lastRevised, let ago = Day.fromToday(lastRevised).map({ -$0 }) else { return "Not revised" }
+        switch ago {
+        case ...0: return "Today"
+        case 1: return "Yesterday"
+        case 2..<7: return "\(ago)d ago"
+        default: return lastRevised.monthDay
+        }
+    }
 }
 
-struct StudySubject: Identifiable {
+/// Synced as `jobstudy/<id>.json`, topics included.
+struct StudySubject: Identifiable, Equatable, Codable, SyncRecord {
+    static let folder = "jobstudy"
+
     var id = newID()
     var subject: String
     var hex: UInt32
-    var topics: [StudyTopic]
+    var topics: [StudyTopic] = []
+    var createdAt = Date.now
+    var updatedAt = Date.now
     var color: Color { Color(hex: hex) }
 
+    /// Share of topics revised at least once.
     var percent: Int {
         topics.isEmpty ? 0 : Int((100 * Double(topics.filter { $0.revisions > 0 }.count) / Double(topics.count)).rounded())
     }
+
+    var dueCount: Int { topics.filter(\.isDue).count }
 }
 
 // MARK: Workout
