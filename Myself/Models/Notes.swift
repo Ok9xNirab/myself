@@ -24,14 +24,11 @@ struct Note: Identifiable, Equatable, Codable, SyncRecord {
     var title = ""
     var pinned = false
     var blocks: [NoteBlock] = [NoteBlock()]
-    var font: NoteFont?
     var createdAt = Date.now
-    /// Last change to the title, blocks or typography; shown and sorted as "Date edited".
+    /// Last change to the title or blocks; shown and sorted as "Date edited".
     var editedAt = Date.now
     /// Last change of any kind, including pinning and moving. Decides which copy wins in sync.
     var updatedAt = Date.now
-
-    var typography: NoteFont { font ?? NoteFont() }
 
     var displayTitle: String { title.isEmpty ? "Untitled" : title }
 
@@ -233,59 +230,6 @@ enum CodeLanguage: String, Codable, CaseIterable, Identifiable {
         case .plaintext: "Plain text"
         }
     }
-}
-
-/// Per-page typography from the editor's "Aa অ" menu.
-struct NoteFont: Equatable, Codable {
-    enum Latin: String, Codable, CaseIterable, Identifiable {
-        case sans, serif, rounded
-        var id: Self { self }
-        var title: String { rawValue.capitalized }
-        var design: Font.Design {
-            switch self {
-            case .sans: .default
-            case .serif: .serif
-            case .rounded: .rounded
-            }
-        }
-    }
-
-    /// Bengali typefaces bundled in `Fonts/` (all SIL Open Font License).
-    enum Bengali: String, Codable, CaseIterable, Identifiable {
-        case notoSans = "noto-sans", hind, notoSerif = "noto-serif", tiro
-        var id: Self { self }
-        var title: String {
-            switch self {
-            case .notoSans: "Noto Sans Bengali"
-            case .hind: "Hind Siliguri"
-            case .notoSerif: "Noto Serif Bengali"
-            case .tiro: "Tiro Bangla"
-            }
-        }
-    }
-
-    enum Size: String, Codable, CaseIterable, Identifiable {
-        case s, m, l
-        var id: Self { self }
-        var title: String {
-            switch self {
-            case .s: "Small"
-            case .m: "Medium"
-            case .l: "Large"
-            }
-        }
-        var points: CGFloat {
-            switch self {
-            case .s: 14
-            case .m: 15.5
-            case .l: 17
-            }
-        }
-    }
-
-    var latin = Latin.sans
-    var bengali = Bengali.notoSans
-    var size = Size.m
 }
 
 /// Plain-text helpers for inline note markdown.

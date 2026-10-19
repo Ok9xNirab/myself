@@ -21,7 +21,6 @@ struct NoteEditor: View {
     @State private var activeID: ID?
     @State private var pendingFocus: PendingFocus?
     @State private var slash: SlashMenu?
-    @State private var showsTypography = false
     @State private var textFocus = NoteTextFocus()
     @State private var paperWidth: CGFloat = 780
     /// Image block waiting for a file from the open panel.
@@ -56,8 +55,7 @@ struct NoteEditor: View {
 
     /// The note as the store has it now; `note` can lag behind within one event.
     private var current: Note { store.notes.first { $0.id == note.id } ?? note }
-    private var typography: NoteFont { note.typography }
-    private var size: CGFloat { typography.size.points }
+    private var size: CGFloat { NoteTypeface.bodySize }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -122,7 +120,7 @@ struct NoteEditor: View {
             .padding(.bottom, 12)
 
             NoteTextView(text: Binding(get: { current.title }, set: { title in store.editNote(note.id) { $0.title = title.replacingOccurrences(of: "\n", with: "") } }),
-                         font: NoteTypeface.platformFont(typography, size: size * 2, weight: .bold),
+                         font: NoteTypeface.platformFont(size: size * 2, weight: .bold),
                          lineSpacing: NoteText.hasBengali(note.title) ? size * 0.4 : size * 0.1,
                          placeholder: "Untitled",
                          focus: request(for: Self.titleID),
@@ -782,17 +780,6 @@ struct NoteEditor: View {
             .scrollIndicators(.never)
             .mask(LinearGradient(stops: [.init(color: .black, location: 0.92), .init(color: .clear, location: 1)], startPoint: .leading, endPoint: .trailing))
             separator
-            Button { showsTypography.toggle() } label: {
-                HStack(spacing: 2) {
-                    Text("Aa").font(.system(size: 13, weight: .semibold))
-                    Text("অ").font(NoteTypeface.sample(.notoSans, size: 14))
-                }
-                .padding(.horizontal, 6)
-                .frame(minHeight: 28)
-                .background(showsTypography ? Color.accentColor.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 6))
-            }
-            .help("Typography")
-            .popover(isPresented: $showsTypography, arrowEdge: .bottom) { typographyMenu }
             pageMenu
         }
         .buttonStyle(.borderless)
@@ -837,56 +824,6 @@ struct NoteEditor: View {
         .help("Page options")
     }
 
-    private var typographyMenu: some View {
-        let font = typography
-        let set = { (change: (inout NoteFont) -> Void) in
-            store.editNote(note.id) { n in
-                var f = n.typography
-                change(&f)
-                n.font = f
-            }
-        }
-        return VStack(alignment: .leading, spacing: 6) {
-            Text("Latin text").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.ink3)
-            Picker("Latin text", selection: Binding(get: { font.latin }, set: { v in set { $0.latin = v } })) {
-                ForEach(NoteFont.Latin.allCases) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            Text("Bengali typeface").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.ink3).padding(.top, 6)
-            ForEach(NoteFont.Bengali.allCases) { option in
-                Button { set { $0.bengali = option } } label: {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("বাংলা লিপি · ক্ষ ত্র জ্ঞ").font(NoteTypeface.sample(option, size: 17))
-                        Text(option.title).font(.system(size: 11)).foregroundStyle(Palette.ink3)
-                    }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(font.bengali == option ? Color.accentColor.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 7))
-                    .overlay {
-                        if font.bengali == option { RoundedRectangle(cornerRadius: 7).strokeBorder(Color.accentColor.opacity(0.5)) }
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-            Text("Size").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.ink3).padding(.top, 6)
-            Picker("Size", selection: Binding(get: { font.size }, set: { v in set { $0.size = v } })) {
-                ForEach(NoteFont.Size.allCases) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            Text("Bengali characters are detected automatically and set in the selected typeface with taller line spacing.")
-                .font(.system(size: 11))
-                .foregroundStyle(Palette.ink3)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 6)
-        }
-        .padding(14)
-        .frame(width: 286)
-    }
-
     // MARK: Status bar
 
     private var statusBar: some View {
@@ -899,11 +836,11 @@ struct NoteEditor: View {
             if note.hasBengali {
                 HStack(spacing: 6) {
                     Text("অ")
-                        .font(NoteTypeface.sample(typography.bengali, size: 11))
+                        .font(NoteTypeface.font(size: 11))
                         .frame(width: 16, height: 16)
                         .background(Palette.amber.opacity(0.22), in: RoundedRectangle(cornerRadius: 4))
                         .foregroundStyle(.primary)
-                    Text("Bengali · \(typography.bengali.title)")
+                    Text("Bengali · \(NoteTypeface.bengaliFamily)")
                 }
                 .foregroundStyle(Palette.ink2)
             }
@@ -928,8 +865,7 @@ private struct NoteBlockRow: View {
     var editor: NoteEditor
     @State private var hovering = false
 
-    private var typography: NoteFont { editor.note.typography }
-    private var size: CGFloat { typography.size.points }
+    private var size: CGFloat { NoteTypeface.bodySize }
     private var bengali: Bool { NoteText.hasBengali(block.text) }
 
     var body: some View {
@@ -1033,7 +969,7 @@ private struct NoteBlockRow: View {
             Group {
                 if editor.isEditing(block.id) {
                     NoteTextView(text: Binding(get: { block.text }, set: { editor.change(block, to: $0) }),
-                                 font: NoteTypeface.platformFont(typography, size: textSize, weight: textWeight),
+                                 font: NoteTypeface.platformFont(size: textSize, weight: textWeight),
                                  lineSpacing: lineSpacing,
                                  textColor: block.kind == .quote ? PlatformColor.secondaryLabelCompat : PlatformColor.labelCompat,
                                  placeholder: block.kind == .p ? "Type \u{201C}/\u{201D} for blocks, $x^2$ for inline math" : block.kind.title,
@@ -1045,7 +981,7 @@ private struct NoteBlockRow: View {
                                  onKey: { editor.textKey(block.id, $0, $1) },
                                  onFocusChange: { editor.focusChanged(block.id, $0) })
                 } else {
-                    NoteMarkdown.text(block.text.isEmpty ? " " : block.text, typography: typography, size: textSize, weight: textWeight)
+                    NoteMarkdown.text(block.text.isEmpty ? " " : block.text, size: textSize, weight: textWeight)
                         .lineSpacing(lineSpacing)
                         .strikethrough(done, color: Palette.ink3.opacity(0.6))
                         .foregroundStyle(done ? Palette.ink3 : block.kind == .quote ? Palette.ink2 : .primary)
@@ -1199,7 +1135,7 @@ private struct CodeBlockView: View {
             .frame(height: 32)
             Divider()
             NoteTextView(text: Binding(get: { block.text }, set: { v in editor.update(block.id) { $0.text = v } }),
-                         font: NoteTypeface.platformFont(editor.note.typography, size: 12.5, monospaced: true),
+                         font: NoteTypeface.platformFont(size: 12.5, monospaced: true),
                          lineSpacing: 12.5 * 0.45,
                          placeholder: "// code",
                          code: lang,
@@ -1397,7 +1333,7 @@ private struct MathBlockView: View {
     var editor: NoteEditor
     @State private var hovering = false
 
-    private var size: CGFloat { editor.note.typography.size.points }
+    private var size: CGFloat { NoteTypeface.bodySize }
 
     var body: some View {
         if editor.isEditing(block.id) {
@@ -1412,7 +1348,7 @@ private struct MathBlockView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 NoteTextView(text: Binding(get: { block.text }, set: { v in editor.update(block.id) { $0.text = v } }),
-                             font: NoteTypeface.platformFont(editor.note.typography, size: 12.5, monospaced: true),
+                             font: NoteTypeface.platformFont(size: 12.5, monospaced: true),
                              lineSpacing: 12.5 * 0.45,
                              placeholder: #"e.g. \int_0^1 x^2\,dx = \frac{1}{3}"#,
                              focus: editor.request(for: block.id),

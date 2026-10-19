@@ -95,7 +95,7 @@ enum NoteMarkdown {
     }
 
     /// Read-mode rendering of a text block.
-    static func text(_ source: String, typography: NoteFont, size: CGFloat, weight: PlatformFont.Weight) -> Text {
+    static func text(_ source: String, size: CGFloat, weight: PlatformFont.Weight) -> Text {
         var result = Text("")
         for run in parse(source) {
             let piece: Text
@@ -104,10 +104,10 @@ enum NoteMarkdown {
                 var attributed = AttributedString(string)
                 let bold = style.contains(.bold) ? PlatformFont.Weight.bold : weight
                 if style.contains(.code) {
-                    attributed.font = NoteTypeface.font(typography, size: size * 0.86, weight: bold, monospaced: true)
+                    attributed.font = NoteTypeface.font(size: size * 0.86, weight: bold, monospaced: true)
                     attributed.backgroundColor = NoteColors.codeBackground
                 } else {
-                    attributed.font = NoteTypeface.font(typography, size: size, weight: bold, italic: style.contains(.italic))
+                    attributed.font = NoteTypeface.font(size: size, weight: bold, italic: style.contains(.italic))
                 }
                 if style.contains(.strike) { attributed.strikethroughStyle = .single }
                 if style.contains(.highlight) { attributed.backgroundColor = Palette.amber.opacity(0.28) }
@@ -121,7 +121,7 @@ enum NoteMarkdown {
                 if let math = MathRenderer.render(latex, fontSize: size * 1.08, display: false) {
                     piece = Text(Image(platformImage: math.image).renderingMode(.template)).baselineOffset(-math.descent)
                 } else {
-                    piece = Text(latex).font(NoteTypeface.font(typography, size: size * 0.86, monospaced: true)).foregroundStyle(Palette.red)
+                    piece = Text(latex).font(NoteTypeface.font(size: size * 0.86, monospaced: true)).foregroundStyle(Palette.red)
                 }
             }
             result = Text("\(result)\(piece)")

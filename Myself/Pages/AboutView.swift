@@ -69,7 +69,7 @@ struct AboutView: View {
 
             VStack(spacing: 3) {
                 Text("Built with SwiftUI and SwiftMath.")
-                Text("Bengali fonts: Noto Sans & Serif Bengali, Hind Siliguri and Tiro Bangla, under the SIL Open Font License.")
+                Text("Bengali font: Hind Siliguri, under the SIL Open Font License.")
                     .fixedSize(horizontal: false, vertical: true)
                 Text("© \(Calendar.current.component(.year, from: .now).formatted(.number.grouping(.never))) \(AppInfo.author)")
                     .padding(.top, 6)

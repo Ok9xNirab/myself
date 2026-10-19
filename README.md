@@ -38,7 +38,7 @@ Most people track their life across five apps: a todo list, a notes app, a Kanba
 | 🎓 **University** | Classes with a weekly schedule, syllabus subjects and topics, assignments and exams. |
 | 💼 **Office Tasks** | Work tasks with notes, a reference link and a due date. Always high priority. |
 | 📖 **Job Study** | Interview-prep subjects with a revision checklist. A topic is due again 7 days after you last revised it, and topics can link to notes. |
-| 📝 **Notes** | A block editor with headings, lists, checklists, quotes, syntax-highlighted code, **LaTeX math** and Bengali typefaces. Notes are sorted into categories, and any note can open in its own window. |
+| 📝 **Notes** | A block editor with headings, lists, checklists, quotes, syntax-highlighted code, **LaTeX math** and Bengali set in Hind Siliguri. Notes are sorted into categories, and any note can open in its own window. |
 | 🗂️ **Product Dev** | Kanban boards per project with Backlog, In Progress, Review and Done columns. Drag cards between columns. |
 | 🏋️ **Workout** | Week-by-week training programs. *Coming soon.* |
 
@@ -137,7 +137,7 @@ Myself/
 ├── Pages/               One view per section, plus Quick Open and Settings
 ├── Components/          Shared design-system views (cards, badges, progress…)
 ├── Support/             Dates, theme palette, preferences, markdown & code rendering
-├── Fonts/               Bundled Bengali fonts (SIL OFL)
+├── Fonts/               Bundled Bengali font (SIL OFL)
 └── AppIcon.icon/        Icon Composer app icon
 scripts/make-dmg.sh      Builds the release DMG
 ```
@@ -159,4 +159,4 @@ If MySelf is useful to you, a ⭐ on GitHub helps other people find it.
 
 ## License
 
-MySelf is released under the [MIT License](LICENSE). The bundled Bengali fonts (Noto Sans Bengali, Noto Serif Bengali, Hind Siliguri and Tiro Bangla) are under the SIL Open Font License, with licence files in `Myself/Fonts/`.
+MySelf is released under the [MIT License](LICENSE). The bundled Bengali font, Hind Siliguri, is under the SIL Open Font License, with its licence in `Myself/Fonts/`.

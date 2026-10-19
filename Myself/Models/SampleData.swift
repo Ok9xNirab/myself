@@ -208,8 +208,8 @@ extension SampleData {
     static func notes() -> [Note] {
         typealias B = NoteBlock
         let ago = { (hours: Double) in Date.now.addingTimeInterval(-hours * 3600) }
-        func note(_ id: ID, _ category: ID, _ title: String, pinned: Bool = false, hoursAgo: Double, font: NoteFont? = nil, _ blocks: [NoteBlock]) -> Note {
-            Note(id: id, categoryID: category, title: title, pinned: pinned, blocks: blocks, font: font, createdAt: ago(hoursAgo + 72), editedAt: ago(hoursAgo), updatedAt: ago(hoursAgo))
+        func note(_ id: ID, _ category: ID, _ title: String, pinned: Bool = false, hoursAgo: Double, _ blocks: [NoteBlock]) -> Note {
+            Note(id: id, categoryID: category, title: title, pinned: pinned, blocks: blocks, createdAt: ago(hoursAgo + 72), editedAt: ago(hoursAgo), updatedAt: ago(hoursAgo))
         }
         return [
             note("np1", "nc1", "Eigenvalues & Eigenvectors", pinned: true, hoursAgo: 2, [
@@ -246,7 +246,7 @@ extension SampleData {
                 B(.p, "Rank rows inside a group without collapsing them like `GROUP BY` does."),
                 B(.code, "SELECT name, dept, salary,\n       RANK() OVER (PARTITION BY dept ORDER BY salary DESC) AS rnk\nFROM employees\nWHERE active = TRUE;", lang: .sql),
             ]),
-            note("np5", "nc3", "নিউটনের গতির সূত্র", hoursAgo: 0.66, font: NoteFont(bengali: .hind), [
+            note("np5", "nc3", "নিউটনের গতির সূত্র", hoursAgo: 0.66, [
                 B(.p, "বল ও গতির সম্পর্ক বোঝার জন্য নিউটনের তিনটি সূত্র মৌলিক। পরীক্ষার আগে সংক্ষেপে পুনরাবৃত্তি।"),
                 B(.h2, "দ্বিতীয় সূত্র"),
                 B(.p, "কোনো বস্তুর ভরবেগের পরিবর্তনের হার তার উপর প্রযুক্ত বলের সমানুপাতিক। ভর স্থির থাকলে লেখা যায় $F = ma$।"),
