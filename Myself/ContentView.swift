@@ -6,20 +6,20 @@ struct ContentView: View {
     @Environment(\.openSettings) private var openSettings
     #endif
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(PrefKey.sidebarStyle) private var sidebarStyle = SidebarStyle.floating
 
     var body: some View {
         @Bindable var store = store
-        NavigationSplitView {
-            Sidebar()
-                .navigationSplitViewColumnWidth(min: 200, ideal: 232, max: 300)
-        } detail: {
-            PageView(page: store.page)
-                .id(store.page)
-                .navigationTitle(store.page.title)
-                #if os(macOS)
-                .navigationSubtitle(store.page.subtitle)
-                #endif
-                .toolbar { toolbar }
+        Group {
+            #if os(macOS)
+            if sidebarStyle == .classic {
+                ClassicSplitView { Sidebar() } detail: { detail }
+            } else {
+                splitView
+            }
+            #else
+            splitView
+            #endif
         }
         // Pick up changes made on other Macs while the app was in the background.
         .onChange(of: scenePhase) { if scenePhase == .active { store.reloadSynced() } }
@@ -41,6 +41,26 @@ struct ContentView: View {
             }
         }
         #endif
+    }
+
+    /// The system split view. On macOS 26 its sidebar is the floating glass panel.
+    private var splitView: some View {
+        NavigationSplitView {
+            Sidebar()
+                .navigationSplitViewColumnWidth(min: 200, ideal: 232, max: 300)
+        } detail: {
+            detail
+        }
+    }
+
+    private var detail: some View {
+        PageView(page: store.page)
+            .id(store.page)
+            .navigationTitle(store.page.title)
+            #if os(macOS)
+            .navigationSubtitle(store.page.subtitle)
+            #endif
+            .toolbar { toolbar }
     }
 
     @ToolbarContentBuilder
@@ -169,6 +189,64 @@ private struct SidebarBackground: ViewModifier {
         }
     }
 }
+
+#if os(macOS)
+/// The "Classic" sidebar: a flat, full-height column with a hairline edge. `NavigationSplitView` always draws its
+/// sidebar as a floating panel on macOS 26 and has no way to turn that off, so this lays the two columns out itself.
+/// The sidebar can be dragged between 200 and 300 points wide and hidden with the toolbar button or ⌃⌘S.
+private struct ClassicSplitView<Sidebar: View, Detail: View>: View {
+    @ViewBuilder var sidebar: Sidebar
+    @ViewBuilder var detail: Detail
+    @AppStorage("classicSidebarWidth") private var width = 232.0
+    @AppStorage("classicSidebarHidden") private var isHidden = false
+    @State private var dragStart: Double?
+
+    var body: some View {
+        HStack(spacing: 0) {
+            if !isHidden {
+                sidebar
+                    .frame(width: width)
+                    .overlay(alignment: .trailing) {
+                        Rectangle().fill(Palette.border).frame(width: 0.5).ignoresSafeArea()
+                    }
+                    .overlay(alignment: .trailing) { resizeHandle }
+                    .transition(.move(edge: .leading))
+            }
+            detail
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .toolbar {
+                    ToolbarItem(placement: .navigation) {
+                        Button(isHidden ? "Show Sidebar" : "Hide Sidebar", systemImage: "sidebar.left") {
+                            withAnimation(.smooth(duration: 0.25)) { isHidden.toggle() }
+                        }
+                        .keyboardShortcut("s", modifiers: [.control, .command])
+                        .help(isHidden ? "Show Sidebar (⌃⌘S)" : "Hide Sidebar (⌃⌘S)")
+                    }
+                }
+        }
+    }
+
+    private var resizeHandle: some View {
+        Color.clear
+            .frame(width: 6)
+            .contentShape(Rectangle())
+            .offset(x: 3)
+            .ignoresSafeArea()
+            .onHover { inside in
+                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged { value in
+                        let start = dragStart ?? width
+                        dragStart = start
+                        width = min(300, max(200, start + value.translation.width))
+                    }
+                    .onEnded { _ in dragStart = nil }
+            )
+    }
+}
+#endif
 
 #Preview {
     ContentView()
