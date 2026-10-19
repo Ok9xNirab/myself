@@ -3,14 +3,13 @@ import SwiftUI
 @main struct MyApp: App {
     @State private var store = AppStore()
     @AppStorage(PrefKey.appearance) private var appearance = ""
-    @AppStorage(PrefKey.accent) private var accent = AccentChoice.blue
     @AppStorage(PrefKey.rowDensity) private var density = RowDensity.regular
 
     var body: some Scene {
         WindowGroup(id: "main") {
             ContentView()
                 .environment(store)
-                .appPreferences(appearance: appearance, accent: accent, density: density)
+                .appPreferences(appearance: appearance, density: density)
         }
         .defaultSize(width: 1240, height: 820)
         .commands {
@@ -62,7 +61,7 @@ import SwiftUI
         Settings {
             SettingsView()
                 .environment(store)
-                .appPreferences(appearance: appearance, accent: accent, density: density)
+                .appPreferences(appearance: appearance, density: density)
         }
 
         // A note opened on its own (double-click in the note list). Opening a note that already has a window brings that window forward.
@@ -70,14 +69,14 @@ import SwiftUI
             if let noteID {
                 NoteWindow(noteID: noteID)
                     .environment(store)
-                    .appPreferences(appearance: appearance, accent: accent, density: density)
+                    .appPreferences(appearance: appearance, density: density)
             }
         }
         .defaultSize(width: 760, height: 680)
 
         Window("About \(AppInfo.name)", id: "about") {
             AboutView()
-                .appPreferences(appearance: appearance, accent: accent, density: density)
+                .appPreferences(appearance: appearance, density: density)
                 .windowMinimizeBehavior(.disabled)
         }
         .windowStyle(.hiddenTitleBar)

@@ -44,7 +44,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
 - `Support/Theme.swift`: `Palette` holds the design tokens from `native.css` as adaptive light/dark colors, built with `Color.dynamic(light:dark:)`. Use `Palette.*` and `Color.accentColor` instead of hard-coded colors. User-chosen colors (labels, classes, projects) are stored as `UInt32` hex in the models.
 - `Components/Components.swift` contains the shared design-system pieces: `PageScroll` (page padding/max width; it also publishes `pageWidth` into the environment), `AdaptiveColumns` (two columns when wide, stacked when narrow), `Card`, `StatTile`, `Badge`/`PriorityBadge`/`DueBadge`/`LabelChip`, `CheckCircle`, `ProgressBar`, `Donut`, `ColorTabs`, `RowActions` (hover-revealed edit/delete), `FlowLayout`, `ListRow`.
 - `Pages/` has one view per sidebar page, plus `QuickOpenView` (the ⌘K palette) and `SettingsView` (the ⌘, window on macOS, a sheet elsewhere; tabs General / Features / iCloud). Open it from code with `store.openSettings(tab)`.
-- `Support/Preferences.swift`: `PrefKey` (all `@AppStorage` keys), `AccentChoice`, `SidebarStyle`, `RowDensity` (read by `ListRow` via `\.rowDensity`), and `appPreferences(...)`, which both scenes apply. The accent needs `.accentColor(_:)` as well as `.tint`, because `Color.accentColor` ignores `.tint`.
+- `Support/Preferences.swift`: `PrefKey` (all `@AppStorage` keys), `SidebarStyle`, `RowDensity` (read by `ListRow` via `\.rowDensity`), and `appPreferences(...)`, which every scene applies. There's no accent setting: `Color.accentColor` follows the Mac's accent (the `AccentColor` asset when it's set to multicolour).
 
 ## Feature visibility
 

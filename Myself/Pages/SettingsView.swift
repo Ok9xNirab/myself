@@ -24,7 +24,6 @@ struct SettingsView: View {
 private struct GeneralSettings: View {
     @Environment(AppStore.self) private var store
     @AppStorage(PrefKey.appearance) private var appearance = ""
-    @AppStorage(PrefKey.accent) private var accent = AccentChoice.blue
     @AppStorage(PrefKey.sidebarStyle) private var sidebarStyle = SidebarStyle.floating
     @AppStorage(PrefKey.rowDensity) private var density = RowDensity.regular
     @State private var confirmingReset = false
@@ -37,7 +36,6 @@ private struct GeneralSettings: View {
                     Text("Light").tag("light")
                     Text("Dark").tag("dark")
                 }
-                LabeledContent("Accent color") { AccentPicker(selection: $accent) }
                 Picker("Sidebar style", selection: $sidebarStyle) {
                     ForEach(SidebarStyle.allCases) { Text($0.title).tag($0) }
                 }
@@ -62,32 +60,6 @@ private struct GeneralSettings: View {
             Button("Reset", role: .destructive, action: store.loadSampleData)
         } message: {
             Text("Your todos, labels, office tasks, notes, classes, boards and workouts will be replaced with the original sample content. Todos, labels, office tasks, notes and University are replaced on every Mac that syncs this folder.")
-        }
-    }
-}
-
-private struct AccentPicker: View {
-    @Binding var selection: AccentChoice
-
-    var body: some View {
-        HStack(spacing: 7) {
-            ForEach(AccentChoice.allCases) { choice in
-                Button { selection = choice } label: {
-                    Circle()
-                        .fill(choice.color)
-                        .frame(width: 16, height: 16)
-                        .overlay {
-                            if choice == selection { Circle().fill(.white).frame(width: 6, height: 6) }
-                        }
-                        .overlay(Circle().strokeBorder(.black.opacity(0.12), lineWidth: 0.5))
-                        .padding(2)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .help(choice.title)
-                .accessibilityLabel(choice.title)
-                .accessibilityAddTraits(choice == selection ? .isSelected : [])
-            }
         }
     }
 }
@@ -207,7 +179,7 @@ private struct ICloudSettings: View {
                 }
                 Toggle(isOn: $syncAppearance) {
                     Text("Appearance")
-                    Text("Theme, accent color, sidebar style and row density.")
+                    Text("Theme, sidebar style and row density.")
                 }
             } header: {
                 Text("Also sync")

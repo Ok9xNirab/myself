@@ -812,7 +812,7 @@ final class AppStore {
         reloadSynced()
     }
 
-    private static let appearanceKeys = [PrefKey.appearance, PrefKey.accent, PrefKey.sidebarStyle, PrefKey.rowDensity]
+    private static let appearanceKeys = [PrefKey.appearance, PrefKey.sidebarStyle, PrefKey.rowDensity]
     private static let settingsSyncedAtKey = "settingsSyncedAt"
 
     /// This Mac's share of `settings.json`: only the groups turned on under Settings › iCloud › Also sync.
