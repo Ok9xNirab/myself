@@ -477,6 +477,9 @@ final class AppStore {
 
     func setPinned(_ ids: [ID], _ pinned: Bool) { updateNotes(ids) { $0.pinned = pinned } }
 
+    /// Turns reader mode on or off; like pinning, it isn't an edit, so "Date edited" stays.
+    func setReaderMode(_ id: ID, _ on: Bool) { updateNotes([id]) { $0.readerMode = on ? true : nil } }
+
     func moveNotes(_ ids: [ID], to categoryID: ID) { updateNotes(ids) { $0.categoryID = categoryID } }
 
     @discardableResult

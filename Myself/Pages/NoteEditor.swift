@@ -15,6 +15,12 @@ struct NoteEditor: View {
 
     @Environment(AppStore.self) private var store
     @Environment(\.undoManager) private var undoManager
+    #if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+    #else
+    /// An image opened from reader mode.
+    @State private var viewingImage: String?
+    #endif
     /// Block (or `titleID`) whose text view is showing.
     @State private var editingID: ID?
     /// Last block that had focus, for the toolbar's block buttons.
@@ -56,6 +62,8 @@ struct NoteEditor: View {
     /// The note as the store has it now; `note` can lag behind within one event.
     private var current: Note { store.notes.first { $0.id == note.id } ?? note }
     private var size: CGFloat { NoteTypeface.bodySize }
+    /// Reader mode: everything renders, nothing can be changed.
+    fileprivate var reading: Bool { current.isReading }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -92,7 +100,7 @@ struct NoteEditor: View {
         }
         .onAppear {
             splitPastedDocuments()
-            if isFresh { focus(Self.titleID, caret: nil) }
+            if isFresh && !reading { focus(Self.titleID, caret: nil) }
         }
         .fileImporter(isPresented: Binding(get: { choosingImageFor != nil }, set: { if !$0 { choosingImageFor = nil } }),
                       allowedContentTypes: [.image], allowsMultipleSelection: false) { result in
@@ -101,6 +109,11 @@ struct NoteEditor: View {
         } onCancellation: {
             if let id = choosingImageFor { discardEmptyImage(id) }
         }
+        #if !os(macOS)
+        .sheet(isPresented: Binding(get: { viewingImage != nil }, set: { if !$0 { viewingImage = nil } })) {
+            if let viewingImage { NavigationStack { NoteImageViewer(name: viewingImage) } }
+        }
+        #endif
     }
 
     // MARK: Page
@@ -119,6 +132,10 @@ struct NoteEditor: View {
             .foregroundStyle(Palette.ink3)
             .padding(.bottom, 12)
 
+            if reading {
+                NoteReaderView(note: current, imageURL: imageURL, onOpenImage: openImage)
+                Color.clear.frame(height: 160)
+            } else {
             NoteTextView(text: Binding(get: { current.title }, set: { title in store.editNote(note.id) { $0.title = title.replacingOccurrences(of: "\n", with: "") } }),
                          font: NoteTypeface.platformFont(size: size * 2, weight: .bold),
                          lineSpacing: NoteText.hasBengali(note.title) ? size * 0.4 : size * 0.1,
@@ -146,6 +163,7 @@ struct NoteEditor: View {
                 .frame(height: 160)
                 .contentShape(Rectangle())
                 .onTapGesture(perform: tailClick)
+            }
         }
         .coordinateSpace(.named(Self.paperSpace))
         // Dragging from anywhere but a block being typed in (its text view keeps the mouse) selects the blocks
@@ -153,6 +171,7 @@ struct NoteEditor: View {
         .simultaneousGesture(
             DragGesture(minimumDistance: 6, coordinateSpace: .named(Self.paperSpace))
                 .onChanged { value in
+                    guard !reading else { return }
                     if band == nil { blur() }
                     let rect = CGRect(x: min(value.startLocation.x, value.location.x), y: min(value.startLocation.y, value.location.y),
                                       width: abs(value.location.x - value.startLocation.x), height: abs(value.location.y - value.startLocation.y))
@@ -178,6 +197,18 @@ struct NoteEditor: View {
         }
     }
 
+    private func imageURL(_ name: String) -> URL? {
+        if case .ready(let url) = store.sync.imageState(name) { url } else { nil }
+    }
+
+    private func openImage(_ name: String) {
+        #if os(macOS)
+        openWindow(id: NoteImageViewer.windowID, value: name)
+        #else
+        viewingImage = name
+        #endif
+    }
+
     // MARK: Focus
 
     fileprivate func request(for id: ID) -> NoteFocusRequest? {
@@ -188,6 +219,7 @@ struct NoteEditor: View {
 
     /// Shows `id`'s text view and puts the caret at `caret` (UTF-16; `nil` = end).
     fileprivate func focus(_ id: ID, caret: Int?) {
+        guard !reading else { return }
         selectedBlocks = []
         editingID = id
         if id != Self.titleID { activeID = id }
@@ -220,6 +252,7 @@ struct NoteEditor: View {
     /// A click on a block that isn't being typed in. With Shift it selects the blocks from the current one
     /// (the block being typed in, or the selection) through this one; otherwise it starts editing.
     fileprivate func tap(_ id: ID, otherwise action: () -> Void) {
+        guard !reading else { return }
         #if os(macOS)
         let shift = NSEvent.modifierFlags.contains(.shift)
         #else
@@ -237,6 +270,7 @@ struct NoteEditor: View {
 
     /// Leaves the text and selects `ids` as blocks; the page takes key focus so Delete and Esc reach it.
     private func selectBlocks(_ ids: Set<ID>) {
+        guard !reading else { return }
         blur()
         selectedBlocks = ids
         #if os(macOS)
@@ -282,7 +316,7 @@ struct NoteEditor: View {
     /// ⌘A: the first press selects the block's text (the text view does that); once it's all selected, or the
     /// block is empty, the next press selects every block, as in Notion.
     private func selectAll(_ context: NoteKeyContext) -> Bool {
-        guard context.selection.location == 0, context.selection.length == context.length else { return false }
+        guard !reading, context.selection.location == 0, context.selection.length == context.length else { return false }
         selectBlocks(Set(current.blocks.map(\.id)))
         return true
     }
@@ -305,7 +339,10 @@ struct NoteEditor: View {
 
     // MARK: Block changes
 
-    private func setBlocks(_ change: (inout [NoteBlock]) -> Void) { store.editNote(note.id) { change(&$0.blocks) } }
+    private func setBlocks(_ change: (inout [NoteBlock]) -> Void) {
+        guard !reading else { return }
+        store.editNote(note.id) { change(&$0.blocks) }
+    }
 
     fileprivate func update(_ id: ID, _ change: (inout NoteBlock) -> Void) {
         setBlocks { blocks in
@@ -531,6 +568,7 @@ struct NoteEditor: View {
     }
 
     private func tailClick() {
+        guard !reading else { return }
         if let last = current.blocks.last, last.kind == .p, last.text.isEmpty {
             focus(last.id, caret: nil)
         } else {
@@ -736,6 +774,13 @@ struct NoteEditor: View {
                     .help(showsBrowser.wrappedValue ? "Hide note list" : "Show note list")
                 separator
             }
+            if reading {
+                Label("Reader mode", systemImage: "book")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Palette.ink3)
+                    .padding(.horizontal, 6)
+                Spacer()
+            } else {
             Picker("Paragraph style", selection: Binding(
                 get: { activeBlock.map { [.h1, .h2, .h3].contains($0.kind) ? $0.kind : .p } ?? .p },
                 set: { setKind($0) }
@@ -779,13 +824,26 @@ struct NoteEditor: View {
             }
             .scrollIndicators(.never)
             .mask(LinearGradient(stops: [.init(color: .black, location: 0.92), .init(color: .clear, location: 1)], startPoint: .leading, endPoint: .trailing))
+            }
             separator
+            toolButton(reading ? "Turn Off Reader Mode (⇧⌘R)" : "Reader Mode (⇧⌘R)", reading ? "book.fill" : "book", on: reading, action: toggleReader)
+                .keyboardShortcut("r", modifiers: [.command, .shift])
             pageMenu
         }
         .buttonStyle(.borderless)
         .foregroundStyle(Palette.ink2)
         .padding(.horizontal, 10)
         .frame(height: 42)
+    }
+
+    /// Entering reader mode leaves any text being typed (saving it) and drops a block selection.
+    private func toggleReader() {
+        if !reading {
+            blur()
+            selectedBlocks = []
+            store.saveUnsavedNotes()
+        }
+        store.setReaderMode(note.id, !reading)
     }
 
     private var separator: some View {
@@ -813,6 +871,7 @@ struct NoteEditor: View {
             .pickerStyle(.inline)
             Divider()
             Button(note.pinned ? "Unpin Note" : "Pin Note", systemImage: note.pinned ? "pin.slash" : "pin") { store.setPinned([note.id], !note.pinned) }
+            Button(reading ? "Turn Off Reader Mode" : "Reader Mode", systemImage: "book", action: toggleReader)
             Button("Duplicate Page", systemImage: "plus.square.on.square", action: onDuplicate)
             Button("Delete Page", systemImage: "trash", role: .destructive, action: onDelete)
         } label: {
@@ -882,7 +941,7 @@ private struct NoteBlockRow: View {
             .overlay(alignment: .topLeading) {
                 handles
                     .padding(.top, topMargin + handleOffset)
-                    .offset(x: -54)
+                    .offset(x: -32)
                     .opacity(hovering ? 1 : 0)
             }
             .overlay(alignment: .bottomLeading) {
@@ -985,10 +1044,10 @@ private struct NoteBlockRow: View {
                         .lineSpacing(lineSpacing)
                         .strikethrough(done, color: Palette.ink3.opacity(0.6))
                         .foregroundStyle(done ? Palette.ink3 : block.kind == .quote ? Palette.ink2 : .primary)
-                        .textSelection(.disabled)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.vertical, 3)
                         .padding(.horizontal, 2)
+                        .textSelection(.disabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
                         .onTapGesture { editor.tap(block.id) { editor.focus(block.id, caret: nil) } }
@@ -1003,16 +1062,6 @@ private struct NoteBlockRow: View {
 
     private var handles: some View {
         HStack(spacing: 0) {
-            Menu {
-                Section("Insert below") {
-                    ForEach(NoteBlock.Kind.allCases) { kind in
-                        Button(kind.title, systemImage: kind.systemImage) { editor.insert(kind, after: block.id) }
-                    }
-                }
-            } label: {
-                Image(systemName: "plus").font(.system(size: 12, weight: .semibold)).frame(width: 22, height: 24)
-            }
-            .help("Insert block below")
             Menu {
                 Menu("Turn into") {
                     ForEach(NoteBlock.Kind.allCases) { kind in

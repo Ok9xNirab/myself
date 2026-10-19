@@ -23,6 +23,9 @@ struct Note: Identifiable, Equatable, Codable, SyncRecord {
     var categoryID: ID
     var title = ""
     var pinned = false
+    /// Reader mode: the note is shown rendered and can't be edited until it's turned off. Optional so notes saved
+    /// before it existed still decode.
+    var readerMode: Bool?
     var blocks: [NoteBlock] = [NoteBlock()]
     var createdAt = Date.now
     /// Last change to the title or blocks; shown and sorted as "Date edited".
@@ -31,6 +34,8 @@ struct Note: Identifiable, Equatable, Codable, SyncRecord {
     var updatedAt = Date.now
 
     var displayTitle: String { title.isEmpty ? "Untitled" : title }
+
+    var isReading: Bool { readerMode == true }
 
     /// Title and block text, lowercased, for search.
     var searchText: String { (title + " " + blocks.map(\.text).joined(separator: " ")).lowercased() }
