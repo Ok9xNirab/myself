@@ -1,15 +1,23 @@
 import SwiftUI
 
-/// ⌘K palette: jump to a page or to any open item.
+/// Where a Quick Open result leads.
+enum QuickOpenTarget { case page(Page), note(ID), settings }
+
+/// ⌘K palette: jump to a page or to any open item. On macOS it's also the floating Spotlight-style panel
+/// opened by the system-wide search shortcut, which passes `onClose` and lets `SearchShortcut` open the result.
 struct QuickOpenView: View {
+    var onClose: (() -> Void)?
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
+    #if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+    #endif
     @State private var query = ""
     @State private var selected = 0
     @FocusState private var focused: Bool
 
     private struct Result: Identifiable {
-        enum Target { case page(Page), note(ID), settings }
+        typealias Target = QuickOpenTarget
         let id = UUID()
         let group: String
         let title: String
@@ -48,9 +56,23 @@ struct QuickOpenView: View {
     }
 
     private func open(_ r: Result) {
+        #if os(macOS)
+        if let onClose {
+            onClose()
+            SearchShortcut.shared.open(r.target)
+            return
+        }
+        #endif
         switch r.target {
         case .page(let page): store.go(page)
-        case .note(let id): store.openNote(id)
+        case .note(let id):
+            // On macOS a note opens in its own window, like double-clicking it in the note list.
+            #if os(macOS)
+            store.isQuickOpenPresented = false
+            openWindow(id: NoteWindow.id, value: id)
+            #else
+            store.openNote(id)
+            #endif
         case .settings: store.openSettings(.general)
         }
     }
@@ -110,7 +132,7 @@ struct QuickOpenView: View {
         .onChange(of: query) { selected = 0 }
         .onKeyPress(.downArrow) { selected = min(results.count - 1, selected + 1); return .handled }
         .onKeyPress(.upArrow) { selected = max(0, selected - 1); return .handled }
-        .onKeyPress(.escape) { dismiss(); return .handled }
+        .onKeyPress(.escape) { if let onClose { onClose() } else { dismiss() }; return .handled }
     }
 
     private func row(_ r: Result, isSelected: Bool) -> some View {

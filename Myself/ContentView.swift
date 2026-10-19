@@ -4,6 +4,7 @@ struct ContentView: View {
     @Environment(AppStore.self) private var store
     #if os(macOS)
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
     #endif
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(PrefKey.sidebarStyle) private var sidebarStyle = SidebarStyle.floating
@@ -21,6 +22,13 @@ struct ContentView: View {
             splitView
             #endif
         }
+        #if os(macOS)
+        .onAppear {
+            SearchShortcut.shared.openMainWindow = { openWindow(id: "main") }
+            SearchShortcut.shared.openNoteWindow = { openWindow(id: NoteWindow.id, value: $0) }
+            SearchShortcut.shared.start(store: store)
+        }
+        #endif
         // Pick up changes made on other Macs while the app was in the background.
         .onChange(of: scenePhase) { if scenePhase == .active { store.reloadSynced() } }
         .sheet(isPresented: $store.isQuickOpenPresented) {

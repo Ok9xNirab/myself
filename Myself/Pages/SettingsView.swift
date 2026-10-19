@@ -28,6 +28,15 @@ private struct GeneralSettings: View {
     @AppStorage(PrefKey.rowDensity) private var density = RowDensity.regular
     @State private var confirmingReset = false
 
+    #if os(macOS)
+    private var shortcutNote: String {
+        let shortcut = SearchShortcut.shared
+        if shortcut.hotKey == nil { return "Off. Click to set a shortcut that opens search from any app." }
+        if !shortcut.isRegistered { return "Another app is using this shortcut. Choose a different one." }
+        return "Opens search from any app. ⌘K still works inside MySelf."
+    }
+    #endif
+
     var body: some View {
         Form {
             Section {
@@ -44,6 +53,17 @@ private struct GeneralSettings: View {
                 }
             }
             .pickerStyle(.segmented)
+
+            #if os(macOS)
+            Section {
+                LabeledContent {
+                    ShortcutRecorder()
+                } label: {
+                    Text("Search MySelf")
+                    Text(shortcutNote)
+                }
+            }
+            #endif
 
             Section("Data") {
                 LabeledContent {
