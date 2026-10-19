@@ -87,7 +87,7 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
     }
 
     /// Sidebar section order. `allCases` order can't drive it: new pages go last to keep the ⌘1–⌘9 shortcuts stable.
-    private static let groupOrder = ["Overview", "Plan & Track", "Build", "Capture", "Health"]
+    private static let groupOrder = ["Overview", "Plan & Track", "Capture", "Build", "Health"]
 
     /// Sidebar sections, in order, holding only the given pages.
     static func groups(_ pages: [Page]) -> [(name: String, pages: [Page])] {
