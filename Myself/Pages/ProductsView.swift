@@ -349,28 +349,18 @@ private struct KanbanCardSheet: View {
                     DatePicker("Date", selection: due, displayedComponents: .date)
                 }
             }
-            if !store.labels.isEmpty {
-                Section("Labels") {
-                    FlowLayout(spacing: 6, lineSpacing: 6) {
-                        ForEach(store.labels) { label in
-                            LabelToggle(label: label, isOn: draft.labelIDs.contains(label.id)) { toggle(label.id) }
-                        }
-                    }
-                }
+            Section("Labels") {
+                LabelPicker(scope: .product, selection: $draft.labelIDs)
             }
         }
         .onAppear { focused = isNew }
-    }
-
-    private func toggle(_ id: ID) {
-        if let i = draft.labelIDs.firstIndex(of: id) { draft.labelIDs.remove(at: i) } else { draft.labelIDs.append(id) }
     }
 
     private func save() {
         draft.title = trimmed(draft.title)
         draft.desc = trimmed(draft.desc)
         draft.due = hasDue ? (draft.due ?? Day.offset(0)) : nil
-        let known = Set(store.labels.map(\.id))
+        let known = Set(store.productLabels.map(\.id))
         draft.labelIDs.removeAll { !known.contains($0) }
         store.saveCard(draft, undoManager: undoManager)
     }

@@ -121,7 +121,10 @@ enum UniversityEditor: Identifiable {
 /// in-memory sample content. Feature visibility is stored in UserDefaults.
 @Observable
 final class AppStore {
-    private(set) var labels: [TaskLabel] = []
+    /// TODO and Product Dev labels together, as they're stored; read `labels` or `productLabels`.
+    private(set) var allLabels: [TaskLabel] = []
+    var labels: [TaskLabel] { allLabels.filter { !$0.isProduct } }
+    var productLabels: [TaskLabel] { allLabels.filter(\.isProduct) }
     private(set) var todos: [Todo] = []
     private(set) var office: [OfficeTask] = []
     private(set) var university = University()
@@ -179,6 +182,13 @@ final class AppStore {
             for category in SampleData.noteCategories { sync.save(category, onlyIfNewer: true) }
             reloadSynced()
         }
+        // Product Dev's default labels, once per Mac (so deleting them all doesn't bring them back). Fixed IDs and
+        // `onlyIfNewer` keep a second Mac from duplicating them or undoing renames.
+        if productLabels.isEmpty, !UserDefaults.standard.bool(forKey: Self.seededProductLabels) {
+            for label in SampleData.productLabels { sync.save(label, onlyIfNewer: true) }
+            reloadSynced()
+        }
+        UserDefaults.standard.set(true, forKey: Self.seededProductLabels)
         syncedSettings = localSettings()
         defaultsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.pushSettings() }
@@ -188,9 +198,9 @@ final class AppStore {
     /// Settings › Reset: replaces todos, labels, office tasks, notes, University, Job Study and Product Dev (in the sync folder too) and every other feature with the samples.
     func loadSampleData() {
         for todo in todos { sync.delete(Todo.self, id: todo.id) }
-        labels = SampleData.labels
+        allLabels = SampleData.labels + SampleData.productLabels
         todos = SampleData.todos()
-        for label in labels { sync.save(label) }
+        for label in allLabels { sync.save(label) }
         for todo in todos { sync.save(todo) }
         for task in office { sync.delete(OfficeTask.self, id: task.id) }
         office = SampleData.office()
@@ -284,7 +294,7 @@ final class AppStore {
 
     // MARK: Derived
 
-    func label(_ id: ID) -> TaskLabel? { labels.first { $0.id == id } }
+    func label(_ id: ID) -> TaskLabel? { allLabels.first { $0.id == id } }
 
     /// Sidebar badge counts.
     func count(for page: Page) -> Int {
@@ -336,22 +346,50 @@ final class AppStore {
     }
 
     @discardableResult
-    func addLabel(name: String, hex: UInt32) -> TaskLabel? {
+    func addLabel(name: String, hex: UInt32, scope: TaskLabel.Scope = .todo) -> TaskLabel? {
         let name = name.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return nil }
-        let label = TaskLabel(id: newID(), name: name, hex: hex, sortOrder: (labels.map(\.sortOrder).max() ?? -1) + 1, updatedAt: .now)
-        labels.append(label)
+        let siblings = scope == .product ? productLabels : labels
+        let label = TaskLabel(id: newID(), name: name, hex: hex, sortOrder: (siblings.map(\.sortOrder).max() ?? -1) + 1, updatedAt: .now,
+                              scope: scope == .product ? .product : nil)
+        allLabels.append(label)
         sync.save(label)
         return label
     }
 
-    /// Deletes a label and takes it off every todo.
+    /// Deletes a label and takes it off every todo and card.
     func deleteLabel(_ id: ID) {
-        labels.removeAll { $0.id == id }
+        allLabels.removeAll { $0.id == id }
         sync.delete(TaskLabel.self, id: id)
         for var todo in todos where todo.labelIDs.contains(id) {
             todo.labelIDs.removeAll { $0 == id }
             saveTodo(todo)
+        }
+        for var card in cards where card.labelIDs.contains(id) {
+            card.labelIDs.removeAll { $0 == id }
+            saveCard(card)
+        }
+    }
+
+    private static let seededProductLabels = "seededProductLabels"
+
+    /// Cards used to share the TODO labels. Each TODO label a card still points at gets a Product Dev copy, with an
+    /// ID derived from the original so two Macs migrating at once make the same copy, and the card moves to it.
+    private func moveCardsToProductLabels() {
+        let todoLabels = Dictionary(labels.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        for var card in cards where card.labelIDs.contains(where: { todoLabels[$0] != nil }) {
+            card.labelIDs = card.labelIDs.map { id in
+                guard let original = todoLabels[id] else { return id }
+                let copyID = "p-\(id)"
+                if label(copyID) == nil {
+                    let copy = TaskLabel(id: copyID, name: original.name, hex: original.hex,
+                                         sortOrder: (productLabels.map(\.sortOrder).max() ?? -1) + 1, updatedAt: .now, scope: .product)
+                    allLabels.append(copy)
+                    sync.save(copy, onlyIfNewer: true)
+                }
+                return copyID
+            }
+            saveCard(card)
         }
     }
 
@@ -886,8 +924,8 @@ final class AppStore {
         sync.scan {
             let todos = sync.load(Todo.self, keeping: todos).sorted { $0.createdAt < $1.createdAt }
             if todos != self.todos { self.todos = todos }
-            let labels = sync.load(TaskLabel.self, keeping: labels).sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
-            if labels != self.labels { self.labels = labels }
+            let labels = sync.load(TaskLabel.self, keeping: allLabels).sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
+            if labels != self.allLabels { self.allLabels = labels }
             let office = sync.load(OfficeTask.self, keeping: office).sorted { $0.createdAt < $1.createdAt }
             if office != self.office { self.office = office }
             let categories = sync.load(NoteCategory.self, keeping: noteCategories).sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
@@ -910,6 +948,7 @@ final class AppStore {
             let cards = sync.load(KanbanCard.self, keeping: cards).sorted(by: Self.cardOrder)
             if cards != self.cards { self.cards = cards }
         }
+        moveCardsToProductLabels()
         pullSettings()
     }
 
@@ -925,7 +964,7 @@ final class AppStore {
     private func carryData(_ change: () throws -> Void) rethrows {
         saveUnsavedNotes()
         saveUniversityNotes()
-        let (todos, labels, office, categories, notes) = (todos, labels, office, noteCategories, notes)
+        let (todos, labels, office, categories, notes) = (todos, allLabels, office, noteCategories, notes)
         let (u, uniNotes, jobStudy) = (university, universityNotes, jobStudy)
         let (products, cards) = (products, cards)
         let oldRoot = sync.root

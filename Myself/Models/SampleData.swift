@@ -11,6 +11,16 @@ enum SampleData {
         TaskLabel(id: "l6", name: "Finance", hex: 0xBC8A1C, sortOrder: 5),
     ]
 
+    /// Product Dev's own labels, seeded once with fixed IDs like the TODO ones.
+    static let productLabels: [TaskLabel] = [
+        TaskLabel(id: "pl1", name: "Feature", hex: 0x2B7BBF, sortOrder: 0, scope: .product),
+        TaskLabel(id: "pl2", name: "Bug", hex: 0xCB4733, sortOrder: 1, scope: .product),
+        TaskLabel(id: "pl3", name: "Design", hex: 0xB34A82, sortOrder: 2, scope: .product),
+        TaskLabel(id: "pl4", name: "Marketing", hex: 0xBC8A1C, sortOrder: 3, scope: .product),
+        TaskLabel(id: "pl5", name: "Infra", hex: 0x1F9D8F, sortOrder: 4, scope: .product),
+        TaskLabel(id: "pl6", name: "Research", hex: 0x6A63C4, sortOrder: 5, scope: .product),
+    ]
+
     static func todos() -> [Todo] {
         [
             Todo(title: "Renew domain & SSL for landing page", desc: "Auto-renew failed last year — do it manually this time and screenshot the receipt.", labelIDs: ["l1", "l6"], priority: .high, due: Day.offset(1)),
@@ -97,18 +107,18 @@ enum SampleData {
             cards.append(KanbanCard(productID: product, status: status, title: title, desc: desc, labelIDs: [label],
                                     priority: priority, due: due.map(Day.offset), order: order))
         }
-        add("p1", .backlog, "Stripe billing integration", desc: "Metered usage + free tier cap.", label: "l1", .medium, due: 12)
-        add("p1", .backlog, "Dark mode for the builder", label: "l5", .low)
-        add("p1", .backlog, "Webhook delivery retries", desc: "Exponential backoff, 5 attempts.", label: "l1", .medium, due: 20)
-        add("p1", .inProgress, "Drag-and-drop field reordering", desc: "Using pointer events, no library.", label: "l1", .high, due: 2)
-        add("p1", .inProgress, "Onboarding email sequence", desc: "3 emails over first week.", label: "l2", .medium, due: 4)
-        add("p1", .review, "Landing page redesign", desc: "Hero + pricing + testimonials.", label: "l1", .high, due: 1)
-        add("p1", .done, "Set up CI/CD pipeline", label: "l1", .low, due: -5)
-        add("p1", .done, "Domain + DNS configuration", label: "l1", .low, due: -8)
-        add("p2", .backlog, "Grocery list auto-generation", desc: "From selected recipes.", label: "l5", .medium)
-        add("p2", .backlog, "Offline recipe caching", label: "l1", .low)
-        add("p2", .inProgress, "Recipe import from URL", desc: "Parse schema.org/Recipe JSON-LD.", label: "l1", .high, due: 6)
-        add("p2", .done, "App icon & splash screen", label: "l2", .low, due: -3)
+        add("p1", .backlog, "Stripe billing integration", desc: "Metered usage + free tier cap.", label: "pl1", .medium, due: 12)
+        add("p1", .backlog, "Dark mode for the builder", label: "pl6", .low)
+        add("p1", .backlog, "Webhook delivery retries", desc: "Exponential backoff, 5 attempts.", label: "pl1", .medium, due: 20)
+        add("p1", .inProgress, "Drag-and-drop field reordering", desc: "Using pointer events, no library.", label: "pl1", .high, due: 2)
+        add("p1", .inProgress, "Onboarding email sequence", desc: "3 emails over first week.", label: "pl4", .medium, due: 4)
+        add("p1", .review, "Landing page redesign", desc: "Hero + pricing + testimonials.", label: "pl3", .high, due: 1)
+        add("p1", .done, "Set up CI/CD pipeline", label: "pl5", .low, due: -5)
+        add("p1", .done, "Domain + DNS configuration", label: "pl5", .low, due: -8)
+        add("p2", .backlog, "Grocery list auto-generation", desc: "From selected recipes.", label: "pl6", .medium)
+        add("p2", .backlog, "Offline recipe caching", label: "pl1", .low)
+        add("p2", .inProgress, "Recipe import from URL", desc: "Parse schema.org/Recipe JSON-LD.", label: "pl1", .high, due: 6)
+        add("p2", .done, "App icon & splash screen", label: "pl3", .low, due: -3)
         return (products, cards)
     }
 

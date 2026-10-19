@@ -20,16 +20,21 @@ enum Priority: String, CaseIterable, Identifiable, Codable {
     }
 }
 
-/// Synced as `labels/<id>.json`.
+/// Synced as `labels/<id>.json`. TODOs and Product Dev each have their own set, told apart by `scope`.
 struct TaskLabel: Identifiable, Hashable, Codable, SyncRecord {
     static let folder = "labels"
+
+    enum Scope: String, Codable { case todo, product }
 
     let id: ID
     var name: String
     var hex: UInt32
     var sortOrder = 0
     var updatedAt = Date.distantPast
+    /// nil for TODO labels, so files written before Product Dev had its own labels still read as TODO ones.
+    var scope: Scope?
     var color: Color { Color(hex: hex) }
+    var isProduct: Bool { scope == .product }
 }
 
 /// Synced as `todos/<id>.json`.

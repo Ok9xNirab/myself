@@ -8,11 +8,7 @@ struct TodoEditorSheet: View {
     var undoManager: UndoManager?
     @State private var draft: Todo
     @State private var hasDue: Bool
-    @State private var addingLabel = false
-    @State private var labelName = ""
-    @State private var labelHex = Palette.swatches[0]
     @FocusState private var titleFocused: Bool
-    @FocusState private var labelFocused: Bool
 
     init(todo: Todo, undoManager: UndoManager?) {
         self.undoManager = undoManager
@@ -49,23 +45,7 @@ struct TodoEditorSheet: View {
                 }
 
                 Section("Labels") {
-                    FlowLayout(spacing: 6, lineSpacing: 6) {
-                        ForEach(store.labels) { label in
-                            LabelToggle(label: label, isOn: draft.labelIDs.contains(label.id)) { toggle(label.id) }
-                                .contextMenu {
-                                    Button("Delete Label", systemImage: "trash", role: .destructive) {
-                                        draft.labelIDs.removeAll { $0 == label.id }
-                                        store.deleteLabel(label.id)
-                                    }
-                                }
-                        }
-                        if !addingLabel {
-                            Button("New Label", systemImage: "plus") { withAnimation { addingLabel = true } }
-                                .font(.system(size: 11, weight: .medium))
-                                .buttonStyle(.borderless)
-                        }
-                    }
-                    if addingLabel { newLabelRow }
+                    LabelPicker(scope: .todo, selection: $draft.labelIDs)
                 }
             }
             .formStyle(.grouped)
@@ -85,6 +65,52 @@ struct TodoEditorSheet: View {
         .frame(minHeight: 420)
         #endif
         .onAppear { titleFocused = isNew }
+    }
+
+    private func save() {
+        guard !trimmedTitle.isEmpty else { return }
+        draft.title = trimmedTitle
+        draft.desc = draft.desc.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft.due = hasDue ? (draft.due ?? Day.offset(0)) : nil
+        let known = Set(store.labels.map(\.id))
+        draft.labelIDs.removeAll { !known.contains($0) }
+        store.saveTodo(draft, undoManager: undoManager)
+        dismiss()
+    }
+}
+
+/// One set of labels (TODO or Product Dev) as chips to switch on and off, with New Label and, in a chip's
+/// context menu, Delete Label. Used by the todo and card sheets.
+struct LabelPicker: View {
+    var scope: TaskLabel.Scope
+    @Binding var selection: [ID]
+
+    @Environment(AppStore.self) private var store
+    @State private var addingLabel = false
+    @State private var labelName = ""
+    @State private var labelHex = Palette.swatches[0]
+    @FocusState private var labelFocused: Bool
+
+    private var labels: [TaskLabel] { scope == .product ? store.productLabels : store.labels }
+
+    var body: some View {
+        FlowLayout(spacing: 6, lineSpacing: 6) {
+            ForEach(labels) { label in
+                LabelToggle(label: label, isOn: selection.contains(label.id)) { toggle(label.id) }
+                    .contextMenu {
+                        Button("Delete Label", systemImage: "trash", role: .destructive) {
+                            selection.removeAll { $0 == label.id }
+                            store.deleteLabel(label.id)
+                        }
+                    }
+            }
+            if !addingLabel {
+                Button("New Label", systemImage: "plus") { withAnimation { addingLabel = true } }
+                    .font(.system(size: 11, weight: .medium))
+                    .buttonStyle(.borderless)
+            }
+        }
+        if addingLabel { newLabelRow }
     }
 
     /// Name field with a live colour dot, then the colour swatches. Labels are hidden so the grouped Form
@@ -144,25 +170,14 @@ struct TodoEditorSheet: View {
     }
 
     private func toggle(_ id: ID) {
-        if let i = draft.labelIDs.firstIndex(of: id) { draft.labelIDs.remove(at: i) } else { draft.labelIDs.append(id) }
+        if let i = selection.firstIndex(of: id) { selection.remove(at: i) } else { selection.append(id) }
     }
 
     private func createLabel() {
-        guard let label = store.addLabel(name: labelName, hex: labelHex) else { return }
-        draft.labelIDs.append(label.id)
+        guard let label = store.addLabel(name: labelName, hex: labelHex, scope: scope) else { return }
+        selection.append(label.id)
         labelName = ""
         withAnimation { addingLabel = false }
-    }
-
-    private func save() {
-        guard !trimmedTitle.isEmpty else { return }
-        draft.title = trimmedTitle
-        draft.desc = draft.desc.trimmingCharacters(in: .whitespacesAndNewlines)
-        draft.due = hasDue ? (draft.due ?? Day.offset(0)) : nil
-        let known = Set(store.labels.map(\.id))
-        draft.labelIDs.removeAll { !known.contains($0) }
-        store.saveTodo(draft, undoManager: undoManager)
-        dismiss()
     }
 }
 
