@@ -46,23 +46,27 @@ struct DashboardView: View {
         let university = store.isEnabled(.university)
         let workout = store.isEnabled(.workout)
         let office = store.isEnabled(.office)
+        let jobStudy = store.isEnabled(.jobStudy)
         PageScroll {
             hero(focusCount: focus.count)
 
-            StatGrid(count: 1 + [office, workout, university].filter { $0 }.count) {
+            StatGrid(count: 1 + [office, university, jobStudy].filter { $0 }.count) {
                 StatTile(systemImage: "checklist", label: "Open todos", value: "\(store.todos.filter { !$0.done }.count)",
                          foot: "\(store.todos.filter { !$0.done && $0.priority == .high }.count) high priority", color: Palette.blue)
                 if office {
                     StatTile(systemImage: "briefcase", label: "Office due", value: "\(store.office.filter { !$0.done && (Day.fromToday($0.due) ?? 1) <= 0 }.count)",
                              foot: "due today or overdue", color: .accentColor)
                 }
-                if workout {
-                    StatTile(systemImage: "flame", label: "Workout streak", value: "\(store.workout.streak)d",
-                             foot: "\(store.workout.sessionsThisWeek) sessions / wk", color: Palette.red)
-                }
                 if university {
-                    StatTile(systemImage: "flag", label: "Assignments", value: "\(store.university.assignments.filter { !$0.done }.count)",
-                             foot: "all high priority", color: Palette.violet)
+                    let open = store.university.assignments.filter { !$0.done }
+                    let thisWeek = open.filter { (Day.fromToday($0.due) ?? 7) < 7 }.count
+                    StatTile(systemImage: "flag", label: "Assignments", value: "\(open.count)",
+                             foot: open.isEmpty ? "nothing open" : "\(thisWeek) due this week", color: Palette.violet)
+                }
+                if jobStudy {
+                    let topics = store.jobStudy.flatMap(\.topics)
+                    StatTile(systemImage: "book.closed", label: "Topics due", value: "\(store.count(for: .jobStudy))",
+                             foot: "\(topics.filter(\.revisedToday).count) revised today", color: Palette.amber)
                 }
             }
 
@@ -74,9 +78,9 @@ struct DashboardView: View {
                     if university {
                         classesCard
                         deadlinesCard
+                        syllabusCard
                     }
                     if workout { trainingCard }
-                    if university { syllabusCard }
                 }
             } else {
                 // Nothing for the right column: let the remaining cards use the full width.
@@ -123,7 +127,7 @@ struct DashboardView: View {
             let count = Text("\(focusCount)").fontWeight(.semibold).foregroundStyle(Color.accentColor)
             return Text("You have \(count) \(focusCount == 1 ? "thing" : "things") due today and \(classes) scheduled.")
         }
-        return Text("Nothing overdue — a clean slate. \(classes) today.")
+        return Text(n == 0 ? "Nothing overdue — a clean slate. No classes today." : "Nothing overdue — a clean slate. \(classes) today.")
     }
 
     private func focusCard(_ focus: [FocusItem]) -> some View {
@@ -195,6 +199,10 @@ struct DashboardView: View {
             .sorted { $0.date < $1.date }
             .prefix(4)
         return Card(title: "Deadline countdown", systemImage: "clock", tint: Palette.amber) {
+            if deadlines.isEmpty {
+                Text("No upcoming exams.").font(.system(size: 13)).foregroundStyle(Palette.ink3)
+                    .frame(maxWidth: .infinity).padding(24)
+            }
             ForEach(deadlines) { exam in
                 let n = Day.fromToday(exam.date) ?? 0
                 ListRow(verticalPadding: 9) {
@@ -248,39 +256,31 @@ struct DashboardView: View {
         }
     }
 
+    /// Workout is still sample data (`Page.isComingSoon`), so the card only announces it.
     private var trainingCard: some View {
-        let w = store.workout
-        let goal = w.programs.first?.daysPerWeek ?? 3
-        return Card(title: "Training", systemImage: "dumbbell", tint: Palette.red) {
+        Card(title: "Training", systemImage: "dumbbell", tint: Palette.red) {
             Spacer()
-            GhostButton(title: "Details", trailingChevron: true) { store.go(.workout) }
+            Badge(text: "Coming soon", systemImage: "sparkles", color: .accentColor)
         } content: {
-            HStack(spacing: 14) {
-                Donut(value: Double(w.sessionsThisWeek) / Double(goal) * 100, size: 70, lineWidth: 8, color: Palette.red) {
-                    VStack(spacing: 0) {
-                        Text("\(w.sessionsThisWeek)").font(.numeral(18))
-                        Text("this wk").font(.system(size: 9)).foregroundStyle(Palette.ink3)
-                    }
-                }
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("\(w.programs.count) active programs").font(.system(size: 13, weight: .medium)).padding(.bottom, 1)
-                    ForEach(w.programs) { p in
-                        LabeledProgress(label: p.name, value: p.percent, color: p.color, height: 4)
-                    }
-                }
-            }
-            .padding(16)
+            Text("\(Page.workout.featureDescription) are on the way.")
+                .font(.system(size: 13)).foregroundStyle(Palette.ink3)
+                .frame(maxWidth: .infinity).padding(24)
         }
     }
 
     private var syllabusCard: some View {
         Card(title: "Syllabus progress", systemImage: "book.closed", tint: Palette.green) {
-            VStack(spacing: 11) {
-                ForEach(store.university.syllabus) { s in
-                    LabeledProgress(label: s.subject, value: s.percent, color: s.percent == 100 ? Palette.green : .accentColor)
+            if store.university.syllabus.isEmpty {
+                Text("No syllabus subjects yet.").font(.system(size: 13)).foregroundStyle(Palette.ink3)
+                    .frame(maxWidth: .infinity).padding(24)
+            } else {
+                VStack(spacing: 11) {
+                    ForEach(store.university.syllabus) { s in
+                        LabeledProgress(label: s.subject, value: s.percent, color: s.percent == 100 ? Palette.green : .accentColor)
+                    }
                 }
+                .padding(16)
             }
-            .padding(16)
         }
     }
 }
