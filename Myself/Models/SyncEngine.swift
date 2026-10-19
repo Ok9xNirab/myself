@@ -174,7 +174,7 @@ final class SyncEngine {
         let root = root
         for folder in [Todo.folder, TaskLabel.folder, OfficeTask.folder, NoteCategory.folder, Note.folder,
                        UniClass.folder, SyllabusSubject.folder, Assignment.folder, Exam.folder, UniversityNotes.folder,
-                       StudySubject.folder, Product.folder, KanbanCard.folder] {
+                       StudySubject.folder, Product.folder, KanbanCard.folder, Self.imageFolder] {
             try? FileManager.default.createDirectory(at: root.appending(path: folder, directoryHint: .isDirectory), withIntermediateDirectories: true)
         }
         let reload: @MainActor () -> Void = { [weak self] in self?.scheduleReload() }
@@ -291,6 +291,76 @@ final class SyncEngine {
 
     func writeSettings(_ settings: SyncedSettings) {
         write(settings, to: root.appending(path: "settings.json"))
+    }
+
+    // MARK: Note images
+
+    /// Images in notes, as `noteimages/<id>.<ext>`. Note blocks refer to them by file name; the store deletes a file
+    /// once no note uses it.
+    static let imageFolder = "noteimages"
+
+    enum ImageState { case ready(URL), downloading, missing }
+
+    /// Writes image data to a new file and returns its name, or nil if it couldn't be written.
+    func saveImage(_ data: Data, ext: String) -> String? {
+        saveImage(data, name: "\(newID()).\(ext.isEmpty ? "png" : ext.lowercased())")
+    }
+
+    /// Writes image data under a given name; used to put a deleted image back on undo.
+    @discardableResult
+    func saveImage(_ data: Data, name: String) -> String? {
+        let url = imageURL(name)
+        var failure: Error?
+        var error: NSError?
+        NSFileCoordinator(filePresenter: watcher).coordinate(writingItemAt: url, options: .forReplacing, error: &error) { url in
+            do { try data.write(to: url, options: .atomic) } catch { failure = error }
+        }
+        if let failure = failure ?? error {
+            status = .failed(failure.localizedDescription)
+            return nil
+        }
+        didWrite()
+        return name
+    }
+
+    /// The file's data, for undo, if it's downloaded.
+    func imageData(_ name: String) -> Data? {
+        guard case .ready(let url) = imageState(name) else { return nil }
+        return try? Data(contentsOf: url)
+    }
+
+    func deleteImage(_ name: String) {
+        remove(imageURL(name))
+        didWrite()
+    }
+
+    func imageURL(_ name: String) -> URL {
+        root.appending(path: Self.imageFolder, directoryHint: .isDirectory).appending(path: name)
+    }
+
+    /// Whether an image can be shown yet; asks iCloud Drive for it when it hasn't been downloaded.
+    func imageState(_ name: String) -> ImageState {
+        let url = imageURL(name)
+        let placeholder = url.deletingLastPathComponent().appending(path: ".\(name).icloud")
+        if FileManager.default.fileExists(atPath: url.path) {
+            if isDownloaded(url) { return .ready(url) }
+        } else if !FileManager.default.fileExists(atPath: placeholder.path) {
+            return .missing
+        }
+        try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+        return .downloading
+    }
+
+    /// Copies images from the previous folder after switching, keeping files that are already there.
+    func copyImages(from oldRoot: URL) {
+        let old = oldRoot.appending(path: Self.imageFolder, directoryHint: .isDirectory)
+        guard old != root.appending(path: Self.imageFolder, directoryHint: .isDirectory),
+              let names = try? FileManager.default.contentsOfDirectory(atPath: old.path) else { return }
+        for name in names where !name.hasPrefix(".") {
+            let destination = imageURL(name)
+            guard !FileManager.default.fileExists(atPath: destination.path) else { continue }
+            try? FileManager.default.copyItem(at: old.appending(path: name), to: destination)
+        }
     }
 
     // MARK: Files

@@ -45,6 +45,7 @@ struct Note: Identifiable, Equatable, Codable, SyncRecord {
         }
         if blocks.contains(where: { $0.kind == .code }) { return "Code" }
         if blocks.contains(where: { $0.kind == .math }) { return "Equation" }
+        if blocks.contains(where: { $0.kind == .image }) { return "Image" }
         return "No additional text"
     }
 
@@ -58,7 +59,7 @@ struct Note: Identifiable, Equatable, Codable, SyncRecord {
 
 struct NoteBlock: Identifiable, Equatable, Codable {
     enum Kind: String, Codable, CaseIterable, Identifiable {
-        case p, h1, h2, h3, bullet, num, todo, quote, code, math, hr
+        case p, h1, h2, h3, bullet, num, todo, quote, code, math, image, hr
 
         var id: Self { self }
 
@@ -74,6 +75,7 @@ struct NoteBlock: Identifiable, Equatable, Codable {
             case .quote: "Quote"
             case .code: "Code block"
             case .math: "Math block"
+            case .image: "Image"
             case .hr: "Divider"
             }
         }
@@ -90,6 +92,7 @@ struct NoteBlock: Identifiable, Equatable, Codable {
             case .quote: "text.quote"
             case .code: "chevron.left.forwardslash.chevron.right"
             case .math: "sum"
+            case .image: "photo"
             case .hr: "minus"
             }
         }
@@ -107,21 +110,27 @@ struct NoteBlock: Identifiable, Equatable, Codable {
             case .quote: ">"
             case .code: "```"
             case .math: "$$"
+            case .image: ""
             case .hr: "---"
             }
         }
 
-        /// Blocks edited as one line of inline markdown (everything but code, math and dividers).
-        var isText: Bool { self != .code && self != .math && self != .hr }
+        /// Blocks edited as one line of inline markdown (everything but code, math, images and dividers).
+        var isText: Bool { self != .code && self != .math && self != .image && self != .hr }
+        /// Blocks with a text view that the arrow keys and Backspace can move the caret into.
+        var hasCaret: Bool { self != .image && self != .hr }
         /// Kinds that Return continues onto the next block.
         var continues: Bool { self == .bullet || self == .num || self == .todo }
     }
 
     var id: ID
     var kind: Kind
+    /// The line of markdown, code or LaTeX; an image block's caption.
     var text: String
     var lang: CodeLanguage?
     var done: Bool?
+    /// An image block's file name in the sync folder's `noteimages/`; nil until an image is chosen.
+    var image: String?
 
     init(id: ID = newID(), _ kind: Kind = .p, _ text: String = "", lang: CodeLanguage? = nil, done: Bool? = nil) {
         self.id = id
@@ -129,6 +138,75 @@ struct NoteBlock: Identifiable, Equatable, Codable {
         self.text = text
         self.lang = lang ?? (kind == .code ? .python : nil)
         self.done = done ?? (kind == .todo ? false : nil)
+    }
+}
+
+extension NoteBlock {
+    /// Splits pasted markdown into blocks: headings, lists, checklists, quotes, fenced code, `$$` math and dividers
+    /// become their kinds, tables become a plain-text code block, other lines paragraphs. Blank lines only separate.
+    /// Nested lists are flattened.
+    static func blocks(fromMarkdown markdown: String) -> [NoteBlock] {
+        let lines = markdown.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
+        var blocks: [NoteBlock] = []
+        var i = 0
+        /// Lines up to (not including) the closing `fence`, which is skipped; or to the end if it never comes.
+        func body(until fence: (String) -> Bool) -> String {
+            var collected: [String] = []
+            while i < lines.count, !fence(lines[i].trimmingCharacters(in: .whitespaces)) {
+                collected.append(lines[i])
+                i += 1
+            }
+            i += 1
+            return collected.joined(separator: "\n")
+        }
+        while i < lines.count {
+            let line = lines[i].trimmingCharacters(in: .whitespaces)
+            i += 1
+            if line.isEmpty { continue }
+            if line.hasPrefix("```") {
+                let lang = CodeLanguage(fence: String(line.dropFirst(3)))
+                blocks.append(NoteBlock(.code, body { $0.hasPrefix("```") }, lang: lang))
+            } else if line == "$$" {
+                blocks.append(NoteBlock(.math, body { $0 == "$$" }))
+            } else if line.count > 4, line.hasPrefix("$$"), line.hasSuffix("$$") {
+                blocks.append(NoteBlock(.math, String(line.dropFirst(2).dropLast(2))))
+            } else if line.hasPrefix("|") {
+                var rows = [line]
+                while i < lines.count, lines[i].trimmingCharacters(in: .whitespaces).hasPrefix("|") {
+                    rows.append(lines[i].trimmingCharacters(in: .whitespaces))
+                    i += 1
+                }
+                blocks.append(NoteBlock(.code, rows.joined(separator: "\n"), lang: .plaintext))
+            } else if line.wholeMatch(of: /(-\s*){3,}|(\*\s*){3,}|(_\s*){3,}/) != nil {
+                blocks.append(NoteBlock(.hr))
+            } else if let m = line.wholeMatch(of: /(#{1,6})\s+(.*)/) {
+                let kind: Kind = switch m.1.count { case 1: .h1; case 2: .h2; default: .h3 }
+                blocks.append(NoteBlock(kind, String(m.2)))
+            } else if let m = line.wholeMatch(of: /(?:[-*+]\s+)?\[([ xX])\]\s+(.*)/) {
+                blocks.append(NoteBlock(.todo, String(m.2), done: m.1 != " "))
+            } else if let m = line.wholeMatch(of: /[-*+]\s+(.*)/) {
+                blocks.append(NoteBlock(.bullet, String(m.1)))
+            } else if let m = line.wholeMatch(of: /\d+[.)]\s+(.*)/) {
+                blocks.append(NoteBlock(.num, String(m.1)))
+            } else if line.hasPrefix(">") {
+                let quote = line.dropFirst().trimmingCharacters(in: .whitespaces)
+                if !quote.isEmpty { blocks.append(NoteBlock(.quote, quote)) }
+            } else {
+                blocks.append(NoteBlock(.p, line))
+            }
+        }
+        return blocks
+    }
+}
+
+extension CodeLanguage {
+    /// The language named after a markdown code fence (```js), plain text when it's missing or unknown.
+    init(fence: String) {
+        let name = fence.trimmingCharacters(in: .whitespaces).lowercased()
+        let aliases: [String: CodeLanguage] = ["py": .python, "js": .javascript, "jsx": .javascript, "ts": .typescript, "tsx": .typescript,
+                                               "c++": .cpp, "cc": .cpp, "sh": .bash, "shell": .bash, "zsh": .bash, "html": .xml,
+                                               "golang": .go, "rs": .rust, "text": .plaintext, "txt": .plaintext]
+        self = CodeLanguage(rawValue: name) ?? aliases[name] ?? .plaintext
     }
 }
 

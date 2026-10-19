@@ -403,14 +403,19 @@ final class AppStore {
     }
 
     /// Edits a note's content. Memory updates straight away; the file is written once typing pauses.
-    func editNote(_ id: ID, _ edit: (inout Note) -> Void) {
-        guard let i = notes.firstIndex(where: { $0.id == id }) else { return }
+    /// Returns the data of image files the edit deleted, for an undo.
+    @discardableResult
+    func editNote(_ id: ID, _ edit: (inout Note) -> Void) -> [String: Data] {
+        guard let i = notes.firstIndex(where: { $0.id == id }) else { return [:] }
         var note = notes[i]
         edit(&note)
-        guard note != notes[i] else { return }
+        guard note != notes[i] else { return [:] }
         note.editedAt = .now
         note.updatedAt = .now
+        let images = Set(notes[i].blocks.compactMap(\.image))
         notes[i] = note
+        // An image block removed, replaced or turned into text takes its file with it.
+        let released = releaseImages(images.subtracting(note.blocks.compactMap(\.image)))
         unsavedNotes.insert(id)
         noteSaveTask?.cancel()
         noteSaveTask = Task { [weak self] in
@@ -418,6 +423,37 @@ final class AppStore {
             guard !Task.isCancelled else { return }
             self?.saveUnsavedNotes()
         }
+        return released
+    }
+
+    /// Replaces a note's blocks as one undoable step (deleting blocks); image files it deletes come back on undo.
+    func setNoteBlocks(_ id: ID, _ blocks: [NoteBlock], actionName: String, undoManager: UndoManager?) {
+        guard let old = notes.first(where: { $0.id == id })?.blocks, old != blocks else { return }
+        let released = editNote(id) { $0.blocks = blocks }
+        undoManager?.registerUndo(withTarget: self) { store in
+            for (name, data) in released { store.sync.saveImage(data, name: name) }
+            store.setNoteBlocks(id, old, actionName: actionName, undoManager: undoManager)
+        }
+        undoManager?.setActionName(actionName)
+    }
+
+    /// Stores an image for a note's image block and returns its file name (`NoteBlock.image`).
+    func addNoteImage(_ data: Data, ext: String) -> String? {
+        sync.saveImage(data, ext: ext)
+    }
+
+    /// Deletes the image files no note refers to any more (a duplicated note shares its images) and returns
+    /// their data, so undoing a deletion can write them back.
+    @discardableResult
+    private func releaseImages(_ names: some Collection<String>) -> [String: Data] {
+        guard !names.isEmpty else { return [:] }
+        let used = Set(notes.flatMap(\.blocks).compactMap(\.image))
+        var released: [String: Data] = [:]
+        for name in names where !used.contains(name) {
+            released[name] = sync.imageData(name)
+            sync.deleteImage(name)
+        }
+        return released
     }
 
     /// Writes notes edited with `editNote` that haven't been saved yet.
@@ -456,16 +492,20 @@ final class AppStore {
         return copy
     }
 
-    func deleteNotes(_ ids: [ID], undoManager: UndoManager? = nil) {
+    /// Returns the data of the images deleted with the notes, for an undo registered by the caller.
+    @discardableResult
+    func deleteNotes(_ ids: [ID], undoManager: UndoManager? = nil) -> [String: Data] {
         let removed = notes.filter { ids.contains($0.id) }
-        guard !removed.isEmpty else { return }
+        guard !removed.isEmpty else { return [:] }
         notes.removeAll { ids.contains($0.id) }
         for note in removed {
             unsavedNotes.remove(note.id)
             sync.delete(Note.self, id: note.id)
         }
-        undoManager?.registerUndo(withTarget: self) { $0.restore(notes: removed, categories: [], undoManager: undoManager) }
+        let images = releaseImages(removed.flatMap(\.blocks).compactMap(\.image))
+        undoManager?.registerUndo(withTarget: self) { $0.restore(notes: removed, categories: [], images: images, undoManager: undoManager) }
         undoManager?.setActionName(removed.count == 1 ? "Delete Note" : "Delete Notes")
+        return images
     }
 
     @discardableResult
@@ -493,12 +533,13 @@ final class AppStore {
         let removed = notes.filter { $0.categoryID == id }
         noteCategories.removeAll { $0.id == id }
         sync.delete(NoteCategory.self, id: id)
-        deleteNotes(removed.map(\.id))
-        undoManager?.registerUndo(withTarget: self) { $0.restore(notes: removed, categories: [category], undoManager: undoManager) }
+        let images = deleteNotes(removed.map(\.id))
+        undoManager?.registerUndo(withTarget: self) { $0.restore(notes: removed, categories: [category], images: images, undoManager: undoManager) }
         undoManager?.setActionName("Delete Category")
     }
 
-    private func restore(notes restored: [Note], categories: [NoteCategory], undoManager: UndoManager?) {
+    private func restore(notes restored: [Note], categories: [NoteCategory], images: [String: Data], undoManager: UndoManager?) {
+        for (name, data) in images { sync.saveImage(data, name: name) }
         for var category in categories {
             category.updatedAt = .now
             noteCategories.append(category)
@@ -884,7 +925,9 @@ final class AppStore {
         let (todos, labels, office, categories, notes) = (todos, labels, office, noteCategories, notes)
         let (u, uniNotes, jobStudy) = (university, universityNotes, jobStudy)
         let (products, cards) = (products, cards)
+        let oldRoot = sync.root
         try change()
+        sync.copyImages(from: oldRoot)
         for r in products { sync.save(r, onlyIfNewer: true) }
         for r in cards { sync.save(r, onlyIfNewer: true) }
         for r in jobStudy { sync.save(r, onlyIfNewer: true) }

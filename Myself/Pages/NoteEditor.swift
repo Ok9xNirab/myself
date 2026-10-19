@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The block editor for one note: formatting bar, page (breadcrumb, title, blocks) and status bar.
 ///
@@ -13,6 +14,7 @@ struct NoteEditor: View {
     var onDelete: () -> Void
 
     @Environment(AppStore.self) private var store
+    @Environment(\.undoManager) private var undoManager
     /// Block (or `titleID`) whose text view is showing.
     @State private var editingID: ID?
     /// Last block that had focus, for the toolbar's block buttons.
@@ -22,6 +24,21 @@ struct NoteEditor: View {
     @State private var showsTypography = false
     @State private var textFocus = NoteTextFocus()
     @State private var paperWidth: CGFloat = 780
+    /// Image block waiting for a file from the open panel.
+    @State private var choosingImageFor: ID?
+    /// Blocks selected as blocks (Esc in a block, or ⌘A twice), which Delete removes.
+    @State private var selectedBlocks: Set<ID> = []
+    @FocusState private var selectionFocused: Bool
+    /// Each block's frame on the page, for drag selection.
+    @State private var blockFrames: [ID: CGRect] = [:]
+    /// The drag-selection box while dragging.
+    @State private var band: CGRect?
+    private static let paperSpace = "paper"
+    #if os(macOS)
+    /// Catches Delete, Esc, ⌘A and clicks while blocks are selected. SwiftUI focus set from code doesn't reliably
+    /// reach the page on macOS, so the keys are taken from the event stream instead.
+    @State private var selectionMonitor: Any?
+    #endif
 
     private static let titleID = "title"
 
@@ -48,6 +65,23 @@ struct NoteEditor: View {
             Divider()
             ScrollView {
                 paper
+                    #if os(macOS)
+                    .onChange(of: selectedBlocks.isEmpty) { if selectedBlocks.isEmpty { stopSelectionMonitor() } }
+                    .onDisappear(perform: stopSelectionMonitor)
+                    #else
+                    .focusable(!selectedBlocks.isEmpty)
+                    .focused($selectionFocused)
+                    .focusEffectDisabled()
+                    .onKeyPress(keys: [.delete, .deleteForward]) { _ in
+                        deleteSelectedBlocks()
+                        return .handled
+                    }
+                    .onKeyPress(.escape) {
+                        selectedBlocks = []
+                        return .handled
+                    }
+                    .onChange(of: selectionFocused) { if !selectionFocused { selectedBlocks = [] } }
+                    #endif
                     .frame(maxWidth: 780)
                     .padding(.leading, paperWidth < 640 ? 52 : 64)
                     .padding(.trailing, paperWidth < 640 ? 36 : 64)
@@ -58,7 +92,17 @@ struct NoteEditor: View {
             Divider()
             statusBar
         }
-        .onAppear { if isFresh { focus(Self.titleID, caret: nil) } }
+        .onAppear {
+            splitPastedDocuments()
+            if isFresh { focus(Self.titleID, caret: nil) }
+        }
+        .fileImporter(isPresented: Binding(get: { choosingImageFor != nil }, set: { if !$0 { choosingImageFor = nil } }),
+                      allowedContentTypes: [.image], allowsMultipleSelection: false) { result in
+            guard let id = choosingImageFor, let urls = try? result.get() else { return }
+            setImage(id, from: urls)
+        } onCancellation: {
+            if let id = choosingImageFor { discardEmptyImage(id) }
+        }
     }
 
     // MARK: Page
@@ -95,14 +139,44 @@ struct NoteEditor: View {
 
             ForEach(note.blocks) { block in
                 let _ = (number = block.kind == .num ? number + 1 : 0)
-                NoteBlockRow(block: block, number: number, editor: self)
+                NoteBlockRow(block: block, number: number, selected: selectedBlocks.contains(block.id), editor: self)
                     .zIndex(slash?.id == block.id ? 1 : 0)
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.paperSpace)) } action: { blockFrames[block.id] = $0 }
             }
 
             Color.clear
                 .frame(height: 160)
                 .contentShape(Rectangle())
                 .onTapGesture(perform: tailClick)
+        }
+        .coordinateSpace(.named(Self.paperSpace))
+        // Dragging from anywhere but a block being typed in (its text view keeps the mouse) selects the blocks
+        // the box touches, as in Notion.
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 6, coordinateSpace: .named(Self.paperSpace))
+                .onChanged { value in
+                    if band == nil { blur() }
+                    let rect = CGRect(x: min(value.startLocation.x, value.location.x), y: min(value.startLocation.y, value.location.y),
+                                      width: abs(value.location.x - value.startLocation.x), height: abs(value.location.y - value.startLocation.y))
+                    band = rect
+                    selectedBlocks = Set(current.blocks.filter { block in
+                        blockFrames[block.id].map { $0.minY < rect.maxY && $0.maxY > rect.minY } ?? false
+                    }.map(\.id))
+                }
+                .onEnded { _ in
+                    band = nil
+                    if !selectedBlocks.isEmpty { selectBlocks(selectedBlocks) }
+                }
+        )
+        .overlay(alignment: .topLeading) {
+            if let band {
+                Rectangle()
+                    .fill(Color.accentColor.opacity(0.08))
+                    .overlay(Rectangle().strokeBorder(Color.accentColor.opacity(0.45)))
+                    .frame(width: band.width, height: band.height)
+                    .offset(x: band.minX, y: band.minY)
+                    .allowsHitTesting(false)
+            }
         }
     }
 
@@ -116,6 +190,7 @@ struct NoteEditor: View {
 
     /// Shows `id`'s text view and puts the caret at `caret` (UTF-16; `nil` = end).
     fileprivate func focus(_ id: ID, caret: Int?) {
+        selectedBlocks = []
         editingID = id
         if id != Self.titleID { activeID = id }
         pendingFocus = PendingFocus(id: id, request: NoteFocusRequest(caret: caret))
@@ -123,6 +198,7 @@ struct NoteEditor: View {
 
     fileprivate func focusChanged(_ id: ID, _ focused: Bool) {
         if focused {
+            selectedBlocks = []
             editingID = id
             if id != Self.titleID { activeID = id }
         } else {
@@ -139,6 +215,94 @@ struct NoteEditor: View {
         #if os(macOS)
         NSApp.keyWindow?.makeFirstResponder(nil)
         #endif
+    }
+
+    // MARK: Block selection
+
+    /// A click on a block that isn't being typed in. With Shift it selects the blocks from the current one
+    /// (the block being typed in, or the selection) through this one; otherwise it starts editing.
+    fileprivate func tap(_ id: ID, otherwise action: () -> Void) {
+        #if os(macOS)
+        let shift = NSEvent.modifierFlags.contains(.shift)
+        #else
+        let shift = false
+        #endif
+        let blocks = current.blocks
+        if shift, let anchor = editingID ?? activeID ?? selectedBlocks.first,
+           let a = blocks.firstIndex(where: { $0.id == anchor }), let b = blocks.firstIndex(where: { $0.id == id }) {
+            let range = min(a, b)...max(a, b)
+            selectBlocks(Set(blocks[range].map(\.id)).union(selectedBlocks))
+        } else {
+            action()
+        }
+    }
+
+    /// Leaves the text and selects `ids` as blocks; the page takes key focus so Delete and Esc reach it.
+    private func selectBlocks(_ ids: Set<ID>) {
+        blur()
+        selectedBlocks = ids
+        #if os(macOS)
+        startSelectionMonitor()
+        #else
+        DispatchQueue.main.async { selectionFocused = true }
+        #endif
+    }
+
+    #if os(macOS)
+    private func startSelectionMonitor() {
+        guard selectionMonitor == nil, let window = NSApp.keyWindow else { return }
+        selectionMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown]) { event in
+            guard event.window === window, !selectedBlocks.isEmpty else { return event }
+            if event.type == .leftMouseDown {
+                // Shift-click extends the selection (`tap`); any other click ends it.
+                if !event.modifierFlags.contains(.shift) { selectedBlocks = [] }
+                return event
+            }
+            switch event.keyCode {
+            case 51, 117:  // Delete, forward delete
+                deleteSelectedBlocks()
+                return nil
+            case 53:  // Esc
+                selectedBlocks = []
+                return nil
+            default:
+                if event.isCommand("a", keyCode: 0) {
+                    selectedBlocks = Set(current.blocks.map(\.id))
+                    return nil
+                }
+                return event
+            }
+        }
+    }
+
+    private func stopSelectionMonitor() {
+        if let selectionMonitor { NSEvent.removeMonitor(selectionMonitor) }
+        selectionMonitor = nil
+    }
+    #endif
+
+    /// ⌘A: the first press selects the block's text (the text view does that); once it's all selected, or the
+    /// block is empty, the next press selects every block, as in Notion.
+    private func selectAll(_ context: NoteKeyContext) -> Bool {
+        guard context.selection.location == 0, context.selection.length == context.length else { return false }
+        selectBlocks(Set(current.blocks.map(\.id)))
+        return true
+    }
+
+    private func deleteSelectedBlocks() {
+        let blocks = current.blocks
+        guard let first = blocks.firstIndex(where: { selectedBlocks.contains($0.id) }) else { return }
+        let ids = selectedBlocks
+        selectedBlocks = []
+        var kept = blocks.filter { !ids.contains($0.id) }
+        if kept.isEmpty { kept = [NoteBlock()] }
+        store.setNoteBlocks(note.id, kept, actionName: ids.count == 1 ? "Delete Block" : "Delete Blocks", undoManager: undoManager)
+        // The caret goes to the block that took the first deleted block's place, or the one before it.
+        let remaining = current.blocks
+        let next = remaining.indices.contains(first) ? remaining[first...].first { $0.kind.hasCaret } : nil
+        if let target = next ?? remaining[..<min(first, remaining.count)].last(where: { $0.kind.hasCaret }) {
+            focus(target.id, caret: next == nil ? nil : 0)
+        }
     }
 
     // MARK: Block changes
@@ -183,6 +347,17 @@ struct NoteEditor: View {
 
     fileprivate func turnInto(_ block: NoteBlock, _ kind: NoteBlock.Kind, clear: Bool = false) {
         slash = nil
+        if kind == .image {
+            // The text stays as the caption; an image block has no text view to focus.
+            update(block.id) { b in
+                b.kind = .image
+                if clear { b.text = "" }
+            }
+            blur()
+            activeID = block.id
+            if block.image == nil { choosingImageFor = block.id }
+            return
+        }
         if kind == .hr {
             let next = NoteBlock()
             setBlocks { blocks in
@@ -195,6 +370,7 @@ struct NoteEditor: View {
         }
         update(block.id) { b in
             b.kind = kind
+            b.image = nil
             if clear { b.text = "" }
             if kind == .code, b.lang == nil { b.lang = .python }
             if kind == .todo, b.done == nil { b.done = false }
@@ -211,7 +387,116 @@ struct NoteEditor: View {
             blocks.insert(block, at: at)
             if kind == .hr { blocks.insert(paragraph, at: at + 1) }
         }
+        if kind == .image {
+            blur()
+            activeID = block.id
+            choosingImageFor = block.id
+            return
+        }
         focus(kind == .hr ? paragraph.id : block.id, caret: 0)
+    }
+
+    // MARK: Pasting
+
+    /// Multi-line text pasted into a text block becomes blocks (one long block is slow to lay out, and markdown
+    /// pasted from elsewhere should keep its headings and lists). The first pasted line joins the text before the
+    /// caret when it's a plain paragraph; the text after the caret ends up after the last pasted block.
+    fileprivate func pasteText(_ text: String, in id: ID, replacing selection: NSRange) -> Bool {
+        guard let i = index(id) else { return false }
+        var pasted = NoteBlock.blocks(fromMarkdown: text)
+        let block = current.blocks[i]
+        let ns = block.text as NSString
+        let before = ns.substring(to: selection.location)
+        let after = ns.substring(from: NSMaxRange(selection))
+        guard !pasted.isEmpty else { return true }
+
+        var head: NoteBlock? = block
+        if before.isEmpty && block.kind == .p {
+            var first = pasted.removeFirst()
+            first.id = block.id
+            head = first
+        } else if pasted[0].kind == .p {
+            head?.text = before + pasted.removeFirst().text
+        } else if before.isEmpty {
+            head = nil  // an empty list item or quote gives way to the pasted blocks
+        } else {
+            head?.text = before
+        }
+        var blocks = (head.map { [$0] } ?? []) + pasted
+        var focusID = blocks[blocks.count - 1].id
+        var caret = (blocks[blocks.count - 1].text as NSString).length
+        if !after.isEmpty {
+            if blocks[blocks.count - 1].kind.isText {
+                blocks[blocks.count - 1].text += after
+            } else {
+                let rest = NoteBlock(.p, after)
+                blocks.append(rest)
+                (focusID, caret) = (rest.id, 0)
+            }
+        }
+        setBlocks { $0.replaceSubrange(i...i, with: blocks) }
+        if blocks.last(where: { $0.id == focusID })?.kind.hasCaret == true { focus(focusID, caret: caret) } else { blur() }
+        return true
+    }
+
+    /// A whole document pasted into one text block (before pastes were split) takes seconds to lay out on every
+    /// redraw, so blocks with many lines are split into blocks the same way a paste is now.
+    private func splitPastedDocuments() {
+        let limit = 20
+        guard current.blocks.contains(where: { $0.kind.isText && $0.text.count(where: { $0 == "\n" }) >= limit }) else { return }
+        setBlocks { blocks in
+            blocks = blocks.flatMap { block -> [NoteBlock] in
+                guard block.kind.isText, block.text.count(where: { $0 == "\n" }) >= limit else { return [block] }
+                let parts = NoteBlock.blocks(fromMarkdown: block.text)
+                return parts.isEmpty ? [block] : parts
+            }
+        }
+    }
+
+    // MARK: Images
+
+    fileprivate func chooseImage(for id: ID) { choosingImageFor = id }
+
+    /// Takes away an image block that never got an image: it goes back to a paragraph if it has a caption
+    /// (e.g. a line turned into an image), and is removed otherwise.
+    fileprivate func discardEmptyImage(_ id: ID) {
+        guard let i = index(id), current.blocks[i].kind == .image, current.blocks[i].image == nil else { return }
+        if !current.blocks[i].text.isEmpty || current.blocks.count == 1 {
+            update(id) { $0.kind = .p }
+            focus(id, caret: nil)
+        } else {
+            remove(id)
+        }
+    }
+
+    /// Stores the first image file in `urls` and shows it in image block `id`. False if none was an image.
+    @discardableResult
+    fileprivate func setImage(_ id: ID, from urls: [URL]) -> Bool {
+        guard let file = urls.lazy.compactMap(NoteImages.read).first,
+              let name = store.addNoteImage(file.data, ext: file.ext) else { return false }
+        update(id) { $0.image = name }
+        return true
+    }
+
+    /// An image pasted into a text block: it replaces an empty paragraph, otherwise goes below the block,
+    /// and the caret moves to a paragraph after it so typing carries on.
+    fileprivate func pasteImage(_ data: Data, ext: String, in id: ID) {
+        guard let name = store.addNoteImage(data, ext: ext), let i = index(id) else { return }
+        let block = current.blocks[i]
+        var image = NoteBlock(.image)
+        image.image = name
+        let replaces = block.kind == .p && block.text.isEmpty
+        if replaces { image.id = block.id }
+        let paragraph = NoteBlock()
+        setBlocks { blocks in
+            if replaces { blocks[i] = image } else { blocks.insert(image, at: i + 1) }
+            let after = replaces ? i + 1 : i + 2
+            if !(blocks.indices.contains(after) && blocks[after].kind == .p && blocks[after].text.isEmpty) {
+                blocks.insert(paragraph, at: after)
+            }
+        }
+        let next = current.blocks[(replaces ? i + 1 : i + 2)]
+        focus(next.id, caret: 0)
     }
 
     fileprivate func move(_ id: ID, by offset: Int) {
@@ -231,14 +516,14 @@ struct NoteEditor: View {
     }
 
     fileprivate func remove(_ id: ID) {
-        setBlocks { $0.removeAll { $0.id == id } }
+        store.setNoteBlocks(note.id, current.blocks.filter { $0.id != id }, actionName: "Delete Block", undoManager: undoManager)
     }
 
     /// Leaves a code or math block: focuses the next block, or adds a paragraph if there's none to edit.
     private func exitDown(_ id: ID) {
         let blocks = current.blocks
         guard let i = blocks.firstIndex(where: { $0.id == id }) else { return }
-        if blocks.indices.contains(i + 1), blocks[i + 1].kind != .hr {
+        if blocks.indices.contains(i + 1), blocks[i + 1].kind.hasCaret {
             focus(blocks[i + 1].id, caret: 0)
         } else {
             let paragraph = NoteBlock()
@@ -276,7 +561,7 @@ struct NoteEditor: View {
     }
 
     private func enterFirstBlock() {
-        if let first = current.blocks.first, first.kind != .hr {
+        if let first = current.blocks.first, first.kind.hasCaret {
             focus(first.id, caret: 0)
         } else {
             let paragraph = NoteBlock()
@@ -335,22 +620,30 @@ struct NoteEditor: View {
                 focus(previous.id, caret: caret)
             } else if previous.kind == .hr {
                 setBlocks { $0.remove(at: i - 1) }
+            } else if previous.kind == .image {
+                // Like a divider, but an image is worth more than a stray Backspace: remove only an empty line.
+                if block.text.isEmpty {
+                    setBlocks { $0.remove(at: i) }
+                    blur()
+                }
             } else if block.text.isEmpty {
                 setBlocks { $0.remove(at: i) }
                 focus(previous.id, caret: nil)
             }
             return true
         case .up:
-            guard context.atStart, let previous = blocks[..<i].last(where: { $0.kind != .hr }) else { return false }
+            guard context.atStart, let previous = blocks[..<i].last(where: { $0.kind.hasCaret }) else { return false }
             focus(previous.id, caret: nil)
             return true
         case .down:
-            guard context.atEnd, let next = blocks[(i + 1)...].first(where: { $0.kind != .hr }) else { return false }
+            guard context.atEnd, let next = blocks[(i + 1)...].first(where: { $0.kind.hasCaret }) else { return false }
             focus(next.id, caret: 0)
             return true
         case .escape:
-            blur()
+            selectBlocks([id])
             return true
+        case .selectAll:
+            return selectAll(context)
         case .tab:
             return true
         case .commandReturn:
@@ -369,8 +662,10 @@ struct NoteEditor: View {
             #endif
             return true
         case .escape:
-            blur()
+            selectBlocks([id])
             return true
+        case .selectAll:
+            return selectAll(context)
         case .commandReturn:
             exitDown(id)
             return true
@@ -394,6 +689,8 @@ struct NoteEditor: View {
         case .escape:
             blur()
             return true
+        case .selectAll:
+            return selectAll(context)
         case .commandReturn:
             exitDown(id)
             return true
@@ -421,7 +718,7 @@ struct NoteEditor: View {
     /// Toolbar block buttons: toggle a text block's kind, or insert code, math and dividers below the active block.
     private func setKind(_ kind: NoteBlock.Kind) {
         guard let block = activeBlock else { insert(kind, after: current.blocks.last?.id); return }
-        if kind == .code || kind == .math || kind == .hr {
+        if kind == .code || kind == .math || kind == .image || kind == .hr {
             if block.kind.isText, block.text.isEmpty, kind != .hr { turnInto(block, kind) } else { insert(kind, after: block.id) }
             return
         }
@@ -477,6 +774,7 @@ struct NoteEditor: View {
                     separator
                     toolButton("Code block (```)", "curlybraces", on: activeBlock?.kind == .code) { setKind(.code) }
                     toolButton("Math block ($$)", NoteBlock.Kind.math.systemImage, on: activeBlock?.kind == .math) { setKind(.math) }
+                    toolButton("Image", NoteBlock.Kind.image.systemImage) { setKind(.image) }
                     toolButton("Divider (---)", NoteBlock.Kind.hr.systemImage) { setKind(.hr) }
                 }
                 .padding(.trailing, 16)
@@ -625,6 +923,8 @@ private struct NoteBlockRow: View {
     var block: NoteBlock
     /// Position in a run of numbered items.
     var number: Int
+    /// Selected as a block (Esc, ⌘A twice, a drag or Shift-click).
+    var selected: Bool
     var editor: NoteEditor
     @State private var hovering = false
 
@@ -634,6 +934,13 @@ private struct NoteBlockRow: View {
 
     var body: some View {
         content
+            .background {
+                if selected {
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.16))
+                        .padding(.horizontal, -6)
+                }
+            }
             .padding(.top, topMargin)
             .onHover { hovering = $0 }
             .overlay(alignment: .topLeading) {
@@ -655,7 +962,7 @@ private struct NoteBlockRow: View {
         case .h1: 20
         case .h2: 16
         case .h3: 10
-        case .code, .math: 8
+        case .code, .math, .image: 8
         default: 0
         }
     }
@@ -678,6 +985,8 @@ private struct NoteBlockRow: View {
             CodeBlockView(block: block, editor: editor).padding(.bottom, 8)
         case .math:
             MathBlockView(block: block, editor: editor).padding(.bottom, 8)
+        case .image:
+            ImageBlockView(block: block, editor: editor).padding(.bottom, 8)
         default:
             textBlock
         }
@@ -731,6 +1040,8 @@ private struct NoteBlockRow: View {
                                  formatting: true,
                                  focus: editor.request(for: block.id),
                                  focusTracker: editor.textFocusTracker,
+                                 onPasteImage: { editor.pasteImage($0, ext: $1, in: block.id) },
+                                 onPasteText: { editor.pasteText($0, in: block.id, replacing: $1) },
                                  onKey: { editor.textKey(block.id, $0, $1) },
                                  onFocusChange: { editor.focusChanged(block.id, $0) })
                 } else {
@@ -744,7 +1055,7 @@ private struct NoteBlockRow: View {
                         .padding(.horizontal, 2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
-                        .onTapGesture { editor.focus(block.id, caret: nil) }
+                        .onTapGesture { editor.tap(block.id) { editor.focus(block.id, caret: nil) } }
                 }
             }
             .padding(.leading, block.kind == .quote ? 11 : 0)
@@ -771,6 +1082,9 @@ private struct NoteBlockRow: View {
                     ForEach(NoteBlock.Kind.allCases) { kind in
                         Button(kind.title, systemImage: kind.systemImage) { editor.turnInto(block, kind) }
                     }
+                }
+                if block.kind == .image {
+                    Button(block.image == nil ? "Choose Image\u{2026}" : "Replace Image\u{2026}", systemImage: "photo") { editor.chooseImage(for: block.id) }
                 }
                 Button("Move Up", systemImage: "chevron.up") { editor.move(block.id, by: -1) }
                 Button("Move Down", systemImage: "chevron.down") { editor.move(block.id, by: 1) }
@@ -904,6 +1218,180 @@ private struct CodeBlockView: View {
     }
 }
 
+/// An image block: the picture (click it, or the zoom button, to open the viewer) and an optional caption.
+/// Before an image is chosen it's a drop target that opens the file panel when clicked.
+private struct ImageBlockView: View {
+    var block: NoteBlock
+    var editor: NoteEditor
+
+    @Environment(AppStore.self) private var store
+    #if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+    #else
+    @State private var viewing = false
+    #endif
+    @State private var preview: CGImage?
+    @State private var missing = false
+    @State private var hovering = false
+    @State private var dropping = false
+    @FocusState private var captionFocused: Bool
+
+    /// The editor's copy is decoded for a 2× display.
+    private static let scale: CGFloat = 2
+
+    var body: some View {
+        VStack(spacing: 6) {
+            if let name = block.image {
+                picture(name)
+                if !block.text.isEmpty || hovering || captionFocused { caption }
+            } else {
+                placeholder
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .onHover { hovering = $0 }
+        .dropDestination(for: URL.self) { urls, _ in editor.setImage(block.id, from: urls) } isTargeted: { dropping = $0 }
+        #if !os(macOS)
+        .sheet(isPresented: $viewing) {
+            if let name = block.image { NavigationStack { NoteImageViewer(name: name) } }
+        }
+        #endif
+    }
+
+    @ViewBuilder
+    private func picture(_ name: String) -> some View {
+        Group {
+            if let preview {
+                Image(decorative: preview, scale: Self.scale)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    // Small images keep their size instead of stretching to the page width.
+                    .frame(maxWidth: CGFloat(preview.width) / Self.scale)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(dropping ? Color.accentColor : Palette.border, lineWidth: dropping ? 2 : 0.5))
+                    .overlay(alignment: .topTrailing) {
+                        HStack(spacing: 6) {
+                            overlayButton("Open image", "arrow.up.left.and.arrow.down.right", action: open)
+                            overlayButton("Remove image", "trash") { editor.remove(block.id) }
+                        }
+                        .padding(8)
+                        .opacity(hovering ? 1 : 0)
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { editor.tap(block.id, otherwise: open) }
+                    .help("Click to open")
+            } else {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Palette.surface2)
+                    .frame(height: 160)
+                    .overlay {
+                        if missing {
+                            VStack(spacing: 10) {
+                                Label("Image not found", systemImage: "exclamationmark.triangle").foregroundStyle(Palette.ink3)
+                                Button("Choose Image\u{2026}") { editor.chooseImage(for: block.id) }
+                                    .controlSize(.small)
+                            }
+                        } else {
+                            ProgressView().controlSize(.small)
+                        }
+                    }
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(dropping ? Color.accentColor : .clear, lineWidth: 2))
+                    .overlay(alignment: .topTrailing) {
+                        overlayButton("Remove image", "trash") { editor.remove(block.id) }
+                            .padding(8)
+                            .opacity(hovering ? 1 : 0)
+                    }
+            }
+        }
+        .task(id: name) { await load(name) }
+    }
+
+    private func overlayButton(_ title: String, _ systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 28, height: 28)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(title)
+        .accessibilityLabel(title)
+    }
+
+    private var caption: some View {
+        TextField("Add a caption", text: Binding(get: { block.text }, set: { v in editor.update(block.id) { $0.text = v } }), axis: .vertical)
+            .textFieldStyle(.plain)
+            .multilineTextAlignment(.center)
+            .font(.system(size: 12.5))
+            .foregroundStyle(Palette.ink2)
+            .focused($captionFocused)
+            .frame(maxWidth: 520)
+    }
+
+    private var placeholder: some View {
+        Button { editor.chooseImage(for: block.id) } label: {
+            VStack(spacing: 6) {
+                Image(systemName: "photo.badge.plus").font(.system(size: 22))
+                Text("Choose an image").font(.system(size: 13, weight: .medium))
+                Text("or drop one here, or paste it into a line of text").font(.system(size: 11.5)).foregroundStyle(Palette.ink3)
+            }
+            .foregroundStyle(dropping ? Color.accentColor : Palette.ink2)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 26)
+            .background(dropping ? Color.accentColor.opacity(0.08) : hovering ? Color.primary.opacity(0.03) : .clear,
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(dropping ? Color.accentColor : Palette.border, style: StrokeStyle(lineWidth: 1.2, dash: [5, 4]))
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .overlay(alignment: .topTrailing) {
+            Button { editor.discardEmptyImage(block.id) } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(Palette.ink3)
+            .help("Remove")
+            .padding(6)
+            .opacity(hovering ? 1 : 0)
+        }
+    }
+
+    private func open() {
+        guard let name = block.image else { return }
+        #if os(macOS)
+        openWindow(id: NoteImageViewer.windowID, value: name)
+        #else
+        viewing = true
+        #endif
+    }
+
+    /// Waits for iCloud Drive to download the file if needed, then decodes the preview off the main thread.
+    private func load(_ name: String) async {
+        missing = false
+        while !Task.isCancelled {
+            switch store.sync.imageState(name) {
+            case .ready(let url):
+                preview = await Task.detached(priority: .userInitiated) { NoteImages.preview(at: url) }.value
+                missing = preview == nil
+                return
+            case .missing:
+                missing = true
+                return
+            case .downloading:
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
+    }
+}
+
 private struct MathBlockView: View {
     var block: NoteBlock
     var editor: NoteEditor
@@ -948,7 +1436,7 @@ private struct MathBlockView: View {
                 .background(hovering ? Color.primary.opacity(0.04) : .clear, in: RoundedRectangle(cornerRadius: 8))
                 .contentShape(Rectangle())
                 .onHover { hovering = $0 }
-                .onTapGesture { editor.focus(block.id, caret: nil) }
+                .onTapGesture { editor.tap(block.id) { editor.focus(block.id, caret: nil) } }
                 .help("Click to edit LaTeX")
         }
     }

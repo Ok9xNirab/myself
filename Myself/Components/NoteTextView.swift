@@ -3,6 +3,8 @@ import SwiftUI
 /// Keys a note block's editor reports instead of handling itself.
 enum NoteKey {
     case `return`, backspace, up, down, escape, tab, commandReturn
+    /// ⌘A. Unhandled, the view selects all its text.
+    case selectAll
 }
 
 /// What the editor sees when a key arrives: the selection (UTF-16) and text length.
@@ -57,6 +59,11 @@ struct NoteTextView: NSViewRepresentable {
     var formatting = false
     var focus: NoteFocusRequest?
     var focusTracker: NoteTextFocus?
+    /// Called with an image's data and file extension when one is pasted; without it, pasting an image does nothing.
+    var onPasteImage: ((Data, String) -> Void)?
+    /// Called with pasted text that spans several lines and the selection it replaces; return true to take it over
+    /// (the editor splits it into blocks) instead of inserting it into this view.
+    var onPasteText: ((String, NSRange) -> Bool)?
     var onKey: (NoteKey, NoteKeyContext) -> Bool = { _, _ in false }
     var onFocusChange: (Bool) -> Void = { _ in }
 
@@ -166,6 +173,16 @@ struct NoteTextView: NSViewRepresentable {
     }
 }
 
+extension NSEvent {
+    /// ⌘ plus `letter` (no other modifiers). With a non-Latin layout such as Bengali the typed character isn't the
+    /// letter, so it falls back to the key's position on a US keyboard, as menu shortcuts do.
+    func isCommand(_ letter: Character, keyCode code: UInt16) -> Bool {
+        guard modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+              let key = charactersIgnoringModifiers?.lowercased().first else { return false }
+        return key == letter || (!key.isASCII && keyCode == code)
+    }
+}
+
 final class NoteNSTextView: NSTextView {
     var parent: NoteTextView?
     weak var focusTracker: NoteTextFocus?
@@ -195,6 +212,14 @@ final class NoteNSTextView: NSTextView {
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if window?.firstResponder === self, event.isCommand("a", keyCode: 0), let parent,
+           parent.onKey(.selectAll, NoteKeyContext(selection: selectedRange(), length: (string as NSString).length)) {
+            return true
+        }
+        // A plain-text view disables Paste when the pasteboard holds only an image, so ⌘V is caught here.
+        if window?.firstResponder === self, event.isCommand("v", keyCode: 9), pasteImage() {
+            return true
+        }
         guard formatting, window?.firstResponder === self, event.modifierFlags.contains(.command),
               let key = event.charactersIgnoringModifiers?.lowercased() else { return super.performKeyEquivalent(with: event) }
         let shift = event.modifierFlags.contains(.shift)
@@ -210,6 +235,26 @@ final class NoteNSTextView: NSTextView {
         }
         guard let markers else { return super.performKeyEquivalent(with: event) }
         wrap(markers.0, markers.1, placeholder: markers.2)
+        return true
+    }
+
+    override func paste(_ sender: Any?) {
+        if pasteImage() { return }
+        if let text = NSPasteboard.general.string(forType: .string), text.contains("\n"),
+           parent?.onPasteText?(text, selectedRange()) == true { return }
+        super.paste(sender)
+    }
+
+    /// Edit › Paste stays enabled for an image the block can take.
+    override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(paste(_:)), parent?.onPasteImage != nil, NoteImages.fromPasteboard(.general) != nil { return true }
+        return super.validateUserInterfaceItem(item)
+    }
+
+    /// Hands an image on the pasteboard to `onPasteImage`. False when there's none, or the block doesn't take images.
+    private func pasteImage() -> Bool {
+        guard let onPasteImage = parent?.onPasteImage, let image = NoteImages.fromPasteboard(.general) else { return false }
+        onPasteImage(image.data, image.ext)
         return true
     }
 
@@ -252,6 +297,11 @@ struct NoteTextView: View {
     var formatting = false
     var focus: NoteFocusRequest?
     var focusTracker: NoteTextFocus?
+    /// Called with an image's data and file extension when one is pasted; without it, pasting an image does nothing.
+    var onPasteImage: ((Data, String) -> Void)?
+    /// Called with pasted text that spans several lines and the selection it replaces; return true to take it over
+    /// (the editor splits it into blocks) instead of inserting it into this view.
+    var onPasteText: ((String, NSRange) -> Bool)?
     var onKey: (NoteKey, NoteKeyContext) -> Bool = { _, _ in false }
     var onFocusChange: (Bool) -> Void = { _ in }
     @FocusState private var focused: Bool

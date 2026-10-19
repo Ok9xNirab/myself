@@ -78,6 +78,16 @@ import SwiftUI
         }
         .defaultSize(width: 760, height: 680)
 
+        // An image from a note at full size, opened by clicking it or its zoom button.
+        WindowGroup("Image", id: NoteImageViewer.windowID, for: String.self) { $name in
+            if let name {
+                NoteImageViewer(name: name)
+                    .environment(store)
+                    .appPreferences(appearance: appearance, density: density)
+            }
+        }
+        .defaultSize(width: 900, height: 700)
+
         Window("About \(AppInfo.name)", id: "about") {
             AboutView()
                 .appPreferences(appearance: appearance, density: density)
