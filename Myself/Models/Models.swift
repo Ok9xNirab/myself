@@ -48,13 +48,19 @@ struct Todo: Identifiable, Equatable, Codable, SyncRecord {
     var updatedAt = Date.now
 }
 
-/// Office tasks are always high priority and carry a reference link.
-struct OfficeTask: Identifiable {
+/// Synced as `office/<id>.json`. Office tasks are always high priority and carry a reference link.
+struct OfficeTask: Identifiable, Equatable, Codable, SyncRecord {
+    static let folder = "office"
+
     var id = newID()
     var title: String
+    var desc = ""
     var refURL: URL?
     var due: Date?
     var done = false
+    var completedAt: Date?
+    var createdAt = Date.now
+    var updatedAt = Date.now
 }
 
 // MARK: University

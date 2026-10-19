@@ -18,10 +18,14 @@ import SwiftUI
             CommandGroup(replacing: .appInfo) { AboutCommand() }
             #endif
             SidebarCommands()
-            // MySelf is a single-window app with one shared store, so ⌘N makes a todo (⌥⌘N a note) instead of a window.
+            // MySelf is a single-window app with one shared store, so ⌘N makes a todo (⇧⌘N an office task, ⌥⌘N a note) instead of a window.
             CommandGroup(replacing: .newItem) {
                 Button("New Todo", action: store.newTodo)
                     .keyboardShortcut("n")
+                if store.isEnabled(.office) {
+                    Button("New Office Task", action: store.newOfficeTask)
+                        .keyboardShortcut("n", modifiers: [.command, .shift])
+                }
                 if store.isEnabled(.notes) {
                     Button("New Note", action: store.newNote)
                         .keyboardShortcut("n", modifiers: [.command, .option])

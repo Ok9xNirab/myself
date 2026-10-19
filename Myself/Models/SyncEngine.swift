@@ -155,7 +155,7 @@ final class SyncEngine {
         watcher?.stop()
         cache = [:]
         let root = root
-        for folder in [Todo.folder, TaskLabel.folder, NoteCategory.folder, Note.folder,
+        for folder in [Todo.folder, TaskLabel.folder, OfficeTask.folder, NoteCategory.folder, Note.folder,
                        UniClass.folder, SyllabusSubject.folder, Assignment.folder, Exam.folder, UniversityNotes.folder] {
             try? FileManager.default.createDirectory(at: root.appending(path: folder, directoryHint: .isDirectory), withIntermediateDirectories: true)
         }

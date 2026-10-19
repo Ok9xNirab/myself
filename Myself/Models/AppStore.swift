@@ -117,13 +117,13 @@ enum UniversityEditor: Identifiable {
     }
 }
 
-/// App state. TODOs, labels, notes and University are persisted and synced through `SyncEngine`; the other features are still
+/// App state. TODOs, labels, office tasks, notes and University are persisted and synced through `SyncEngine`; the other features are still
 /// in-memory sample content. Feature visibility is stored in UserDefaults.
 @Observable
 final class AppStore {
     private(set) var labels: [TaskLabel] = []
     private(set) var todos: [Todo] = []
-    var office: [OfficeTask] = []
+    private(set) var office: [OfficeTask] = []
     private(set) var university = University()
     private(set) var universityNotes = UniversityNotes()
     var products: [Product] = []
@@ -143,6 +143,8 @@ final class AppStore {
     /// Asks the Notes page to open or create a note (Quick Open, File › New Note); the page clears it.
     var noteRequest: NoteRequest?
     var editingUniversity: UniversityEditor?
+    /// The office task open in the editor sheet; one that isn't in `office` yet is a new one.
+    var editingOffice: OfficeTask?
 
 
     let sync = SyncEngine()
@@ -180,13 +182,16 @@ final class AppStore {
         }
     }
 
-    /// Settings › Reset: replaces todos, labels, notes and University (in the sync folder too) and every other feature with the samples.
+    /// Settings › Reset: replaces todos, labels, office tasks, notes and University (in the sync folder too) and every other feature with the samples.
     func loadSampleData() {
         for todo in todos { sync.delete(Todo.self, id: todo.id) }
         labels = SampleData.labels
         todos = SampleData.todos()
         for label in labels { sync.save(label) }
         for todo in todos { sync.save(todo) }
+        for task in office { sync.delete(OfficeTask.self, id: task.id) }
+        office = SampleData.office()
+        for task in office { sync.save(task) }
         unsavedNotes = []
         for note in notes { sync.delete(Note.self, id: note.id) }
         for category in noteCategories { sync.delete(NoteCategory.self, id: category.id) }
@@ -199,7 +204,6 @@ final class AppStore {
     }
 
     private func loadSampleFeatures() {
-        office = SampleData.office()
         products = SampleData.products()
         jobStudy = SampleData.jobStudy()
         workout = SampleData.workout()
@@ -340,6 +344,29 @@ final class AppStore {
             todo.labelIDs.removeAll { $0 == id }
             saveTodo(todo)
         }
+    }
+
+    // MARK: Office
+
+    func newOfficeTask() {
+        go(.office)
+        editingOffice = OfficeTask(title: "", due: Day.offset(0))
+    }
+
+    func saveOfficeTask(_ task: OfficeTask, undoManager: UndoManager? = nil) {
+        let isNew = !office.contains { $0.id == task.id }
+        put(task, in: \.office, undoManager: undoManager, action: isNew ? "Add Office Task" : "Edit Office Task")
+    }
+
+    func toggleOffice(_ id: ID, undoManager: UndoManager? = nil) {
+        guard var task = office.first(where: { $0.id == id }) else { return }
+        task.done.toggle()
+        task.completedAt = task.done ? .now : nil
+        put(task, in: \.office, undoManager: undoManager, action: task.done ? "Complete Office Task" : "Reopen Office Task")
+    }
+
+    func deleteOfficeTask(_ id: ID, undoManager: UndoManager? = nil) {
+        remove(id, from: \.office, undoManager: undoManager, action: "Delete Office Task")
     }
 
     // MARK: Notes
@@ -584,7 +611,7 @@ final class AppStore {
         }
     }
 
-    /// Adds or replaces a record in one of the University lists and writes its file.
+    /// Adds or replaces a record in one of the synced lists (office tasks, University) and writes its file.
     private func put<T: SyncRecord & Equatable>(_ record: T, in list: ReferenceWritableKeyPath<AppStore, [T]>, undoManager: UndoManager?, action: String) {
         var record = record
         record.updatedAt = .now
@@ -629,7 +656,7 @@ final class AppStore {
 
     // MARK: Sync
 
-    /// Re-reads todos, labels and notes from the sync folder and pulls shared settings.
+    /// Re-reads todos, labels, office tasks, notes and University from the sync folder and pulls shared settings.
     func reloadSynced() {
         // Write pending note edits first so the reload can't bring back older text.
         saveUnsavedNotes()
@@ -639,6 +666,8 @@ final class AppStore {
             if todos != self.todos { self.todos = todos }
             let labels = sync.load(TaskLabel.self, keeping: labels).sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
             if labels != self.labels { self.labels = labels }
+            let office = sync.load(OfficeTask.self, keeping: office).sorted { $0.createdAt < $1.createdAt }
+            if office != self.office { self.office = office }
             let categories = sync.load(NoteCategory.self, keeping: noteCategories).sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
             if categories != self.noteCategories { self.noteCategories = categories }
             let notes = sync.load(Note.self, keeping: notes).sorted { $0.createdAt < $1.createdAt }
@@ -668,7 +697,7 @@ final class AppStore {
     private func carryData(_ change: () throws -> Void) rethrows {
         saveUnsavedNotes()
         saveUniversityNotes()
-        let (todos, labels, categories, notes) = (todos, labels, noteCategories, notes)
+        let (todos, labels, office, categories, notes) = (todos, labels, office, noteCategories, notes)
         let (u, uniNotes) = (university, universityNotes)
         try change()
         for r in u.classes { sync.save(r, onlyIfNewer: true) }
@@ -678,6 +707,7 @@ final class AppStore {
         if uniNotes.updatedAt > .distantPast { sync.save(uniNotes, onlyIfNewer: true) }
         for label in labels { sync.save(label, onlyIfNewer: true) }
         for todo in todos { sync.save(todo, onlyIfNewer: true) }
+        for task in office { sync.save(task, onlyIfNewer: true) }
         for category in categories { sync.save(category, onlyIfNewer: true) }
         for note in notes { sync.save(note, onlyIfNewer: true) }
         syncedSettings = nil
@@ -749,10 +779,6 @@ final class AppStore {
     }
 
     // MARK: Other features
-
-    func toggleOffice(_ id: ID) {
-        if let i = office.firstIndex(where: { $0.id == id }) { office[i].done.toggle() }
-    }
 
     /// Ticking a topic logs one revision for today; un-ticking the same day undoes it.
     func reviseTopic(subject: ID, topic: ID) {

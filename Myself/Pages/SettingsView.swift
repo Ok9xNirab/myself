@@ -52,7 +52,7 @@ private struct GeneralSettings: View {
                     Button("Reset…") { confirmingReset = true }
                 } label: {
                     Text("Reset sample data")
-                    Text("Replaces everything with the original sample content, including synced todos, labels, notes and University.")
+                    Text("Replaces everything with the original sample content, including synced todos, labels, office tasks, notes and University.")
                 }
             }
         }
@@ -61,7 +61,7 @@ private struct GeneralSettings: View {
         .confirmationDialog("Reset sample data?", isPresented: $confirmingReset) {
             Button("Reset", role: .destructive, action: store.loadSampleData)
         } message: {
-            Text("Your todos, labels, notes, classes, boards and workouts will be replaced with the original sample content. Todos, labels, notes and University are replaced on every Mac that syncs this folder.")
+            Text("Your todos, labels, office tasks, notes, classes, boards and workouts will be replaced with the original sample content. Todos, labels, office tasks, notes and University are replaced on every Mac that syncs this folder.")
         }
     }
 }

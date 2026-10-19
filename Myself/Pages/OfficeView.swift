@@ -2,12 +2,14 @@ import SwiftUI
 
 struct OfficeView: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.undoManager) private var undoManager
     @State private var query = ""
 
     var body: some View {
-        let filtered = store.office.filter { query.isEmpty || $0.title.localizedCaseInsensitiveContains(query) }
+        @Bindable var store = store
+        let filtered = store.office.filter { query.isEmpty || ($0.title + " " + $0.desc).localizedCaseInsensitiveContains(query) }
         let active = filtered.filter { !$0.done }.sorted { (Day.fromToday($0.due) ?? 999) < (Day.fromToday($1.due) ?? 999) }
-        let done = filtered.filter(\.done)
+        let done = filtered.filter(\.done).sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
 
         PageScroll {
             Callout(systemImage: "briefcase") {
@@ -18,7 +20,7 @@ struct OfficeView: View {
             HStack(spacing: 8) {
                 SearchField(placeholder: "Search office tasks…", text: $query)
                 Spacer()
-                Button("Add task", systemImage: "plus") {}
+                Button("Add task", systemImage: "plus", action: store.newOfficeTask)
                     .buttonStyle(.borderedProminent)
             }
 
@@ -26,7 +28,13 @@ struct OfficeView: View {
                 CountText(value: active.count)
             } content: {
                 if active.isEmpty {
-                    EmptyStateView(systemImage: "briefcase", title: "Inbox zero", subtitle: "No open office tasks. Nice.")
+                    if store.office.isEmpty {
+                        EmptyStateView(systemImage: "briefcase", title: "No office tasks yet", subtitle: "Add a work item with a link to its ticket or doc.")
+                    } else if query.isEmpty {
+                        EmptyStateView(systemImage: "briefcase", title: "Inbox zero", subtitle: "No open office tasks. Nice.")
+                    } else {
+                        EmptyStateView(systemImage: "magnifyingglass", title: "No matches", subtitle: "No open office tasks match \u{201C}\(query)\u{201D}.")
+                    }
                 } else {
                     ForEach(active) { OfficeRow(task: $0) }
                 }
@@ -40,20 +48,25 @@ struct OfficeView: View {
                 }
             }
         }
+        .sheet(item: $store.editingOffice) { OfficeEditorSheet(task: $0, undoManager: undoManager) }
     }
 }
 
 private struct OfficeRow: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.undoManager) private var undoManager
     var task: OfficeTask
     @State private var hovering = false
 
     var body: some View {
         ListRow {
             HStack(alignment: .top, spacing: 10) {
-                CheckCircle(isOn: task.done) { withAnimation { store.toggleOffice(task.id) } }
-                VStack(alignment: .leading, spacing: 6) {
+                CheckCircle(isOn: task.done) { toggle() }
+                VStack(alignment: .leading, spacing: 2) {
                     Text(task.title).font(.system(size: 13, weight: .medium)).strikethrough(task.done)
+                    if !task.desc.isEmpty {
+                        Text(task.desc).font(.system(size: 12)).foregroundStyle(Palette.ink2)
+                    }
                     FlowLayout(spacing: 8) {
                         if !task.done { PriorityBadge(priority: .high, locked: true) }
                         DueBadge(date: task.due)
@@ -66,17 +79,48 @@ private struct OfficeRow: View {
                                 }
                                 .font(.system(size: 12))
                             }
+                            .help(url.absoluteString)
                         }
                     }
+                    .padding(.top, 4)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                RowActions(isHovering: hovering, onDelete: {
-                    store.office.removeAll { $0.id == task.id }
-                })
+                RowActions(isHovering: hovering, onEdit: edit, onDelete: delete)
             }
             .opacity(task.done ? 0.55 : 1)
         }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2, perform: edit)
         .onHover { hovering = $0 }
+        .contextMenu {
+            Button("Edit…", systemImage: "pencil", action: edit)
+            Button(task.done ? "Mark as Not Done" : "Mark as Done", systemImage: task.done ? "circle" : "checkmark.circle", action: toggle)
+            if let url = task.refURL {
+                Link(destination: url) { Label("Open Link", systemImage: "arrow.up.right.square") }
+                Button("Copy Link", systemImage: "doc.on.doc") { copy(url) }
+            }
+            Divider()
+            Button("Delete", systemImage: "trash", role: .destructive, action: delete)
+        }
+    }
+
+    private func edit() { store.editingOffice = task }
+
+    private func toggle() {
+        withAnimation { store.toggleOffice(task.id, undoManager: undoManager) }
+    }
+
+    private func delete() {
+        withAnimation { store.deleteOfficeTask(task.id, undoManager: undoManager) }
+    }
+
+    private func copy(_ url: URL) {
+        #if os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url.absoluteString, forType: .string)
+        #else
+        UIPasteboard.general.url = url
+        #endif
     }
 }
 
