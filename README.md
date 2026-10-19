@@ -15,7 +15,7 @@
 
 [**⬇ Download the DMG**](https://github.com/Ok9xNirab/myself/releases/latest) · [Features](#features) · [Install](#installation) · [Build from source](#build-from-source) · [iCloud sync](#icloud-sync)
 
-<img src="screenshot.png" alt="MySelf dashboard on macOS showing today's focus, open todos, office tasks, assignments, Job Study topics due, classes today and syllabus progress" width="860">
+<img src="screenshot.png" alt="MySelf dashboard on macOS showing open todos, office tasks, assignments and Job Study topics due, today's focus, classes today, a deadline countdown, product activity and syllabus progress" width="860">
 
 </div>
 
@@ -38,8 +38,8 @@ Most people track their life across five apps: a todo list, a notes app, a Kanba
 | 🎓 **University** | Classes with a weekly schedule, syllabus subjects and topics, assignments and exams. |
 | 💼 **Office Tasks** | Work tasks with notes, a reference link and a due date. Always high priority. |
 | 📖 **Job Study** | Interview-prep subjects with a revision checklist. A topic is due again 7 days after you last revised it, and topics can link to notes. |
-| 📝 **Notes** | A block editor with headings, lists, checklists, quotes, syntax-highlighted code, **LaTeX math** and Bengali set in Hind Siliguri. Notes are sorted into categories, and any note can open in its own window. |
-| 🗂️ **Product Dev** | Kanban boards per project with Backlog, In Progress, Review and Done columns. Drag cards between columns. |
+| 📝 **Notes** | A block editor with headings, lists, checklists, quotes, syntax-highlighted code, **LaTeX math**, **images** (paste, drop or pick one; click to zoom) and Bengali set in Hind Siliguri. Paste markdown and it becomes blocks. Select blocks like in Notion (<kbd>Esc</kbd>, <kbd>⌘A</kbd> twice, drag or Shift-click) and delete them with undo. **Reader mode** (<kbd>⇧⌘R</kbd>) locks a note and shows it as one page you can select and copy across. Notes are sorted into categories, and any note can open in its own window. |
+| 🗂️ **Product Dev** | Kanban boards per project with Backlog, In Progress, Review and Done columns. Drag cards between columns, and tag them with Product Dev's own labels, kept separate from your TODO labels. |
 | 🏋️ **Workout** | Week-by-week training programs. *Coming soon.* |
 
 ### Built for speed
@@ -47,7 +47,7 @@ Most people track their life across five apps: a todo list, a notes app, a Kanba
 - **Quick Open** (<kbd>⌘K</kbd>) jumps to any page, task or note.
 - **Search MySelf from any app** (<kbd>⌥⌘K</kbd>, changeable) opens a Spotlight-style panel over whatever you're doing. No Accessibility permission needed.
 - **Menu bar icon** for quick access: New Todo, New Office Task, New Note, Search and Go To.
-- **Shortcuts**: <kbd>⌘N</kbd> new todo, <kbd>⇧⌘N</kbd> new office task, <kbd>⌥⌘N</kbd> new note, <kbd>⌘1</kbd>–<kbd>⌘8</kbd> switch pages, <kbd>⌘[</kbd> / <kbd>⌘]</kbd> back and forward, <kbd>⌃⌘S</kbd> show or hide the sidebar.
+- **Shortcuts**: <kbd>⌘N</kbd> new todo, <kbd>⇧⌘N</kbd> new office task, <kbd>⌥⌘N</kbd> new note, <kbd>⌘1</kbd>–<kbd>⌘8</kbd> switch pages, <kbd>⌘[</kbd> / <kbd>⌘]</kbd> back and forward, <kbd>⇧⌘R</kbd> reader mode for a note, <kbd>⌃⌘S</kbd> show or hide the sidebar.
 - **Looks at home on macOS**: light and dark mode, your system accent colour, sidebar style and row density options, and an adaptive app icon with dark, clear and tinted variants.
 
 ## Requirements
@@ -148,6 +148,8 @@ scripts/make-dmg.sh      Builds the release DMG
 - [x] Notes with a block editor, LaTeX math and code highlighting
 - [x] University, Job Study and Product Dev boards, saved and synced
 - [x] System-wide search shortcut and menu bar icon
+- [x] Images, reader mode and block selection in Notes
+- [x] Update check against GitHub releases
 - [ ] Workout programs, saved and synced
 - [ ] Developer ID signing and notarization
 
