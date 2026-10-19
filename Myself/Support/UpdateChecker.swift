@@ -19,7 +19,10 @@ final class UpdateChecker {
     private(set) var isChecking = false
     private(set) var lastChecked: Date?
 
-    private static let latestRelease = URL(string: "https://api.github.com/repos/Ok9xNirab/myself/releases/latest")!
+    /// The website's latest-release link, which redirects to the newest tag's page (`…/releases/tag/v1.1`). Unlike
+    /// the REST API it isn't limited to 60 requests an hour per network, which a shared office connection can use up.
+    private static let latestRelease = URL(string: "https://github.com/Ok9xNirab/myself/releases/latest")!
+    private static let downloads = "https://github.com/Ok9xNirab/myself/releases/download"
     private static let interval: TimeInterval = 24 * 60 * 60
 
     static var currentVersion: String {
@@ -55,6 +58,8 @@ final class UpdateChecker {
                     showAlert(title: "You\u{2019}re up to date",
                               message: "\(AppInfo.name) \(Self.currentVersion) is the newest version.")
                 }
+            } catch let error as URLError where [.notConnectedToInternet, .networkConnectionLost, .timedOut, .cannotFindHost].contains(error.code) {
+                showAlert(title: "Couldn\u{2019}t check for updates", message: "You seem to be offline. Check your connection and try again.")
             } catch {
                 showAlert(title: "Couldn\u{2019}t check for updates", message: error.localizedDescription)
             }
@@ -65,14 +70,31 @@ final class UpdateChecker {
         isChecking = true
         defer { isChecking = false }
         var request = URLRequest(url: Self.latestRelease)
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
-        let latest = try JSONDecoder().decode(GitHubRelease.self, from: data)
+        request.httpMethod = "HEAD"
+        let (_, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else { throw CheckError.http(status) }
+        // The redirect ends on the tag's page; with no release yet it stays on the releases list.
+        guard let page = response.url, let tagIndex = page.pathComponents.firstIndex(of: "tag"),
+              tagIndex + 1 < page.pathComponents.count else { throw CheckError.noRelease }
+        let tag = page.pathComponents[tagIndex + 1]
         lastChecked = .now
         UserDefaults.standard.set(Date.now.timeIntervalSince1970, forKey: PrefKey.lastUpdateCheck)
-        let dmg = latest.assets.first { $0.name.hasSuffix(".dmg") }
-        return Release(version: Self.version(fromTag: latest.tagName), page: latest.htmlURL, download: dmg?.browserDownloadURL)
+        let version = Self.version(fromTag: tag)
+        // `scripts/make-dmg.sh` names the file after the version.
+        let download = URL(string: "\(Self.downloads)/\(tag)/MySelf-\(version).dmg")
+        return Release(version: version, page: page, download: download)
+    }
+
+    enum CheckError: LocalizedError {
+        case http(Int), noRelease
+
+        var errorDescription: String? {
+            switch self {
+            case .http(let status): "GitHub answered with an error (HTTP \(status)). Try again in a few minutes."
+            case .noRelease: "There\u{2019}s no published release on GitHub yet."
+            }
+        }
     }
 
     private func prompt(for release: Release, allowsSkip: Bool) {
@@ -116,28 +138,6 @@ final class UpdateChecker {
             if x != y { return x > y }
         }
         return false
-    }
-}
-
-nonisolated private struct GitHubRelease: Decodable {
-    struct Asset: Decodable {
-        var name: String
-        var browserDownloadURL: URL
-
-        enum CodingKeys: String, CodingKey {
-            case name
-            case browserDownloadURL = "browser_download_url"
-        }
-    }
-
-    var tagName: String
-    var htmlURL: URL
-    var assets: [Asset]
-
-    enum CodingKeys: String, CodingKey {
-        case tagName = "tag_name"
-        case htmlURL = "html_url"
-        case assets
     }
 }
 
