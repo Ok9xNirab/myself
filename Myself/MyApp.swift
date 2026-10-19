@@ -7,7 +7,7 @@ import SwiftUI
     @AppStorage(PrefKey.rowDensity) private var density = RowDensity.regular
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "main") {
             ContentView()
                 .environment(store)
                 .appPreferences(appearance: appearance, accent: accent, density: density)
@@ -64,6 +64,16 @@ import SwiftUI
                 .environment(store)
                 .appPreferences(appearance: appearance, accent: accent, density: density)
         }
+
+        // A note opened on its own (double-click in the note list). Opening a note that already has a window brings that window forward.
+        WindowGroup("Note", id: NoteWindow.id, for: ID.self) { $noteID in
+            if let noteID {
+                NoteWindow(noteID: noteID)
+                    .environment(store)
+                    .appPreferences(appearance: appearance, accent: accent, density: density)
+            }
+        }
+        .defaultSize(width: 760, height: 680)
 
         Window("About \(AppInfo.name)", id: "about") {
             AboutView()

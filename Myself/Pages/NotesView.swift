@@ -18,6 +18,9 @@ enum NoteSort: String, CaseIterable, Identifiable {
 struct NotesView: View {
     @Environment(AppStore.self) private var store
     @Environment(\.undoManager) private var undoManager
+    #if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+    #endif
 
     /// "all", "pinned" or a category ID.
     @AppStorage("notes.scope") private var scope = "all"
@@ -217,7 +220,7 @@ struct NotesView: View {
             HStack {
                 Text(title)
                 Spacer()
-                Text(count(id).formatted()).font(.system(size: 12)).foregroundStyle(Palette.ink3).monospacedDigit()
+                Text(count(id).formatted()).font(.system(size: 12)).foregroundStyle(.secondary).monospacedDigit()
             }
         } icon: {
             Image(systemName: systemImage)
@@ -239,7 +242,7 @@ struct NotesView: View {
                     .onTapGesture(count: 2) { renamingID = category.id }
             }
             Spacer(minLength: 4)
-            Text(count(category.id).formatted()).font(.system(size: 12)).foregroundStyle(Palette.ink3).monospacedDigit()
+            Text(count(category.id).formatted()).font(.system(size: 12)).foregroundStyle(.secondary).monospacedDigit()
         }
         .tag(category.id)
         .help("Double-click to rename")
@@ -294,7 +297,6 @@ struct NotesView: View {
                                 NoteRow(note: note, category: wide ? store.noteCategory(note.categoryID) : nil, query: q, sort: sort)
                                     .tag(note.id)
                                     .draggable(dragPayload(for: note.id))
-                                    .contextMenu { rowMenu(note) }
                             }
                         }
                     }
@@ -302,7 +304,15 @@ struct NotesView: View {
                 .listStyle(.sidebar)
                 .scrollContentBackground(.hidden)
                 #if os(macOS)
+                // Double-click (or Return) opens the note in its own window.
+                .contextMenu(forSelectionType: ID.self) { ids in
+                    if !ids.isEmpty { rowMenu(Array(ids)) }
+                } primaryAction: { ids in
+                    ids.forEach { openWindow(id: NoteWindow.id, value: $0) }
+                }
                 .onDeleteCommand { delete(Array(selection)) }
+                #else
+                .contextMenu(forSelectionType: ID.self) { ids in if !ids.isEmpty { rowMenu(Array(ids)) } }
                 #endif
             }
             if selection.count > 1 { bulkBar }
@@ -362,8 +372,7 @@ struct NotesView: View {
     }
 
     @ViewBuilder
-    private func rowMenu(_ note: Note) -> some View {
-        let ids = selection.contains(note.id) && selection.count > 1 ? Array(selection) : [note.id]
+    private func rowMenu(_ ids: [ID]) -> some View {
         let allPinned = ids.allSatisfy { id in store.notes.first { $0.id == id }?.pinned == true }
         Button(allPinned ? "Unpin" : "Pin", systemImage: allPinned ? "pin.slash" : "pin") { store.setPinned(ids, !allPinned) }
         Menu("Move to") {
@@ -371,8 +380,13 @@ struct NotesView: View {
                 Button(category.name) { store.moveNotes(ids, to: category.id) }
             }
         }
-        if ids.count == 1 {
-            Button("Duplicate", systemImage: "plus.square.on.square") { duplicate(note.id) }
+        #if os(macOS)
+        Button(ids.count == 1 ? "Open in New Window" : "Open in \(ids.count) Windows", systemImage: "macwindow") {
+            ids.forEach { openWindow(id: NoteWindow.id, value: $0) }
+        }
+        #endif
+        if ids.count == 1, let id = ids.first {
+            Button("Duplicate", systemImage: "plus.square.on.square") { duplicate(id) }
         }
         Divider()
         Button(ids.count == 1 ? "Delete" : "Delete \(ids.count) Notes", systemImage: "trash", role: .destructive) { delete(ids) }
@@ -518,17 +532,17 @@ private struct NoteRow: View {
                         Text(category.name).lineLimit(1)
                     }
                     .font(.system(size: 11))
-                    .foregroundStyle(Palette.ink3)
+                    .foregroundStyle(.tertiary)
                     .frame(maxWidth: 96, alignment: .trailing)
                     .fixedSize()
                 }
             }
             HStack(spacing: 6) {
                 Text(NoteDates.short(sort == .created ? note.createdAt : note.editedAt))
-                    .foregroundStyle(Palette.ink2)
+                    .foregroundStyle(.secondary)
                     .monospacedDigit()
                 Text(highlighted(query.isEmpty ? note.snippet : excerpt))
-                    .foregroundStyle(Palette.ink3)
+                    .foregroundStyle(.tertiary)
                     .lineLimit(1)
             }
             .font(.system(size: 12))

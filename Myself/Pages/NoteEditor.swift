@@ -7,7 +7,8 @@ import SwiftUI
 struct NoteEditor: View {
     var note: Note
     var isFresh: Bool
-    @Binding var showsBrowser: Bool
+    /// The Notes page's list toggle; nil in a note's own window, which has no list.
+    var showsBrowser: Binding<Bool>?
     var onDuplicate: () -> Void
     var onDelete: () -> Void
 
@@ -435,9 +436,11 @@ struct NoteEditor: View {
 
     private var toolbar: some View {
         HStack(spacing: 1) {
-            toolButton("Show Note List", "sidebar.left", on: !showsBrowser) { showsBrowser.toggle() }
-                .help(showsBrowser ? "Hide note list" : "Show note list")
-            separator
+            if let showsBrowser {
+                toolButton("Show Note List", "sidebar.left", on: !showsBrowser.wrappedValue) { showsBrowser.wrappedValue.toggle() }
+                    .help(showsBrowser.wrappedValue ? "Hide note list" : "Show note list")
+                separator
+            }
             Picker("Paragraph style", selection: Binding(
                 get: { activeBlock.map { [.h1, .h2, .h3].contains($0.kind) ? $0.kind : .p } ?? .p },
                 set: { setKind($0) }
