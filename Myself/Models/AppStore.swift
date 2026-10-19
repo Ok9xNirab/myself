@@ -27,7 +27,7 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
         case .jobStudy: "Interview prep with revision tracking"
         case .products: "Your solo company, on Kanban boards"
         case .workout: "Programs, streaks & progress"
-        case .notes: "Pages by category — LaTeX, code & বাংলা"
+        case .notes: "Pages by category"
         }
     }
 
