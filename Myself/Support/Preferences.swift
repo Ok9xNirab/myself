@@ -8,6 +8,7 @@ enum PrefKey {
     static let iCloudSync = "iCloudSync"
     static let syncFeatures = "syncFeatureVisibility"
     static let syncAppearance = "syncAppearance"
+    static let menuBarIcon = "showMenuBarIcon"
     static let lastSynced = "lastSynced"          // TimeInterval since 1970
 }
 

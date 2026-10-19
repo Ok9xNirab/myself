@@ -4,6 +4,7 @@ import SwiftUI
     @State private var store = AppStore()
     @AppStorage(PrefKey.appearance) private var appearance = ""
     @AppStorage(PrefKey.rowDensity) private var density = RowDensity.regular
+    @AppStorage(PrefKey.menuBarIcon) private var showsMenuBarIcon = true
 
     var body: some Scene {
         WindowGroup(id: "main") {
@@ -83,6 +84,11 @@ import SwiftUI
         .windowResizability(.contentSize)
         .restorationBehavior(.disabled)
         .defaultPosition(.center)
+
+        MenuBarExtra(AppInfo.name, image: "MenuBarIcon", isInserted: $showsMenuBarIcon) {
+            MenuBarMenu()
+                .environment(store)
+        }
         #endif
     }
 }

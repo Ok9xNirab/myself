@@ -132,7 +132,8 @@ final class SearchShortcut {
         if panel?.isVisible == true { closePanel() } else { showPanel() }
     }
 
-    private func showPanel() {
+    /// Shows the search panel over the front app (the hot key, or the menu bar icon).
+    func showPanel() {
         guard let store else { return }
         let panel = panel ?? SearchPanel()
         self.panel = panel
@@ -168,7 +169,8 @@ final class SearchShortcut {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    private func showMainWindow() {
+    /// Brings MySelf and its main window forward, reopening the window if it was closed.
+    func showMainWindow() {
         activate()
         if NSApp.windows.contains(where: { $0.identifier?.rawValue.hasPrefix("main") == true }) {
             bringForward(windowPrefix: "main")

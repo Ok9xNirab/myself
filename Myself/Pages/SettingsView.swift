@@ -26,6 +26,9 @@ private struct GeneralSettings: View {
     @AppStorage(PrefKey.appearance) private var appearance = ""
     @AppStorage(PrefKey.sidebarStyle) private var sidebarStyle = SidebarStyle.floating
     @AppStorage(PrefKey.rowDensity) private var density = RowDensity.regular
+    #if os(macOS)
+    @AppStorage(PrefKey.menuBarIcon) private var showsMenuBarIcon = true
+    #endif
     @State private var confirmingReset = false
 
     #if os(macOS)
@@ -61,6 +64,10 @@ private struct GeneralSettings: View {
                 } label: {
                     Text("Search MySelf")
                     Text(shortcutNote)
+                }
+                Toggle(isOn: $showsMenuBarIcon) {
+                    Text("Show in menu bar")
+                    Text("Add todos, office tasks and notes, search, or jump to a page from the menu bar.")
                 }
             }
             #endif
