@@ -65,7 +65,7 @@ struct DashboardView: View {
                 }
                 if jobStudy {
                     let topics = store.jobStudy.flatMap(\.topics)
-                    StatTile(systemImage: "book.closed", label: "Topics due", value: "\(store.count(for: .jobStudy))",
+                    StatTile(systemImage: Page.jobStudy.systemImage, label: "Topics due", value: "\(store.count(for: .jobStudy))",
                              foot: "\(topics.filter(\.revisedToday).count) revised today", color: Palette.amber)
                 }
             }

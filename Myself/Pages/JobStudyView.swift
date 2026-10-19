@@ -131,7 +131,7 @@ private struct JobStudyContent: View {
             })
             .id(active.id)
         } else {
-            EmptyStateView(systemImage: "book.closed", title: "No subjects yet", subtitle: "Add a subject and list topics to track revisions.")
+            EmptyStateView(systemImage: "book", title: "No subjects yet", subtitle: "Add a subject and list topics to track revisions.")
                 .frame(maxWidth: .infinity)
                 .cardBackground()
         }

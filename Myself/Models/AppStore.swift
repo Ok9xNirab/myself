@@ -37,7 +37,7 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
         case .todos: "checklist"
         case .university: "graduationcap"
         case .office: "briefcase"
-        case .jobStudy: "book.closed"
+        case .jobStudy: "book"
         case .products: "shippingbox"
         case .workout: "dumbbell"
         case .notes: "note.text"
