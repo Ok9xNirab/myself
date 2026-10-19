@@ -90,7 +90,7 @@ The same command fixes the *"Myself is damaged and can't be opened"* message.
 
 ### Updating and uninstalling
 
-- **Update**: quit MySelf, drag the new version from the DMG into Applications and replace the old one. You may need to allow it once more.
+- **Update**: MySelf checks GitHub for a new release once a day (Settings › General › Updates, or **MySelf › Check for Updates…**) and links the DMG. Quit MySelf, drag the new version from the DMG into Applications and replace the old one. You may need to allow it once more. If MySelf then says it can't open your sync folder, choose the same folder again in Settings › iCloud.
 - **Uninstall**: move `Myself.app` to the Trash. To also delete its local data, run `rm -rf ~/Library/Containers/com.ok9xnirab.myself`. Anything in your iCloud sync folder stays there until you delete it.
 
 ## iCloud sync

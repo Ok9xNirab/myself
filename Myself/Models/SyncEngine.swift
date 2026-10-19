@@ -31,6 +31,9 @@ final class SyncEngine {
     private(set) var isCloudEnabled: Bool
     /// The iCloud Drive folder picked in Settings, kept across launches with a security-scoped bookmark.
     private(set) var cloudFolder: URL?
+    /// The folder a saved bookmark points to when it no longer opens, for example after installing a newly signed
+    /// build. Until the folder is chosen again, records are read from and written to `localFolder`.
+    private(set) var lostFolder: String?
 
     /// Called on the main actor whenever the folder may have changed on disk.
     @ObservationIgnored var onChange: () -> Void = {}
@@ -85,12 +88,16 @@ final class SyncEngine {
 
     /// "iCloud Drive › MySelf" for folders in iCloud Drive, otherwise the folder path.
     var cloudFolderDisplayName: String? {
-        guard let cloudFolder else { return nil }
-        let parts = cloudFolder.pathComponents
+        Self.displayName(of: cloudFolder?.path)
+    }
+
+    private static func displayName(of path: String?) -> String? {
+        guard let path else { return nil }
+        let parts = URL(filePath: path).pathComponents
         if let i = parts.firstIndex(of: "com~apple~CloudDocs") {
             return (["iCloud Drive"] + parts[(i + 1)...]).joined(separator: " › ")
         }
-        return (cloudFolder.path as NSString).abbreviatingWithTildeInPath
+        return (path as NSString).abbreviatingWithTildeInPath
     }
 
     #if os(macOS)
@@ -123,6 +130,7 @@ final class SyncEngine {
         accessing?.stopAccessingSecurityScopedResource()
         accessing = scoped ? url : nil
         cloudFolder = url
+        lostFolder = nil
         activate()
     }
 
@@ -141,9 +149,18 @@ final class SyncEngine {
         #endif
         var stale = false
         guard let url = try? URL(resolvingBookmarkData: data, options: options, relativeTo: nil, bookmarkDataIsStale: &stale) else {
+            lostFolder = Self.displayName(of: URL.resourceValues(forKeys: [.pathKey], fromBookmarkData: data)?.path)
             return nil
         }
+        #if os(macOS)
+        guard url.startAccessingSecurityScopedResource() else {
+            lostFolder = Self.displayName(of: url.path)
+            return nil
+        }
+        accessing = url
+        #else
         if url.startAccessingSecurityScopedResource() { accessing = url }
+        #endif
         if stale, let fresh = try? url.bookmarkData(options: Self.bookmarkOptions, includingResourceValuesForKeys: nil, relativeTo: nil) {
             UserDefaults.standard.set(fresh, forKey: Self.bookmarkKey)
         }
@@ -348,6 +365,8 @@ final class SyncEngine {
         let next: Status
         if !isCloudEnabled {
             next = .local
+        } else if cloudFolder == nil, let lostFolder {
+            next = .failed("MySelf can\u{2019}t open \(lostFolder) any more, which can happen after an update. Choose it again to resume syncing. Until then changes are saved on this Mac only.")
         } else if cloudFolder == nil {
             next = .needsFolder
         } else if let scanError {

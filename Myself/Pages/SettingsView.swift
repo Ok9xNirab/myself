@@ -28,6 +28,8 @@ private struct GeneralSettings: View {
     @AppStorage(PrefKey.rowDensity) private var density = RowDensity.regular
     #if os(macOS)
     @AppStorage(PrefKey.menuBarIcon) private var showsMenuBarIcon = true
+    @AppStorage(PrefKey.checkForUpdates) private var checksForUpdates = true
+    @State private var updates = UpdateChecker.shared
     #endif
     @State private var confirmingReset = false
 
@@ -37,6 +39,11 @@ private struct GeneralSettings: View {
         if shortcut.hotKey == nil { return "Off. Click to set a shortcut that opens search from any app." }
         if !shortcut.isRegistered { return "Another app is using this shortcut. Choose a different one." }
         return "Opens search from any app. ⌘K still works inside MySelf."
+    }
+
+    private var updateNote: String {
+        guard let date = updates.lastChecked else { return "Not checked yet." }
+        return "Last checked " + date.formatted(.relative(presentation: .named)) + "."
     }
     #endif
 
@@ -68,6 +75,20 @@ private struct GeneralSettings: View {
                 Toggle(isOn: $showsMenuBarIcon) {
                     Text("Show in menu bar")
                     Text("Add todos, office tasks and notes, search, or jump to a page from the menu bar.")
+                }
+            }
+
+            Section("Updates") {
+                Toggle(isOn: $checksForUpdates) {
+                    Text("Check for updates automatically")
+                    Text("Looks for a new release on GitHub once a day.")
+                }
+                LabeledContent {
+                    Button(updates.isChecking ? "Checking\u{2026}" : "Check Now", action: updates.checkNow)
+                        .disabled(updates.isChecking)
+                } label: {
+                    Text("Version \(UpdateChecker.currentVersion)")
+                    Text(updateNote)
                 }
             }
             #endif
@@ -183,6 +204,8 @@ private struct ICloudSettings: View {
                     Text("Sync folder")
                     if let name = sync.cloudFolderDisplayName {
                         Text(name)
+                    } else if let lost = sync.lostFolder {
+                        Text("Can\u{2019}t open \(lost). Choose it again to resume syncing.").foregroundStyle(Palette.red)
                     } else {
                         Text("Pick or create a folder in iCloud Drive, such as iCloud Drive › MySelf.")
                     }

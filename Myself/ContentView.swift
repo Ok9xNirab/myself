@@ -8,6 +8,9 @@ struct ContentView: View {
     #endif
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(PrefKey.sidebarStyle) private var sidebarStyle = SidebarStyle.floating
+    /// Shown once per launch when the saved sync folder no longer opens; the sidebar status stays red until it's fixed.
+    @State private var showsLostFolder = false
+    @State private var warnedLostFolder = false
 
     var body: some View {
         @Bindable var store = store
@@ -27,8 +30,20 @@ struct ContentView: View {
             SearchShortcut.shared.openMainWindow = { openWindow(id: "main") }
             SearchShortcut.shared.openNoteWindow = { openWindow(id: NoteWindow.id, value: $0) }
             SearchShortcut.shared.start(store: store)
+            UpdateChecker.shared.checkAutomatically()
         }
         #endif
+        .task {
+            guard store.sync.lostFolder != nil, !warnedLostFolder else { return }
+            warnedLostFolder = true
+            showsLostFolder = true
+        }
+        .alert("Choose your sync folder again", isPresented: $showsLostFolder) {
+            Button("Choose Folder\u{2026}") { store.openSettings(.iCloud) }
+            Button("Later", role: .cancel) {}
+        } message: {
+            Text("MySelf can\u{2019}t open \(store.sync.lostFolder ?? "the sync folder") any more, which can happen after installing an update. Until you choose it again in Settings \u{203A} iCloud, changes are saved on this Mac only and won\u{2019}t sync.")
+        }
         // Pick up changes made on other Macs while the app was in the background.
         .onChange(of: scenePhase) { if scenePhase == .active { store.reloadSynced() } }
         .sheet(isPresented: $store.isQuickOpenPresented) {

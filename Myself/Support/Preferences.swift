@@ -10,6 +10,9 @@ enum PrefKey {
     static let syncAppearance = "syncAppearance"
     static let menuBarIcon = "showMenuBarIcon"
     static let lastSynced = "lastSynced"          // TimeInterval since 1970
+    static let checkForUpdates = "checkForUpdates"
+    static let lastUpdateCheck = "lastUpdateCheck" // TimeInterval since 1970
+    static let skippedVersion = "skippedVersion"  // a release version the automatic check won't offer again
 }
 
 enum SidebarStyle: String, CaseIterable, Identifiable {

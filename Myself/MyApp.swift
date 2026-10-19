@@ -15,7 +15,10 @@ import SwiftUI
         .defaultSize(width: 1240, height: 820)
         .commands {
             #if os(macOS)
-            CommandGroup(replacing: .appInfo) { AboutCommand() }
+            CommandGroup(replacing: .appInfo) {
+                AboutCommand()
+                CheckForUpdatesCommand()
+            }
             #endif
             SidebarCommands()
             // MySelf is a single-window app with one shared store, so ⌘N makes a todo (⇧⌘N an office task, ⌥⌘N a note) instead of a window.
