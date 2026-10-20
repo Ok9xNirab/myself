@@ -233,7 +233,7 @@ enum NoteReaderText {
     }
 
     /// The system font's line height at `size`. The editor's text takes its line height from the system font; a text
-    /// view would use the tallest font on the line, and Hind Siliguri's is much taller.
+    /// view would use the tallest font on the line, and SF Bangla's is much taller.
     private static func lineHeight(_ size: CGFloat, weight: PlatformFont.Weight = .regular) -> CGFloat {
         let font = PlatformFont.systemFont(ofSize: size, weight: weight)
         #if os(macOS)

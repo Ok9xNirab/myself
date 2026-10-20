@@ -38,7 +38,7 @@ Most people track their life across five apps: a todo list, a notes app, a Kanba
 | 🎓 **University** | Classes with a weekly schedule, syllabus subjects and topics, assignments and exams. |
 | 💼 **Office Tasks** | Work tasks with notes, a reference link and a due date. Always high priority. |
 | 📖 **Job Study** | Interview-prep subjects with a revision checklist. A topic is due again 7 days after you last revised it, and topics can link to notes. |
-| 📝 **Notes** | A block editor with headings, lists, checklists, quotes, syntax-highlighted code, **LaTeX math**, **images** (paste, drop or pick one; click to zoom) and Bengali set in Hind Siliguri. Paste markdown and it becomes blocks. Select blocks like in Notion (<kbd>Esc</kbd>, <kbd>⌘A</kbd> twice, drag or Shift-click) and delete them with undo. **Reader mode** (<kbd>⇧⌘R</kbd>) locks a note and shows it as one page you can select and copy across. Notes are sorted into categories, and any note can open in its own window. |
+| 📝 **Notes** | A block editor with headings, lists, checklists, quotes, syntax-highlighted code, **LaTeX math**, **images** (paste, drop or pick one; click to zoom) and Bengali set in the system's SF Bangla. Paste markdown and it becomes blocks. Select blocks like in Notion (<kbd>Esc</kbd>, <kbd>⌘A</kbd> twice, drag or Shift-click) and delete them with undo. **Reader mode** (<kbd>⇧⌘R</kbd>) locks a note and shows it as one page you can select and copy across. Notes are sorted into categories, and any note can open in its own window. |
 | 🗂️ **Product Dev** | Kanban boards per project with Backlog, In Progress, Review and Done columns. Drag cards between columns, and tag them with Product Dev's own labels, kept separate from your TODO labels. |
 | 🏋️ **Workout** | Week-by-week training programs. *Coming soon.* |
 
@@ -137,7 +137,6 @@ Myself/
 ├── Pages/               One view per section, plus Quick Open and Settings
 ├── Components/          Shared design-system views (cards, badges, progress…)
 ├── Support/             Dates, theme palette, preferences, markdown & code rendering
-├── Fonts/               Bundled Bengali font (SIL OFL)
 └── AppIcon.icon/        Icon Composer app icon
 scripts/make-dmg.sh      Builds the release DMG
 ```
@@ -161,4 +160,4 @@ If MySelf is useful to you, a ⭐ on GitHub helps other people find it.
 
 ## License
 
-MySelf is released under the [MIT License](LICENSE). The bundled Bengali font, Hind Siliguri, is under the SIL Open Font License, with its licence in `Myself/Fonts/`.
+MySelf is released under the [MIT License](LICENSE).
