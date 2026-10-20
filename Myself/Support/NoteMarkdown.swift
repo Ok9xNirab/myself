@@ -102,7 +102,7 @@ enum NoteMarkdown {
             switch run {
             case let .text(string, style, link):
                 var attributed = AttributedString(string)
-                let bold = style.contains(.bold) ? PlatformFont.Weight.bold : weight
+                let bold = style.contains(.bold) ? NoteTypeface.boldWeight(over: weight) : weight
                 if style.contains(.code) {
                     attributed.font = NoteTypeface.font(size: size * 0.86, weight: bold, monospaced: true)
                     attributed.backgroundColor = NoteColors.codeBackground

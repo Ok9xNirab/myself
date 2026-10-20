@@ -36,11 +36,17 @@ enum NoteTypeface {
     }
 
     /// The system's Bengali font at `weight`, found the way text fallback would find it, so no hidden font name is
-    /// spelled out. Regular text is set in Light (300).
+    /// spelled out. Regular text is set in Light (300), so `**bold**` (Medium, 500) stands out from it.
     private static func bengaliFont(size: CGFloat, weight: PlatformFont.Weight) -> PlatformFont {
         let bengaliWeight = weight.rawValue < 0.1 ? PlatformFont.Weight.light : weight
         let system = PlatformFont.systemFont(ofSize: size, weight: bengaliWeight)
         return CTFontCreateForString(system as CTFont, "অ" as CFString, CFRange(location: 0, length: 1)) as PlatformFont
+    }
+
+    /// `**bold**` text: medium (500), so it stands out without getting heavy. Text that's already at least that
+    /// heavy, like a heading, keeps its weight.
+    static func boldWeight(over weight: PlatformFont.Weight) -> PlatformFont.Weight {
+        weight.rawValue >= PlatformFont.Weight.medium.rawValue ? weight : .medium
     }
 
     /// Extra space between lines: the design's 1.65 line height, 1.85 for Bengali, which has taller glyphs.

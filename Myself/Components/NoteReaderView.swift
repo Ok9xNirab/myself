@@ -182,7 +182,7 @@ enum NoteReaderText {
         for run in NoteMarkdown.parse(source) {
             switch run {
             case let .text(string, style, link):
-                let bold = style.contains(.bold) ? PlatformFont.Weight.bold : weight
+                let bold = style.contains(.bold) ? NoteTypeface.boldWeight(over: weight) : weight
                 var attributes: [NSAttributedString.Key: Any] = [.foregroundColor: color]
                 if style.contains(.code) {
                     attributes[.font] = NoteTypeface.platformFont(size: size * 0.86, weight: bold, monospaced: true)
