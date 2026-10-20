@@ -45,6 +45,7 @@ struct Note: Identifiable, Equatable, Codable, SyncRecord {
         if let block = blocks.first(where: { $0.kind.isText && !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }) {
             return NoteText.plain(block.text)
         }
+        if blocks.contains(where: { $0.kind == .table }) { return "Table" }
         if blocks.contains(where: { $0.kind == .code }) { return "Code" }
         if blocks.contains(where: { $0.kind == .math }) { return "Equation" }
         if blocks.contains(where: { $0.kind == .image }) { return "Image" }
@@ -52,7 +53,7 @@ struct Note: Identifiable, Equatable, Codable, SyncRecord {
     }
 
     var wordCount: Int {
-        let text = title + " " + blocks.map(\.text).joined(separator: " ")
+        let text = title + " " + blocks.map { $0.kind == .table ? NoteTable($0.text).cells.joined(separator: " ") : $0.text }.joined(separator: " ")
         return text.split { $0.isWhitespace || "$`*#=~\\{}()".contains($0) }.count
     }
 
@@ -61,7 +62,7 @@ struct Note: Identifiable, Equatable, Codable, SyncRecord {
 
 struct NoteBlock: Identifiable, Equatable, Codable {
     enum Kind: String, Codable, CaseIterable, Identifiable {
-        case p, h1, h2, h3, bullet, num, todo, quote, code, math, image, hr
+        case p, h1, h2, h3, bullet, num, todo, quote, code, math, table, image, hr
 
         var id: Self { self }
 
@@ -77,6 +78,7 @@ struct NoteBlock: Identifiable, Equatable, Codable {
             case .quote: "Quote"
             case .code: "Code block"
             case .math: "Math block"
+            case .table: "Table"
             case .image: "Image"
             case .hr: "Divider"
             }
@@ -94,6 +96,7 @@ struct NoteBlock: Identifiable, Equatable, Codable {
             case .quote: "text.quote"
             case .code: "chevron.left.forwardslash.chevron.right"
             case .math: "sum"
+            case .table: "tablecells"
             case .image: "photo"
             case .hr: "minus"
             }
@@ -112,13 +115,14 @@ struct NoteBlock: Identifiable, Equatable, Codable {
             case .quote: ">"
             case .code: "```"
             case .math: "$$"
+            case .table: "|"
             case .image: ""
             case .hr: "---"
             }
         }
 
-        /// Blocks edited as one line of inline markdown (everything but code, math, images and dividers).
-        var isText: Bool { self != .code && self != .math && self != .image && self != .hr }
+        /// Blocks edited as one line of inline markdown (everything but code, math, tables, images and dividers).
+        var isText: Bool { self != .code && self != .math && self != .table && self != .image && self != .hr }
         /// Blocks with a text view that the arrow keys and Backspace can move the caret into.
         var hasCaret: Bool { self != .image && self != .hr }
         /// Kinds that Return continues onto the next block.
@@ -145,7 +149,7 @@ struct NoteBlock: Identifiable, Equatable, Codable {
 
 extension NoteBlock {
     /// Splits pasted markdown into blocks: headings, lists, checklists, quotes, fenced code, `$$` math and dividers
-    /// become their kinds, tables become a plain-text code block, other lines paragraphs. Blank lines only separate.
+    /// become their kinds, runs of `|` lines tables, other lines paragraphs. Blank lines only separate.
     /// Nested lists are flattened.
     static func blocks(fromMarkdown markdown: String) -> [NoteBlock] {
         let lines = markdown.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
@@ -178,7 +182,7 @@ extension NoteBlock {
                     rows.append(lines[i].trimmingCharacters(in: .whitespaces))
                     i += 1
                 }
-                blocks.append(NoteBlock(.code, rows.joined(separator: "\n"), lang: .plaintext))
+                blocks.append(NoteBlock(.table, rows.joined(separator: "\n")))
             } else if line.wholeMatch(of: /(-\s*){3,}|(\*\s*){3,}|(_\s*){3,}/) != nil {
                 blocks.append(NoteBlock(.hr))
             } else if let m = line.wholeMatch(of: /(#{1,6})\s+(.*)/) {
@@ -198,6 +202,111 @@ extension NoteBlock {
             }
         }
         return blocks
+    }
+}
+
+/// A markdown (GFM) table: a header row, a `| --- | :-: |` row setting each column's alignment, then body rows.
+/// A table block keeps its markdown in `text`; this parses it for display and rebuilds it after adding rows or columns.
+struct NoteTable: Equatable {
+    enum Alignment: Equatable { case leading, center, trailing }
+
+    var header: [String]
+    var alignments: [Alignment]
+    var rows: [[String]]
+
+    var columnCount: Int { alignments.count }
+    /// Every cell's text, header first, for search and word counts.
+    var cells: [String] { (header + rows.flatMap { $0 }).filter { !$0.isEmpty } }
+
+    /// What a new table block starts with.
+    static let template = "| Column 1 | Column 2 |\n| --- | --- |\n|  |  |"
+
+    /// Parses lines of `|`-separated cells. Without an alignment row the first line is still the header. Short rows are
+    /// padded and long ones widen the table, so every row has `columnCount` cells.
+    init(_ markdown: String) {
+        var lines = markdown.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        let head = lines.isEmpty ? [] : Self.cells(lines.removeFirst())
+        var aligns: [Alignment] = []
+        if let first = lines.first, Self.isAlignmentRow(first) {
+            aligns = Self.cells(lines.removeFirst()).map { cell in
+                switch (cell.hasPrefix(":"), cell.hasSuffix(":")) {
+                case (true, true): .center
+                case (false, true): .trailing
+                default: .leading
+                }
+            }
+        }
+        let body = lines.map(Self.cells)
+        let count = max(1, ([head.count] + body.map(\.count)).max() ?? 1)
+        func padded(_ row: [String]) -> [String] { row + Array(repeating: "", count: max(0, count - row.count)) }
+        header = padded(head)
+        alignments = Array((aligns + Array(repeating: .leading, count: count)).prefix(count))
+        rows = body.map(padded)
+    }
+
+    /// The table as markdown, with each column padded to its widest cell so the source lines up.
+    var markdown: String {
+        let widths = (0..<columnCount).map { c in max(3, ([header] + rows).map { $0[c].count }.max() ?? 0) }
+        func line(_ row: [String]) -> String {
+            "| " + row.enumerated().map { c, cell in cell.padding(toLength: widths[c], withPad: " ", startingAt: 0) }.joined(separator: " | ") + " |"
+        }
+        let rule = alignments.enumerated().map { c, align -> String in
+            let dashes = String(repeating: "-", count: widths[c] - (align == .leading ? 0 : align == .center ? 2 : 1))
+            return switch align {
+            case .leading: dashes
+            case .center: ":" + dashes + ":"
+            case .trailing: dashes + ":"
+            }
+        }
+        return ([line(header), "| " + rule.joined(separator: " | ") + " |"] + rows.map(line)).joined(separator: "\n")
+    }
+
+    mutating func addRow() { rows.append(Array(repeating: "", count: columnCount)) }
+
+    mutating func addColumn() {
+        header.append("Column \(columnCount + 1)")
+        alignments.append(.leading)
+        for i in rows.indices { rows[i].append("") }
+    }
+
+    /// A cell's inline markdown for display, with escaped pipes (`\|`) unescaped.
+    static func display(_ cell: String) -> String { cell.replacingOccurrences(of: "\\|", with: "|") }
+
+    /// A row's cells, trimmed and still escaped. Pipes split cells unless escaped (`\|`) or inside backticks; the
+    /// outer pipes are optional.
+    static func cells(_ line: String) -> [String] {
+        var cells: [String] = []
+        var cell = ""
+        var code = false
+        var escaped = false
+        for ch in line {
+            if escaped {
+                cell.append("\\")
+                cell.append(ch)
+                escaped = false
+            } else if ch == "\\" {
+                escaped = true
+            } else if ch == "`" {
+                code.toggle()
+                cell.append(ch)
+            } else if ch == "|", !code {
+                cells.append(cell.trimmingCharacters(in: .whitespaces))
+                cell = ""
+            } else {
+                cell.append(ch)
+            }
+        }
+        if escaped { cell.append("\\") }
+        cells.append(cell.trimmingCharacters(in: .whitespaces))
+        if line.hasPrefix("|") { cells.removeFirst() }
+        if line.hasSuffix("|"), cells.last == "" { cells.removeLast() }
+        return cells
+    }
+
+    /// The `| --- | :-: | --: |` line under the header.
+    static func isAlignmentRow(_ line: String) -> Bool {
+        let cells = cells(line)
+        return !cells.isEmpty && cells.allSatisfy { $0.wholeMatch(of: /:?-+:?/) != nil }
     }
 }
 

@@ -409,13 +409,15 @@ struct NoteEditor: View {
             if clear { b.text = "" }
             if kind == .code, b.lang == nil { b.lang = .python }
             if kind == .todo, b.done == nil { b.done = false }
+            // Text that isn't a table yet becomes its one header cell.
+            if kind == .table, !b.text.hasPrefix("|") { b.text = b.text.isEmpty ? NoteTable.template : "| \(b.text) |\n| --- |" }
         }
         focus(block.id, caret: nil)
     }
 
     /// Inserts a new block after `id` (at the end when `nil`) and focuses it. A divider gets an empty paragraph after it.
     fileprivate func insert(_ kind: NoteBlock.Kind, after id: ID?) {
-        let block = NoteBlock(kind)
+        let block = NoteBlock(kind, kind == .table ? NoteTable.template : "")
         let paragraph = NoteBlock()
         setBlocks { blocks in
             let at = id.flatMap { id in blocks.firstIndex { $0.id == id } }.map { $0 + 1 } ?? blocks.count
@@ -741,6 +743,69 @@ struct NoteEditor: View {
         }
     }
 
+    fileprivate func tableKey(_ id: ID, _ key: NoteKey, _ context: NoteKeyContext) -> Bool {
+        guard let block = current.blocks.first(where: { $0.id == id }) else { return false }
+        switch key {
+        case .tab:
+            #if os(macOS)
+            if let cell = nextCell(in: block.text, after: NSMaxRange(context.selection)) {
+                textFocus.textView?.setSelectedRange(cell)
+            }
+            #endif
+            return true
+        case .escape:
+            blur()
+            return true
+        case .selectAll:
+            return selectAll(context)
+        case .commandReturn:
+            exitDown(id)
+            return true
+        case .backspace where block.text.isEmpty:
+            update(id) { $0.kind = .p }
+            focus(id, caret: 0)
+            return true
+        case .up where context.atStart, .down where context.atEnd:
+            return textKey(id, key, context)
+        default:
+            return false
+        }
+    }
+
+    /// Tab in a table's markdown: the text of the cell after the caret, skipping the alignment row; nil after the last.
+    private func nextCell(in text: String, after location: Int) -> NSRange? {
+        let ns = text as NSString
+        var i = location
+        while i < ns.length {
+            let pipe = ns.range(of: "|", range: NSRange(location: i, length: ns.length - i))
+            guard pipe.location != NSNotFound else { return nil }
+            i = pipe.location + 1
+            let line = ns.lineRange(for: pipe)
+            let lineEnd = line.location + (ns.substring(with: line).hasSuffix("\n") ? line.length - 1 : line.length)
+            let escaped = pipe.location > 0 && ns.character(at: pipe.location - 1) == 92  // `\|`
+            guard i < lineEnd, !escaped, !NoteTable.isAlignmentRow(ns.substring(with: line)) else { continue }
+            let next = ns.range(of: "|", range: NSRange(location: i, length: lineEnd - i))
+            let end = next.location == NSNotFound ? lineEnd : next.location
+            let cell = ns.substring(with: NSRange(location: i, length: end - i))
+            let lead = cell.prefix { $0 == " " }.utf16.count
+            let trimmed = cell.trimmingCharacters(in: .whitespaces)
+            // An empty cell puts the caret one space in, ready to type.
+            return trimmed.isEmpty
+                ? NSRange(location: i + min(1, cell.utf16.count), length: 0)
+                : NSRange(location: i + lead, length: trimmed.utf16.count)
+        }
+        return nil
+    }
+
+    /// Adds a row or column to a table block, re-padding its markdown so the columns line up.
+    fileprivate func editTable(_ id: ID, _ change: (inout NoteTable) -> Void) {
+        guard let block = current.blocks.first(where: { $0.id == id }) else { return }
+        var table = NoteTable(block.text)
+        change(&table)
+        update(id) { $0.text = table.markdown }
+        focus(id, caret: nil)
+    }
+
     // MARK: Toolbar
 
     private var activeBlock: NoteBlock? { current.blocks.first { $0.id == activeID } }
@@ -754,7 +819,7 @@ struct NoteEditor: View {
     /// Toolbar block buttons: toggle a text block's kind, or insert code, math and dividers below the active block.
     private func setKind(_ kind: NoteBlock.Kind) {
         guard let block = activeBlock else { insert(kind, after: current.blocks.last?.id); return }
-        if kind == .code || kind == .math || kind == .image || kind == .hr {
+        if kind == .code || kind == .math || kind == .table || kind == .image || kind == .hr {
             if block.kind.isText, block.text.isEmpty, kind != .hr { turnInto(block, kind) } else { insert(kind, after: block.id) }
             return
         }
@@ -817,6 +882,7 @@ struct NoteEditor: View {
                     separator
                     toolButton("Code block (```)", "curlybraces", on: activeBlock?.kind == .code) { setKind(.code) }
                     toolButton("Math block ($$)", NoteBlock.Kind.math.systemImage, on: activeBlock?.kind == .math) { setKind(.math) }
+                    toolButton("Table", NoteBlock.Kind.table.systemImage, on: activeBlock?.kind == .table) { setKind(.table) }
                     toolButton("Image", NoteBlock.Kind.image.systemImage) { setKind(.image) }
                     toolButton("Divider (---)", NoteBlock.Kind.hr.systemImage) { setKind(.hr) }
                 }
@@ -957,7 +1023,7 @@ private struct NoteBlockRow: View {
         case .h1: 20
         case .h2: 16
         case .h3: 10
-        case .code, .math, .image: 8
+        case .code, .math, .table, .image: 8
         default: 0
         }
     }
@@ -980,6 +1046,8 @@ private struct NoteBlockRow: View {
             CodeBlockView(block: block, editor: editor).padding(.bottom, 8)
         case .math:
             MathBlockView(block: block, editor: editor).padding(.bottom, 8)
+        case .table:
+            TableBlockView(block: block, editor: editor).padding(.bottom, 8)
         case .image:
             ImageBlockView(block: block, editor: editor).padding(.bottom, 8)
         default:
@@ -1444,6 +1512,104 @@ private struct MathBlockView: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+/// A table block: the rendered table, which turns into its markdown (with a live preview) when clicked.
+private struct TableBlockView: View {
+    var block: NoteBlock
+    var editor: NoteEditor
+    @State private var hovering = false
+
+    var body: some View {
+        let table = NoteTable(block.text)
+        if editor.isEditing(block.id) {
+            VStack(spacing: 0) {
+                HStack(spacing: 12) {
+                    Text("Markdown table")
+                    Button("Add Row", systemImage: "plus") { editor.editTable(block.id) { $0.addRow() } }
+                    Button("Add Column", systemImage: "plus") { editor.editTable(block.id) { $0.addColumn() } }
+                    Spacer()
+                    Text("tab for next cell · esc or ⌘↵ to finish")
+                }
+                .buttonStyle(.borderless)
+                .font(.system(size: 11))
+                .foregroundStyle(Palette.ink3)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                NoteTextView(text: Binding(get: { block.text }, set: { v in editor.update(block.id) { $0.text = v } }),
+                             font: NoteTypeface.platformFont(size: 12.5, monospaced: true),
+                             lineSpacing: 12.5 * 0.45,
+                             placeholder: "| Column | Column |",
+                             focus: editor.request(for: block.id),
+                             focusTracker: editor.textFocusTracker,
+                             onKey: { editor.tableKey(block.id, $0, $1) },
+                             onFocusChange: { editor.focusChanged(block.id, $0) })
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 8)
+                Divider()
+                NoteTableGrid(table: table)
+                    .padding(12)
+                    .background(Palette.surface)
+            }
+            .background(NoteColors.codeBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.accentColor.opacity(0.5), lineWidth: 1.5))
+        } else {
+            NoteTableGrid(table: table)
+                .padding(4)
+                .background(hovering ? Color.primary.opacity(0.04) : .clear, in: RoundedRectangle(cornerRadius: 10))
+                .contentShape(Rectangle())
+                .onHover { hovering = $0 }
+                .onTapGesture { editor.tap(block.id) { editor.focus(block.id, caret: nil) } }
+                .help("Click to edit the table")
+        }
+    }
+}
+
+/// A table's cells in a bordered grid, header row shaded. Too wide for the page, it scrolls sideways.
+struct NoteTableGrid: View {
+    var table: NoteTable
+
+    private var size: CGFloat { NoteTypeface.bodySize * 0.93 }
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            grid
+            ScrollView(.horizontal) { grid }
+                .scrollIndicators(.automatic)
+        }
+    }
+
+    private var grid: some View {
+        Grid(horizontalSpacing: 0, verticalSpacing: 0) {
+            row(table.header, header: true)
+            ForEach(table.rows.indices, id: \.self) { r in
+                Divider()
+                row(table.rows[r], header: false)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Palette.border, lineWidth: 1))
+    }
+
+    private func row(_ cells: [String], header: Bool) -> some View {
+        GridRow {
+            ForEach(cells.indices, id: \.self) { c in
+                let align = table.alignments[c]
+                NoteMarkdown.text(NoteTable.display(cells[c]), size: size, weight: header ? .semibold : .regular)
+                    .multilineTextAlignment(align == .center ? .center : align == .trailing ? .trailing : .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(minWidth: 60, maxWidth: .infinity, maxHeight: .infinity,
+                           alignment: align == .center ? .center : align == .trailing ? .trailing : .leading)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(header ? Palette.surface2 : .clear)
+                    .overlay(alignment: .trailing) {
+                        if c < cells.count - 1 { Rectangle().fill(Palette.border).frame(width: 1) }
+                    }
+            }
+        }
     }
 }
 

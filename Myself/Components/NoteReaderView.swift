@@ -109,6 +109,37 @@ enum NoteReaderText {
                     ])
                 }
                 paragraph(math, style(lineSpacing: 0, before: 8, after: 14, alignment: .center))
+            case .table:
+                let table = NoteTable(block.text)
+                let cellSize = size * 0.93
+                #if os(macOS)
+                // Each cell is a paragraph in its own NSTextTableBlock.
+                let grid = tableGrid(table, width: width)
+                spacer(8)
+                for (r, row) in ([table.header] + table.rows).enumerated() {
+                    for (c, cell) in row.enumerated() {
+                        let text = inline(NoteTable.display(cell), size: cellSize, weight: r == 0 ? .semibold : .regular, color: .labelCompat)
+                        if text.length == 0 { text.append(NSAttributedString(string: " ", attributes: [.font: PlatformFont.systemFont(ofSize: cellSize)])) }
+                        paragraph(text, style(lineSpacing: NoteTypeface.lineSpacing(size: cellSize, bengali: NoteText.hasBengali(cell)), after: 0,
+                                              lineHeight: lineHeight(cellSize), alignment: alignment(table.alignments[c]),
+                                              block: tableCell(grid, row: r, column: c)))
+                    }
+                }
+                spacer(14)
+                #else
+                // No text tables in UIKit: one tab-separated line per row, the header in bold.
+                let stops = (1..<max(table.columnCount, 1)).map { NSTextTab(textAlignment: .natural, location: width / CGFloat(table.columnCount) * CGFloat($0)) }
+                for (r, row) in ([table.header] + table.rows).enumerated() {
+                    let line = NSMutableAttributedString()
+                    for (c, cell) in row.enumerated() {
+                        if c > 0 { line.append(NSAttributedString(string: "\t", attributes: [.font: PlatformFont.systemFont(ofSize: cellSize)])) }
+                        line.append(inline(NoteTable.display(cell), size: cellSize, weight: r == 0 ? .semibold : .regular, color: .labelCompat))
+                    }
+                    let paragraphStyle = style(lineSpacing: 0, before: r == 0 ? 8 : 0, after: r == table.rows.count ? 14 : 4) as! NSMutableParagraphStyle
+                    paragraphStyle.tabStops = stops
+                    paragraph(line, paragraphStyle)
+                }
+                #endif
             case .image:
                 guard let name = block.image else { continue }
                 let picture: NSMutableAttributedString
@@ -221,6 +252,14 @@ enum NoteReaderText {
         return NSAttributedString(attachment: attachment)
     }
 
+    private static func alignment(_ align: NoteTable.Alignment) -> NSTextAlignment {
+        switch align {
+        case .leading: .natural
+        case .center: .center
+        case .trailing: .right
+        }
+    }
+
     private static var codeBackground: PlatformColor { .dynamic(light: 0xF6F6F8, dark: 0x202023) }
 
     /// LaTeX images are black templates; draw them in the label colour, resolved for the current appearance.
@@ -278,6 +317,29 @@ enum NoteReaderText {
         block.setWidth(0.5, type: .absoluteValueType, for: .border)
         block.setBorderColor(.separatorColor)
         return sized(block, width: width, inset: 2 * 12 + 2 * 0.5)
+    }
+
+    private static func tableGrid(_ table: NoteTable, width: CGFloat) -> NSTextTable {
+        let grid = NSTextTable()
+        grid.numberOfColumns = table.columnCount
+        grid.collapsesBorders = true
+        grid.hidesEmptyCells = false
+        grid.layoutAlgorithm = .automaticLayoutAlgorithm
+        grid.setWidth(1, type: .absoluteValueType, for: .border)
+        grid.setBorderColor(.separatorColor)
+        return sized(grid, width: width, inset: 2) as! NSTextTable
+    }
+
+    private static func tableCell(_ grid: NSTextTable, row: Int, column: Int) -> NSTextTableBlock {
+        let cell = NSTextTableBlock(table: grid, startingRow: row, rowSpan: 1, startingColumn: column, columnSpan: 1)
+        cell.setWidth(1, type: .absoluteValueType, for: .border)
+        cell.setBorderColor(.separatorColor)
+        cell.setWidth(10, type: .absoluteValueType, for: .padding, edge: .minX)
+        cell.setWidth(10, type: .absoluteValueType, for: .padding, edge: .maxX)
+        cell.setWidth(6, type: .absoluteValueType, for: .padding, edge: .minY)
+        cell.setWidth(6, type: .absoluteValueType, for: .padding, edge: .maxY)
+        if row == 0 { cell.backgroundColor = .dynamic(light: 0xF0F0F2, dark: 0x323234) }
+        return cell
     }
 
     private static func quoteBlock(_ width: CGFloat) -> NSTextBlock {
