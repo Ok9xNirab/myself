@@ -88,7 +88,8 @@ struct NoteEditor: View {
                     }
                     .onChange(of: selectionFocused) { if !selectionFocused { selectedBlocks = [] } }
                     #endif
-                    .frame(maxWidth: 780)
+                    // A note's own window fills its width; the Notes page keeps a readable measure.
+                    .frame(maxWidth: showsBrowser == nil ? .infinity : 780)
                     .padding(.leading, paperWidth < 640 ? 52 : 64)
                     .padding(.trailing, paperWidth < 640 ? 36 : 64)
                     .padding(.top, 30)

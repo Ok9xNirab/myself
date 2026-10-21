@@ -392,7 +392,8 @@ struct NoteReaderView: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSTextView {
-        let view = NSTextView(usingTextLayoutManager: false)
+        let view = ReaderTextView(usingTextLayoutManager: false)
+        view.coordinator = context.coordinator
         view.delegate = context.coordinator
         view.isEditable = false
         view.isSelectable = true
@@ -423,6 +424,20 @@ struct NoteReaderView: NSViewRepresentable {
         container.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
         layout.ensureLayout(for: container)
         return CGSize(width: width, height: ceil(layout.usedRect(for: container).maxY))
+    }
+
+    /// SwiftUI probes `sizeThatFits` with several widths and caches the answers, so the last probe can be narrower
+    /// than the frame the view finally gets. Rebuilding for the frame's width keeps the text from staying that narrow.
+    final class ReaderTextView: NSTextView {
+        weak var coordinator: Coordinator?
+
+        override func setFrameSize(_ newSize: NSSize) {
+            super.setFrameSize(newSize)
+            guard let coordinator, newSize.width > 0, abs(newSize.width - coordinator.width) > 0.5 else { return }
+            coordinator.width = newSize.width
+            coordinator.rebuild(self)
+            textContainer?.containerSize = NSSize(width: newSize.width, height: .greatestFiniteMagnitude)
+        }
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate, NSLayoutManagerDelegate {
