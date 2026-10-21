@@ -45,7 +45,9 @@ struct ContentView: View {
             Text("MySelf can\u{2019}t open \(store.sync.lostFolder ?? "the sync folder") any more, which can happen after installing an update. Until you choose it again in Settings \u{203A} iCloud, changes are saved on this Mac only and won\u{2019}t sync.")
         }
         // Pick up changes made on other Macs while the app was in the background.
-        .onChange(of: scenePhase) { if scenePhase == .active { store.reloadSynced() } }
+        .onChange(of: scenePhase) {
+            if scenePhase == .active { store.reloadSynced() } else { store.saveTypedText() }
+        }
         .sheet(isPresented: $store.isQuickOpenPresented) {
             QuickOpenView()
         }

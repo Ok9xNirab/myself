@@ -42,6 +42,9 @@ final class SyncEngine {
     @ObservationIgnored private var accessing: URL?
     @ObservationIgnored private var cache: [URL: (modified: Date, record: Any)] = [:]
     @ObservationIgnored private var scanPending = false
+    /// Files written here that iCloud hasn't finished uploading; checked on their own instead of rescanning.
+    @ObservationIgnored private var uploading: Set<URL> = []
+    @ObservationIgnored private var uploadCheckTask: Task<Void, Never>?
     @ObservationIgnored private var scanError: String?
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
     @ObservationIgnored private var pollTask: Task<Void, Never>?
@@ -171,6 +174,7 @@ final class SyncEngine {
     private func activate() {
         watcher?.stop()
         cache = [:]
+        uploading = []
         let root = root
         for folder in [Todo.folder, TaskLabel.folder, OfficeTask.folder, NoteCategory.folder, Note.folder,
                        UniClass.folder, SyllabusSubject.folder, Assignment.folder, Exam.folder, UniversityNotes.folder,
@@ -228,7 +232,7 @@ final class SyncEngine {
             guard url.pathExtension == "json" else { continue }
             let values = try? url.resourceValues(forKeys: keys)
             if values?.isUbiquitousItem == true {
-                if values?.ubiquitousItemIsUploading == true { scanPending = true }
+                if values?.ubiquitousItemIsUploading == true { watchUpload(url) }
                 if let state = values?.ubiquitousItemDownloadingStatus, state != .current {
                     try? FileManager.default.startDownloadingUbiquitousItem(at: url)
                     notDownloaded.insert(url.deletingPathExtension().lastPathComponent)
@@ -286,7 +290,7 @@ final class SyncEngine {
 
     func delete<T: SyncRecord>(_ type: T.Type, id: ID) {
         remove(fileURL(T.self, id: id))
-        didWrite()
+        didWrite(nil)
     }
 
     func writeSettings(_ settings: SyncedSettings) {
@@ -319,7 +323,7 @@ final class SyncEngine {
             status = .failed(failure.localizedDescription)
             return nil
         }
-        didWrite()
+        didWrite(url)
         return name
     }
 
@@ -331,7 +335,7 @@ final class SyncEngine {
 
     func deleteImage(_ name: String) {
         remove(imageURL(name))
-        didWrite()
+        didWrite(nil)
     }
 
     func imageURL(_ name: String) -> URL {
@@ -403,7 +407,7 @@ final class SyncEngine {
         if let failure {
             status = .failed(failure.localizedDescription)
         } else {
-            didWrite()
+            didWrite(url)
         }
     }
 
@@ -423,12 +427,39 @@ final class SyncEngine {
 
     // MARK: Status
 
-    private func didWrite() {
+    /// Shows "Syncing…" until iCloud has uploaded `url` (a deletion has no file to watch, so it only needs one
+    /// check). Our own writes don't need the folder read again; only their upload state is checked.
+    private func didWrite(_ url: URL?) {
         guard usesCloud else { return }
-        scanPending = true
         if status != .needsFolder { status = .syncing }
-        // Check back once iCloud Drive has had a moment to pick the change up.
-        scheduleReload(after: .seconds(3))
+        if let url { uploading.insert(url) }
+        scheduleUploadCheck()
+    }
+
+    private func watchUpload(_ url: URL) {
+        uploading.insert(url)
+        if uploadCheckTask == nil { scheduleUploadCheck() }
+    }
+
+    private func scheduleUploadCheck() {
+        uploadCheckTask?.cancel()
+        uploadCheckTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            self?.checkUploads()
+        }
+    }
+
+    private func checkUploads() {
+        uploadCheckTask = nil
+        uploading = uploading.filter { url in
+            var url = url
+            url.removeAllCachedResourceValues()
+            guard let values = try? url.resourceValues(forKeys: [.isUbiquitousItemKey, .ubiquitousItemIsUploadingKey, .ubiquitousItemIsUploadedKey]),
+                  values.isUbiquitousItem == true else { return false }  // gone, or not in iCloud
+            return values.ubiquitousItemIsUploading == true || values.ubiquitousItemIsUploaded == false
+        }
+        if uploading.isEmpty { updateStatus() } else { scheduleUploadCheck() }
     }
 
     private func updateStatus() {
@@ -441,7 +472,7 @@ final class SyncEngine {
             next = .needsFolder
         } else if let scanError {
             next = .failed(scanError)
-        } else if scanPending {
+        } else if scanPending || !uploading.isEmpty {
             next = .syncing
         } else {
             next = .upToDate

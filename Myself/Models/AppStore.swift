@@ -160,9 +160,10 @@ final class AppStore {
     @ObservationIgnored private var defaultsObserver: NSObjectProtocol?
     /// Notes edited in memory but not written yet; typing is saved in one write once it pauses.
     @ObservationIgnored private var unsavedNotes: Set<ID> = []
-    @ObservationIgnored private var noteSaveTask: Task<Void, Never>?
+    @ObservationIgnored private var noteSave = SaveDebounce()
     @ObservationIgnored private var universityNotesUnsaved = false
-    @ObservationIgnored private var universityNotesSaveTask: Task<Void, Never>?
+    @ObservationIgnored private var universityNotesSave = SaveDebounce()
+    @ObservationIgnored private var terminateObserver: NSObjectProtocol?
 
     /// Features turned off in Settings. Their data is kept; they're only hidden.
     private(set) var disabledPages: Set<Page> = Set(
@@ -173,6 +174,11 @@ final class AppStore {
         loadSampleFeatures()
         sync.onChange = { [weak self] in self?.reloadSynced() }
         reloadSynced()
+        #if os(macOS)
+        terminateObserver = NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.saveTypedText() }
+        }
+        #endif
         // Fresh folder: create the default labels. Their fixed IDs stop two Macs from seeding duplicates.
         if labels.isEmpty, !sync.hasFiles(TaskLabel.self) {
             for label in SampleData.labels { sync.save(label, onlyIfNewer: true) }
@@ -455,12 +461,7 @@ final class AppStore {
         // An image block removed, replaced or turned into text takes its file with it.
         let released = releaseImages(images.subtracting(note.blocks.compactMap(\.image)))
         unsavedNotes.insert(id)
-        noteSaveTask?.cancel()
-        noteSaveTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(1))
-            guard !Task.isCancelled else { return }
-            self?.saveUnsavedNotes()
-        }
+        noteSave.schedule { [weak self] in self?.saveUnsavedNotes() }
         return released
     }
 
@@ -496,7 +497,7 @@ final class AppStore {
 
     /// Writes notes edited with `editNote` that haven't been saved yet.
     func saveUnsavedNotes() {
-        noteSaveTask?.cancel()
+        noteSave.cancel()
         for id in unsavedNotes {
             if let note = notes.first(where: { $0.id == id }) { sync.save(note) }
         }
@@ -730,16 +731,17 @@ final class AppStore {
         universityNotes.text = text
         universityNotes.updatedAt = .now
         universityNotesUnsaved = true
-        universityNotesSaveTask?.cancel()
-        universityNotesSaveTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(1))
-            guard !Task.isCancelled else { return }
-            self?.saveUniversityNotes()
-        }
+        universityNotesSave.schedule { [weak self] in self?.saveUniversityNotes() }
+    }
+
+    /// Writes typing that's still waiting for its debounced save: when the app leaves the foreground or quits.
+    func saveTypedText() {
+        saveUnsavedNotes()
+        saveUniversityNotes()
     }
 
     func saveUniversityNotes() {
-        universityNotesSaveTask?.cancel()
+        universityNotesSave.cancel()
         guard universityNotesUnsaved else { return }
         universityNotesUnsaved = false
         sync.save(universityNotes)
@@ -918,9 +920,6 @@ final class AppStore {
 
     /// Re-reads todos, labels, office tasks, notes, University, Job Study and Product Dev from the sync folder and pulls shared settings.
     func reloadSynced() {
-        // Write pending note edits first so the reload can't bring back older text.
-        saveUnsavedNotes()
-        saveUniversityNotes()
         sync.scan {
             let todos = sync.load(Todo.self, keeping: todos).sorted { $0.createdAt < $1.createdAt }
             if todos != self.todos { self.todos = todos }
@@ -930,7 +929,13 @@ final class AppStore {
             if office != self.office { self.office = office }
             let categories = sync.load(NoteCategory.self, keeping: noteCategories).sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
             if categories != self.noteCategories { self.noteCategories = categories }
-            let notes = sync.load(Note.self, keeping: notes).sorted { $0.createdAt < $1.createdAt }
+            var notes = sync.load(Note.self, keeping: notes).sorted { $0.createdAt < $1.createdAt }
+            // A note being typed in is newer than its file until the debounced save writes it, so the reload keeps
+            // the text in memory instead of bringing back the file's (or forcing a write on every reload).
+            if !unsavedNotes.isEmpty {
+                let typed = Dictionary(self.notes.filter { unsavedNotes.contains($0.id) }.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+                notes = notes.map { typed[$0.id] ?? $0 }
+            }
             if notes != self.notes { self.notes = notes }
 
             var u = University()
@@ -939,8 +944,10 @@ final class AppStore {
             u.assignments = sync.load(Assignment.self, keeping: university.assignments).sorted { $0.createdAt < $1.createdAt }
             u.exams = sync.load(Exam.self, keeping: university.exams).sorted { $0.date < $1.date }
             if u != university { university = u }
-            let uniNotes = sync.load(UniversityNotes.self, keeping: [universityNotes]).first ?? UniversityNotes()
-            if uniNotes != universityNotes { universityNotes = uniNotes }
+            if !universityNotesUnsaved {
+                let uniNotes = sync.load(UniversityNotes.self, keeping: [universityNotes]).first ?? UniversityNotes()
+                if uniNotes != universityNotes { universityNotes = uniNotes }
+            }
             let jobStudy = sync.load(StudySubject.self, keeping: jobStudy).sorted { $0.createdAt < $1.createdAt }
             if jobStudy != self.jobStudy { self.jobStudy = jobStudy }
             let products = sync.load(Product.self, keeping: products).sorted { $0.createdAt < $1.createdAt }
@@ -1061,5 +1068,34 @@ final class AppStore {
 
     func updateProgram(_ program: WorkoutProgram) {
         if let i = workout.programs.firstIndex(where: { $0.id == program.id }) { workout.programs[i] = program }
+    }
+}
+
+/// Waits for a pause in typing before saving, but saves at least every `maxWait` seconds while typing goes on,
+/// so a long run of typing is never only in memory for long.
+struct SaveDebounce {
+    var pause: TimeInterval = 2
+    var maxWait: TimeInterval = 10
+    private var task: Task<Void, Never>?
+    /// When the first edit not yet saved was made.
+    private var since: Date?
+
+    mutating func schedule(_ save: @escaping @MainActor () -> Void) {
+        let since = self.since ?? .now
+        self.since = since
+        let delay = min(pause, max(0, maxWait - Date.now.timeIntervalSince(since)))
+        task?.cancel()
+        task = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            save()
+        }
+    }
+
+    /// Called by the save itself (or a save forced earlier), so the next edit starts a new wait.
+    mutating func cancel() {
+        task?.cancel()
+        task = nil
+        since = nil
     }
 }
