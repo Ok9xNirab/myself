@@ -269,6 +269,24 @@ struct NoteEditor: View {
         }
     }
 
+    /// A text selection dragged `overshoot` points past the top (negative) or bottom of block `id`'s text: selects
+    /// the blocks from that one to the mouse, as in Notion. Nil when the mouse is back inside the block.
+    fileprivate func dragOut(of id: ID, _ overshoot: CGFloat?) {
+        guard !reading, let overshoot, let frame = blockFrames[id] else {
+            selectedBlocks = []
+            return
+        }
+        let y = overshoot < 0 ? frame.minY + overshoot : frame.maxY + overshoot
+        let top = min(frame.minY, y), bottom = max(frame.maxY, y)
+        selectedBlocks = Set(current.blocks.filter { block in
+            blockFrames[block.id].map { $0.minY < bottom && $0.maxY > top } ?? false
+        }.map(\.id))
+    }
+
+    fileprivate func endDragOut() {
+        if !selectedBlocks.isEmpty { selectBlocks(selectedBlocks) }
+    }
+
     /// Leaves the text and selects `ids` as blocks; the page takes key focus so Delete and Esc reach it.
     private func selectBlocks(_ ids: Set<ID>) {
         guard !reading else { return }
@@ -301,6 +319,11 @@ struct NoteEditor: View {
             default:
                 if event.isCommand("a", keyCode: 0) {
                     selectedBlocks = Set(current.blocks.map(\.id))
+                    return nil
+                }
+                if event.isCommand("c", keyCode: 8) || event.isCommand("x", keyCode: 7) {
+                    copyToPasteboard(NoteBlock.markdown(current.blocks.filter { selectedBlocks.contains($0.id) }))
+                    if event.isCommand("x", keyCode: 7) { deleteSelectedBlocks() }
                     return nil
                 }
                 return event
@@ -1107,7 +1130,9 @@ private struct NoteBlockRow: View {
                                  onPasteImage: { editor.pasteImage($0, ext: $1, in: block.id) },
                                  onPasteText: { editor.pasteText($0, in: block.id, replacing: $1) },
                                  onKey: { editor.textKey(block.id, $0, $1) },
-                                 onFocusChange: { editor.focusChanged(block.id, $0) })
+                                 onFocusChange: { editor.focusChanged(block.id, $0) },
+                                 onDragOut: { editor.dragOut(of: block.id, $0) },
+                                 onDragOutEnd: editor.endDragOut)
                 } else {
                     NoteMarkdown.text(block.text.isEmpty ? " " : block.text, size: textSize, weight: textWeight)
                         .lineSpacing(lineSpacing)
@@ -1260,7 +1285,9 @@ private struct CodeBlockView: View {
                          focus: editor.request(for: block.id),
                          focusTracker: editor.textFocusTracker,
                          onKey: { editor.codeKey(block.id, $0, $1) },
-                         onFocusChange: { editor.focusChanged(block.id, $0) })
+                         onFocusChange: { editor.focusChanged(block.id, $0) },
+                         onDragOut: { editor.dragOut(of: block.id, $0) },
+                         onDragOutEnd: editor.endDragOut)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 9)
         }

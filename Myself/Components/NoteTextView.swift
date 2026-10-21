@@ -66,6 +66,11 @@ struct NoteTextView: NSViewRepresentable {
     var onPasteText: ((String, NSRange) -> Bool)?
     var onKey: (NoteKey, NoteKeyContext) -> Bool = { _, _ in false }
     var onFocusChange: (Bool) -> Void = { _ in }
+    /// A text selection dragged above or below the view: called with how far past its top (negative) or bottom
+    /// (positive) the mouse is, with nil when it comes back, and `onDragOutEnd` on mouse-up. The editor turns
+    /// it into a block selection, since one text view can't select across blocks.
+    var onDragOut: ((CGFloat?) -> Void)?
+    var onDragOutEnd: (() -> Void)?
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -129,6 +134,9 @@ struct NoteTextView: NSViewRepresentable {
         layout.ensureLayout(for: container)
         // The extra line fragment is the empty line after a trailing newline (or of an empty block).
         let height = max(layout.usedRect(for: container).maxY, layout.extraLineFragmentRect.maxY)
+        // SwiftUI probes several widths and may not set the frame again afterwards, so the text must go back to
+        // wrapping at the view's own width, or it stays wrapped at the last probe's.
+        if view.bounds.width > 0 { container.containerSize = NSSize(width: view.bounds.width, height: .greatestFiniteMagnitude) }
         return CGSize(width: width, height: ceil(height + view.textContainerInset.height * 2))
     }
 
@@ -189,7 +197,50 @@ final class NoteNSTextView: NSTextView {
     var placeholder = ""
     var formatting = false
 
+    /// The mouse is dragging a selection outside the view (`NoteTextView.onDragOut`).
+    private var draggedOut = false
+
     override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: NSView.noIntrinsicMetric) }
+
+    /// Typing registers undo actions on the window's undo manager that point at this view without retaining it.
+    /// A block's text view goes away when the block stops being edited, so its actions go with it; otherwise
+    /// ⌘Z would message the freed view and crash.
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow !== window, let undoManager = window?.undoManager {
+            undoManager.removeAllActions(withTarget: self)
+            if let textStorage { undoManager.removeAllActions(withTarget: textStorage) }
+        }
+        super.viewWillMove(toWindow: newWindow)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        draggedOut = false
+        super.mouseDown(with: event)  // tracks the drag until mouse-up
+        if draggedOut {
+            draggedOut = false
+            parent?.onDragOutEnd?()
+        }
+    }
+
+    /// NSTextView's drag loop reports the selection here while the mouse moves; past the view's top or bottom
+    /// the editor takes over and the text selection stays as it was.
+    override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        if stillSelecting, let onDragOut = parent?.onDragOut, let event = NSApp.currentEvent, event.type == .leftMouseDragged {
+            let y = convert(event.locationInWindow, from: nil).y
+            let margin: CGFloat = 4
+            let overshoot: CGFloat? = y < -margin ? y : y > bounds.height + margin ? y - bounds.height : nil
+            if let overshoot {
+                draggedOut = true
+                onDragOut(overshoot)
+                return
+            }
+            if draggedOut {
+                draggedOut = false
+                onDragOut(nil)
+            }
+        }
+        super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+    }
 
     override func becomeFirstResponder() -> Bool {
         let ok = super.becomeFirstResponder()
@@ -304,6 +355,9 @@ struct NoteTextView: View {
     var onPasteText: ((String, NSRange) -> Bool)?
     var onKey: (NoteKey, NoteKeyContext) -> Bool = { _, _ in false }
     var onFocusChange: (Bool) -> Void = { _ in }
+    /// macOS only: a selection dragged out of the view.
+    var onDragOut: ((CGFloat?) -> Void)?
+    var onDragOutEnd: (() -> Void)?
     @FocusState private var focused: Bool
 
     var body: some View {

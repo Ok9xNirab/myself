@@ -414,20 +414,14 @@ struct NoteReaderView: NSViewRepresentable {
         if context.coordinator.built != note { context.coordinator.rebuild(view) }
     }
 
+    /// Measures in the coordinator's own text system, so SwiftUI's probes at other widths never change the view.
     func sizeThatFits(_ proposal: ProposedViewSize, nsView view: NSTextView, context: Context) -> CGSize? {
-        guard let container = view.textContainer, let layout = view.layoutManager else { return nil }
         let width = proposal.width ?? 600
-        if abs(width - context.coordinator.width) > 0.5 {
-            context.coordinator.width = width
-            context.coordinator.rebuild(view)
-        }
-        container.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
-        layout.ensureLayout(for: container)
-        return CGSize(width: width, height: ceil(layout.usedRect(for: container).maxY))
+        context.coordinator.parent = self
+        return CGSize(width: width, height: context.coordinator.height(of: note, width: width))
     }
 
-    /// SwiftUI probes `sizeThatFits` with several widths and caches the answers, so the last probe can be narrower
-    /// than the frame the view finally gets. Rebuilding for the frame's width keeps the text from staying that narrow.
+    /// Builds the shown text for the view's own width whenever that changes.
     final class ReaderTextView: NSTextView {
         weak var coordinator: Coordinator?
 
@@ -436,7 +430,6 @@ struct NoteReaderView: NSViewRepresentable {
             guard let coordinator, newSize.width > 0, abs(newSize.width - coordinator.width) > 0.5 else { return }
             coordinator.width = newSize.width
             coordinator.rebuild(self)
-            textContainer?.containerSize = NSSize(width: newSize.width, height: .greatestFiniteMagnitude)
         }
     }
 
@@ -444,6 +437,30 @@ struct NoteReaderView: NSViewRepresentable {
         var parent: NoteReaderView?
         var built: Note?
         var width: CGFloat = 600
+        /// The last measurement, so repeated probes at one width don't rebuild the note.
+        private var measured: (note: Note, width: CGFloat, height: CGFloat)?
+        private lazy var measureContainer: NSTextContainer = {
+            let container = NSTextContainer(size: NSSize(width: 600, height: CGFloat.greatestFiniteMagnitude))
+            container.lineFragmentPadding = 2
+            let layout = NSLayoutManager()
+            layout.delegate = self
+            layout.addTextContainer(container)
+            measureStorage.addLayoutManager(layout)
+            return container
+        }()
+        private let measureStorage = NSTextStorage()
+
+        func height(of note: Note, width: CGFloat) -> CGFloat {
+            if let measured, measured.note == note, abs(measured.width - width) <= 0.5 { return measured.height }
+            let container = measureContainer
+            guard let layout = container.layoutManager, let parent else { return 0 }
+            measureStorage.setAttributedString(NoteReaderText.build(note, width: width, imageURL: parent.imageURL))
+            container.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
+            layout.ensureLayout(for: container)
+            let height = ceil(layout.usedRect(for: container).maxY)
+            measured = (note, width, height)
+            return height
+        }
 
         /// Line spacing goes between a paragraph's lines only, as in the editor; TextKit would also add it after the
         /// last line. Code lines are separate paragraphs in one block, so they keep it between them.

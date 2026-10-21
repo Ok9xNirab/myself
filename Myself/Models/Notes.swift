@@ -148,6 +148,33 @@ struct NoteBlock: Identifiable, Equatable, Codable {
 }
 
 extension NoteBlock {
+    /// The blocks as markdown, the reverse of `blocks(fromMarkdown:)`: list items of one kind on consecutive lines,
+    /// other blocks separated by a blank line. An image block gives its caption.
+    static func markdown(_ blocks: [NoteBlock]) -> String {
+        var out = ""
+        var number = 0
+        for (i, block) in blocks.enumerated() {
+            number = block.kind == .num ? number + 1 : 0
+            let line = switch block.kind {
+            case .p, .image: block.text
+            case .h1: "# " + block.text
+            case .h2: "## " + block.text
+            case .h3: "### " + block.text
+            case .bullet: "- " + block.text
+            case .num: "\(number). " + block.text
+            case .todo: "- [\(block.done == true ? "x" : " ")] " + block.text
+            case .quote: "> " + block.text
+            case .code: "```\(block.lang == .plaintext ? "" : block.lang?.rawValue ?? "")\n\(block.text)\n```"
+            case .math: "$$\n\(block.text)\n$$"
+            case .table: block.text
+            case .hr: "---"
+            }
+            if i > 0 { out += block.kind.continues && block.kind == blocks[i - 1].kind ? "\n" : "\n\n" }
+            out += line
+        }
+        return out
+    }
+
     /// Splits pasted markdown into blocks: headings, lists, checklists, quotes, fenced code, `$$` math and dividers
     /// become their kinds, runs of `|` lines tables, other lines paragraphs. Blank lines only separate.
     /// Nested lists are flattened.
