@@ -426,7 +426,8 @@ struct NoteReaderView: NSViewRepresentable {
 
     func updateNSView(_ view: NSTextView, context: Context) {
         context.coordinator.parent = self
-        if context.coordinator.built != note { context.coordinator.rebuild(view) }
+        // Before the view has a width, `setFrameSize` builds the text; building it here too would be wasted.
+        if context.coordinator.width > 0, context.coordinator.built != note { context.coordinator.rebuild(view) }
     }
 
     /// Measures in the coordinator's own text system, so SwiftUI's probes at other widths never change the view.
@@ -451,9 +452,13 @@ struct NoteReaderView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate, NSLayoutManagerDelegate {
         var parent: NoteReaderView?
         var built: Note?
-        var width: CGFloat = 600
-        /// The last measurement, so repeated probes at one width don't rebuild the note.
-        private var measured: (note: Note, width: CGFloat, height: CGFloat)?
+        /// The view's width; 0 until it's first laid out.
+        var width: CGFloat = 0
+        /// The note's text and height at each width it was built for. Opening a note measures it at the width it's
+        /// then shown at, so the view reuses the measured text instead of building the whole note again.
+        private var cached: Note?
+        private var strings: [CGFloat: NSAttributedString] = [:]
+        private var heights: [CGFloat: CGFloat] = [:]
         private lazy var measureContainer: NSTextContainer = {
             let container = NSTextContainer(size: NSSize(width: 600, height: CGFloat.greatestFiniteMagnitude))
             container.lineFragmentPadding = 2
@@ -465,15 +470,35 @@ struct NoteReaderView: NSViewRepresentable {
         }()
         private let measureStorage = NSTextStorage()
 
+        /// Drops the cache when the note changed.
+        private func use(_ note: Note) {
+            guard cached != note else { return }
+            cached = note
+            strings = [:]
+            heights = [:]
+        }
+
+        private func key(_ width: CGFloat) -> CGFloat { (width * 2).rounded() / 2 }
+
+        private func string(_ note: Note, width: CGFloat) -> NSAttributedString {
+            use(note)
+            if let hit = strings[key(width)] { return hit }
+            let built = NoteReaderText.build(note, width: width, imageURL: parent?.imageURL ?? { _ in nil })
+            if strings.count >= 4 { strings = [:] }
+            strings[key(width)] = built
+            return built
+        }
+
         func height(of note: Note, width: CGFloat) -> CGFloat {
-            if let measured, measured.note == note, abs(measured.width - width) <= 0.5 { return measured.height }
+            use(note)
+            if let hit = heights[key(width)] { return hit }
             let container = measureContainer
-            guard let layout = container.layoutManager, let parent else { return 0 }
-            measureStorage.setAttributedString(NoteReaderText.build(note, width: width, imageURL: parent.imageURL))
+            guard let layout = container.layoutManager else { return 0 }
+            measureStorage.setAttributedString(string(note, width: width))
             container.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
             layout.ensureLayout(for: container)
             let height = ceil(layout.usedRect(for: container).maxY)
-            measured = (note, width, height)
+            heights[key(width)] = height
             return height
         }
 
@@ -496,9 +521,9 @@ struct NoteReaderView: NSViewRepresentable {
         }
 
         func rebuild(_ view: NSTextView) {
-            guard let parent else { return }
+            guard let parent, width > 0 else { return }
             built = parent.note
-            view.textStorage?.setAttributedString(NoteReaderText.build(parent.note, width: width, imageURL: parent.imageURL))
+            view.textStorage?.setAttributedString(string(parent.note, width: width))
         }
 
         func textView(_ textView: NSTextView, clickedOn cell: any NSTextAttachmentCellProtocol, in cellFrame: NSRect, at charIndex: Int) {
