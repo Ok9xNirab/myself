@@ -224,8 +224,11 @@ private struct SubjectChecklist: View {
             .padding(.bottom, 10)
             Divider().overlay(Palette.border)
 
-            ForEach(shown) { t in
-                TopicRow(subject: subject.id, topic: t)
+            // Lazy, so opening a subject with many topics builds only the rows on screen, not all of them at once.
+            LazyVStack(spacing: 0) {
+                ForEach(shown) { t in
+                    TopicRow(subject: subject.id, topic: t)
+                }
             }
             if shown.isEmpty {
                 Text(emptyMessage).font(.system(size: 12)).foregroundStyle(Palette.ink3).padding(18)
