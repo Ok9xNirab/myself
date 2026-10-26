@@ -8,6 +8,10 @@ MySelf is a "personal OS" SwiftUI app: dashboard, TODOs, University (classes, sy
 
 Current state: **TODOs, labels, office tasks, notes, University, Job Study and Product Dev are persisted and synced** (see "Sync" below). Every other feature still comes from `SampleData` and lives in memory (`AppStore`). Settings are in UserDefaults. Editor sheets outside TODOs, Office Tasks, University, Job Study and Product Dev (edit/delete pencils on some rows) are placeholders with no action yet.
 
+## Website
+
+The landing page is the static `docs/` folder (`index.html`, `landing.css`, `landing.js`, icon PNGs, and `screenshot.png`, the hero: a macOS window capture with a transparent background), served by Netlify per `netlify.toml` with no build step; it only redeploys when `docs/` or `netlify.toml` change. Its design comes from `MySelf Landing.html` in the prototype zip. Keep its claims in line with the app (macOS 26, features, Workout "Coming soon"), and re-export the icon variants with `ictool` (see below) when the icon changes.
+
 ## Build & run
 
 `xcode-select` points at CommandLineTools on this machine, so prefix `xcodebuild` with `DEVELOPER_DIR`:

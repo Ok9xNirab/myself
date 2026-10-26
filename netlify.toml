@@ -1,0 +1,11 @@
+# The landing page is the static docs/ folder; there's no build step.
+[build]
+  publish = "docs"
+  command = ""
+  # Only redeploy when the site changes, not on every app commit.
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- docs netlify.toml"
+
+[[headers]]
+  for = "/*.png"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
