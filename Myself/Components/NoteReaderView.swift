@@ -62,6 +62,10 @@ enum NoteReaderText {
                 let done = block.kind == .todo && block.done == true
                 let markerFont = PlatformFont.systemFont(ofSize: size)
                 let line: NSMutableAttributedString
+                // Laid out like the editor: a bullet centred in 18 pt, a number right-aligned in 22 pt (wider when the
+                // number needs it, so "10." can't overrun the text's tab stop and wrap), then 6 pt before the text.
+                var marker: NSTextTab?
+                var indent: CGFloat = 24
                 if block.kind == .todo {
                     // The editor's checkbox, centred on the text's x-height.
                     let box = checkbox(done)
@@ -70,9 +74,19 @@ enum NoteReaderText {
                     attachment.bounds = CGRect(x: 0, y: (markerFont.xHeight - box.size.height) / 2, width: box.size.width, height: box.size.height)
                     line = NSMutableAttributedString(attachment: attachment)
                     line.append(NSAttributedString(string: "\t", attributes: [.font: markerFont]))
-                } else {
-                    line = NSMutableAttributedString(string: (block.kind == .bullet ? "•" : "\(number).") + "\t", attributes: [
+                } else if block.kind == .bullet {
+                    marker = NSTextTab(textAlignment: .center, location: 9)
+                    line = NSMutableAttributedString(string: "\t•\t", attributes: [
                         .font: markerFont, .foregroundColor: PlatformColor.secondaryLabelCompat,
+                    ])
+                } else {
+                    let digits = PlatformFont.monospacedDigitSystemFont(ofSize: size, weight: .regular)
+                    let label = "\(number)."
+                    let end = max(22, ceil((label as NSString).size(withAttributes: [.font: digits]).width))
+                    marker = NSTextTab(textAlignment: .right, location: end)
+                    indent = end + 6
+                    line = NSMutableAttributedString(string: "\t\(label)\t", attributes: [
+                        .font: digits, .foregroundColor: PlatformColor.secondaryLabelCompat,
                     ])
                 }
                 let text = inline(block.text, size: size, weight: .regular, color: done ? .tertiaryLabelCompat : .labelCompat)
@@ -80,7 +94,7 @@ enum NoteReaderText {
                     text.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: NSRange(location: 0, length: text.length))
                 }
                 line.append(text)
-                paragraph(line, style(lineSpacing: NoteTypeface.lineSpacing(size: size, bengali: bengali), after: 4, indent: 24, tab: 24,
+                paragraph(line, style(lineSpacing: NoteTypeface.lineSpacing(size: size, bengali: bengali), after: 4, indent: indent, tab: indent, marker: marker,
                                       lineHeight: lineHeight(size)))
             case .code:
                 let code = NSMutableAttributedString(string: block.text.isEmpty ? " " : block.text, attributes: [
@@ -207,7 +221,7 @@ enum NoteReaderText {
         return out
     }
 
-    private static func style(lineSpacing: CGFloat, before: CGFloat = 0, after: CGFloat, indent: CGFloat = 0, tab: CGFloat? = nil,
+    private static func style(lineSpacing: CGFloat, before: CGFloat = 0, after: CGFloat, indent: CGFloat = 0, tab: CGFloat? = nil, marker: NSTextTab? = nil,
                               lineHeight: CGFloat? = nil, alignment: NSTextAlignment = .natural, block: AnyObject? = nil) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         if let lineHeight {
@@ -224,8 +238,9 @@ enum NoteReaderText {
         #endif
         style.alignment = alignment
         style.headIndent = indent
-        style.firstLineHeadIndent = tab == nil ? indent : 4
-        if let tab { style.tabStops = [NSTextTab(textAlignment: .natural, location: tab)] }
+        // A list marker either sits on its own tab stop (the line starts with a tab) or 4 pt in.
+        style.firstLineHeadIndent = tab == nil ? indent : marker == nil ? 4 : 0
+        if let tab { style.tabStops = (marker.map { [$0] } ?? []) + [NSTextTab(textAlignment: .natural, location: tab)] }
         #if os(macOS)
         if let block = block as? NSTextBlock { style.textBlocks = [block] }
         #endif
