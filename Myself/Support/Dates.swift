@@ -11,8 +11,21 @@ enum Day {
     /// Whole days from today to `date` (negative = past).
     static func fromToday(_ date: Date?) -> Int? {
         guard let date else { return nil }
-        return calendar.dateComponents([.day], from: calendar.startOfDay(for: .now), to: calendar.startOfDay(for: date)).day
+        return calendar.dateComponents([.day], from: today, to: calendar.startOfDay(for: date)).day
     }
+
+    /// Start of today, worked out again only once the day (or time zone) changes: lists call `fromToday` for every
+    /// row each time they're drawn.
+    private static var today: Date {
+        let now = Date.now, zone = TimeZone.current
+        if let cached = todayCache, cached.zone == zone, cached.range.contains(now) { return cached.range.lowerBound }
+        let start = calendar.startOfDay(for: now)
+        let end = calendar.date(byAdding: .day, value: 1, to: start) ?? start.addingTimeInterval(86400)
+        todayCache = (start..<end, zone)
+        return start
+    }
+
+    private static var todayCache: (range: Range<Date>, zone: TimeZone)?
 
     static func isToday(_ date: Date?) -> Bool { fromToday(date) == 0 }
 

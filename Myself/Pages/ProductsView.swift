@@ -199,7 +199,7 @@ private struct KanbanCardView: View {
     @Environment(\.undoManager) private var undoManager
     var card: KanbanCard
     var onEdit: () -> Void
-    @State private var hovering = false
+    @State private var hover = HoverState()
     /// A card dragged over this one lands just above it.
     @State private var isTargeted = false
 
@@ -237,7 +237,7 @@ private struct KanbanCardView: View {
         // As a background, the priority stripe takes the card's height instead of stretching it.
         .background(alignment: .leading) { Rectangle().fill(card.priority.color).frame(width: 3) }
         .overlay(alignment: .topTrailing) {
-            RowActions(isHovering: hovering, onEdit: onEdit) {
+            RowActions(hover: hover, onEdit: onEdit) {
                 withAnimation(.snappy) { store.deleteCard(card.id, undoManager: undoManager) }
             }
             .padding(4)
@@ -249,9 +249,9 @@ private struct KanbanCardView: View {
                 Capsule().fill(Color.accentColor).frame(height: 3).offset(y: -5.5)
             }
         }
-        .shadow(color: .black.opacity(hovering ? 0.08 : 0), radius: 6, y: 3)
+        .background { CardHoverShadow(hover: hover) }
         .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-        .onHover { hovering = $0 }
+        .onHover { hover.isOn = $0 }
         .onTapGesture(perform: onEdit)
         .contextMenu {
             Button("Edit Card…", systemImage: "pencil", action: onEdit)
@@ -368,4 +368,15 @@ private struct KanbanCardSheet: View {
 
 #Preview {
     ProductsView().environment(AppStore()).frame(width: 1100, height: 700)
+}
+
+/// A card's lift on hover: a shadow drawn by its own shape, so hovering redraws neither the card nor its content.
+private struct CardHoverShadow: View {
+    var hover: HoverState
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .fill(Palette.surface)
+            .shadow(color: .black.opacity(hover.isOn ? 0.08 : 0), radius: 6, y: 3)
+    }
 }

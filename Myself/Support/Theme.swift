@@ -86,10 +86,15 @@ struct CardBackground: ViewModifier {
     var radius: CGFloat = 12
 
     func body(content: Content) -> some View {
+        // The shadow is on the background shape, not the content: a shadow on the content renders the whole card
+        // (every row of a long list) offscreen again whenever anything in it changes.
         content
-            .background(Palette.surface, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .background {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(Palette.surface)
+                    .shadow(color: .black.opacity(0.05), radius: 1, y: 1)
+            }
             .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Palette.border, lineWidth: 0.5))
-            .shadow(color: .black.opacity(0.05), radius: 1, y: 1)
     }
 }
 

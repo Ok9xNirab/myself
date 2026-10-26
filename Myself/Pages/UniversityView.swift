@@ -202,7 +202,7 @@ struct UniversityView: View {
 private struct SyllabusCell: View {
     @Environment(AppStore.self) private var store
     @Environment(\.undoManager) private var undoManager
-    @State private var hovering = false
+    @State private var hover = HoverState()
     var subject: SyllabusSubject
     var isOpen: Bool
     var onToggleOpen: () -> Void
@@ -220,7 +220,7 @@ private struct SyllabusCell: View {
                             .foregroundStyle(Palette.ink3)
                             .rotationEffect(.degrees(isOpen ? 90 : 0))
                         Spacer(minLength: 0)
-                        RowActions(isHovering: hovering, onEdit: edit, onDelete: delete)
+                        RowActions(hover: hover, onEdit: edit, onDelete: delete)
                             .frame(height: 16)
                     }
                     ProgressBar(value: Double(pct), color: color)
@@ -258,7 +258,7 @@ private struct SyllabusCell: View {
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Palette.surface)
-        .onHover { hovering = $0 }
+        .onHover { hover.isOn = $0 }
         .contextMenu {
             Button("Edit…", systemImage: "pencil", action: edit)
             Divider()
@@ -276,7 +276,7 @@ private struct SyllabusCell: View {
 private struct AssignmentRow: View {
     @Environment(AppStore.self) private var store
     @Environment(\.undoManager) private var undoManager
-    @State private var hovering = false
+    @State private var hover = HoverState()
     var assignment: Assignment
 
     var body: some View {
@@ -295,13 +295,13 @@ private struct AssignmentRow: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                RowActions(isHovering: hovering, onEdit: edit, onDelete: delete)
+                RowActions(hover: hover, onEdit: edit, onDelete: delete)
             }
             .opacity(a.done ? 0.55 : 1)
         }
         .contentShape(Rectangle())
         .onTapGesture(count: 2, perform: edit)
-        .onHover { hovering = $0 }
+        .onHover { hover.isOn = $0 }
         .contextMenu {
             Button("Edit…", systemImage: "pencil", action: edit)
             Button(a.done ? "Mark as Not Done" : "Mark as Done", systemImage: a.done ? "circle" : "checkmark.circle") {
@@ -322,7 +322,7 @@ private struct AssignmentRow: View {
 private struct ExamRow: View {
     @Environment(AppStore.self) private var store
     @Environment(\.undoManager) private var undoManager
-    @State private var hovering = false
+    @State private var hover = HoverState()
     var exam: Exam
 
     var body: some View {
@@ -339,7 +339,7 @@ private struct ExamRow: View {
                 HStack(alignment: .top) {
                     Text(e.subject).font(.system(size: 13, weight: .medium))
                     Spacer(minLength: 0)
-                    RowActions(isHovering: hovering, onEdit: edit, onDelete: delete)
+                    RowActions(hover: hover, onEdit: edit, onDelete: delete)
                         .frame(height: 16)
                 }
                 HStack(spacing: 8) {
@@ -354,7 +354,7 @@ private struct ExamRow: View {
         }
         .contentShape(Rectangle())
         .onTapGesture(count: 2, perform: edit)
-        .onHover { hovering = $0 }
+        .onHover { hover.isOn = $0 }
         .contextMenu {
             Button("Edit…", systemImage: "pencil", action: edit)
             Menu("Prep") {

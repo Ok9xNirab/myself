@@ -284,7 +284,7 @@ private struct TopicRow: View {
     #endif
     var subject: ID
     var topic: StudyTopic
-    @State private var hovering = false
+    @State private var hover = HoverState()
     @State private var renaming = false
     @State private var name = ""
     @State private var picking = false
@@ -315,15 +315,16 @@ private struct TopicRow: View {
         .padding(.leading, 18)
         .padding(.trailing, 12)
         .padding(.vertical, 9)
-        .background(hovering ? Palette.surface2.opacity(0.6) : .clear)
+        .background { HoverFill(hover: hover, color: Palette.surface2.opacity(0.6)) }
         .overlay(alignment: .bottom) { Rectangle().fill(Palette.border).frame(height: 0.5) }
-        .onHover { hovering = $0 }
+        .onHover { hover.isOn = $0 }
     }
 
     // MARK: Parts
 
     private var topicBody: some View {
-        let linked = topic.noteIDs.compactMap { id in store.notes.first { $0.id == id } }
+        // Summaries, not notes: they only change when a title does, so typing in a note doesn't redraw every topic.
+        let linked = topic.noteIDs.compactMap { id in store.noteSummaries.first { $0.id == id } }
         return VStack(alignment: .leading, spacing: 6) {
             if renaming {
                 TextField("Topic", text: $name)
@@ -407,9 +408,7 @@ private struct TopicRow: View {
                 withAnimation { store.deleteStudyTopic(subject: subject, topic: topic.id, undoManager: undoManager) }
             }
         }
-        #if os(macOS)
-        .opacity(hovering || picking ? 1 : 0.35)
-        #endif
+        .modifier(HoverOpacity(hover: hover, off: 0.35, forced: picking))
     }
 
     // MARK: Actions

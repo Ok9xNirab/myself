@@ -21,21 +21,7 @@ import SwiftUI
             }
             #endif
             SidebarCommands()
-            // MySelf is a single-window app with one shared store, so ⌘N makes a todo (⇧⌘N an office task, ⌥⌘N a note) instead of a window.
-            CommandGroup(replacing: .newItem) {
-                Button("New Todo", action: store.newTodo)
-                    .keyboardShortcut("n")
-                if store.isEnabled(.office) {
-                    Button("New Office Task", action: store.newOfficeTask)
-                        .keyboardShortcut("n", modifiers: [.command, .shift])
-                }
-                if store.isEnabled(.notes) {
-                    Button("New Note", action: store.newNote)
-                        .keyboardShortcut("n", modifiers: [.command, .option])
-                }
-                Button("Quick Open…") { store.isQuickOpenPresented = true }
-                    .keyboardShortcut("k")
-            }
+            CommandGroup(replacing: .newItem) { NewItemCommands(store: store) }
             CommandGroup(after: .toolbar) {
                 Picker("Appearance", selection: $appearance) {
                     Text("System").tag("")
@@ -43,22 +29,7 @@ import SwiftUI
                     Text("Dark").tag("dark")
                 }
             }
-            CommandMenu("Go") {
-                Button("Back", action: store.back)
-                    .keyboardShortcut("[")
-                    .disabled(!store.canGoBack)
-                Button("Forward", action: store.forward)
-                    .keyboardShortcut("]")
-                    .disabled(!store.canGoForward)
-                Divider()
-                // Shortcuts stay tied to a page's position, so ⌘7 is always Workout (⌘8 Notes) even when others are hidden.
-                ForEach(Array(Page.allCases.enumerated()), id: \.element) { index, page in
-                    if store.isEnabled(page) {
-                        Button(page.title) { store.go(page) }
-                            .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")))
-                    }
-                }
-            }
+            CommandMenu("Go") { GoCommands(store: store) }
         }
 
         #if os(macOS)
@@ -103,5 +74,49 @@ import SwiftUI
                 .environment(store)
         }
         #endif
+    }
+}
+
+// The menu items that read the store are views of their own: if `MyApp.body` read it, every page switch (which
+// changes Back/Forward) would rebuild every scene and the whole main menu.
+
+/// ⌘N makes a todo (⇧⌘N an office task, ⌥⌘N a note) instead of a window: MySelf is a single-window app with one shared store.
+private struct NewItemCommands: View {
+    var store: AppStore
+
+    var body: some View {
+        Button("New Todo", action: store.newTodo)
+            .keyboardShortcut("n")
+        if store.isEnabled(.office) {
+            Button("New Office Task", action: store.newOfficeTask)
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+        }
+        if store.isEnabled(.notes) {
+            Button("New Note", action: store.newNote)
+                .keyboardShortcut("n", modifiers: [.command, .option])
+        }
+        Button("Quick Open…") { store.isQuickOpenPresented = true }
+            .keyboardShortcut("k")
+    }
+}
+
+private struct GoCommands: View {
+    var store: AppStore
+
+    var body: some View {
+        Button("Back", action: store.back)
+            .keyboardShortcut("[")
+            .disabled(!store.canGoBack)
+        Button("Forward", action: store.forward)
+            .keyboardShortcut("]")
+            .disabled(!store.canGoForward)
+        Divider()
+        // Shortcuts stay tied to a page's position, so ⌘7 is always Workout (⌘8 Notes) even when others are hidden.
+        ForEach(Array(Page.allCases.enumerated()), id: \.element) { index, page in
+            if store.isEnabled(page) {
+                Button(page.title) { store.go(page) }
+                    .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")))
+            }
+        }
     }
 }

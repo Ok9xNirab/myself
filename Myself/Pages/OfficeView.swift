@@ -56,7 +56,7 @@ private struct OfficeRow: View {
     @Environment(AppStore.self) private var store
     @Environment(\.undoManager) private var undoManager
     var task: OfficeTask
-    @State private var hovering = false
+    @State private var hover = HoverState()
 
     var body: some View {
         ListRow {
@@ -85,13 +85,13 @@ private struct OfficeRow: View {
                     .padding(.top, 4)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                RowActions(isHovering: hovering, onEdit: edit, onDelete: delete)
+                RowActions(hover: hover, onEdit: edit, onDelete: delete)
             }
             .opacity(task.done ? 0.55 : 1)
         }
         .contentShape(Rectangle())
         .onTapGesture(count: 2, perform: edit)
-        .onHover { hovering = $0 }
+        .onHover { hover.isOn = $0 }
         .contextMenu {
             Button("Edit…", systemImage: "pencil", action: edit)
             Button(task.done ? "Mark as Not Done" : "Mark as Done", systemImage: task.done ? "circle" : "checkmark.circle", action: toggle)

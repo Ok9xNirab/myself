@@ -16,19 +16,22 @@ extension EnvironmentValues {
 struct PageScroll<Content: View>: View {
     var maxWidth: CGFloat? = 1140
     @ViewBuilder var content: Content
-    @State private var width: CGFloat = 1000
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) { content }
-                .padding(.horizontal, width < 700 ? 18 : 28)
-                .padding(.top, 18)
-                .padding(.bottom, 56)
-                .frame(maxWidth: maxWidth, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .environment(\.pageWidth, width)
+        // GeometryReader hands over the width while laying out, so a page is built at its real width the first
+        // time, not at a guess and then again (switching between one and two columns on the way).
+        GeometryReader { geo in
+            let width = geo.size.width
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) { content }
+                    .padding(.horizontal, width < 700 ? 18 : 28)
+                    .padding(.top, 18)
+                    .padding(.bottom, 56)
+                    .frame(maxWidth: maxWidth, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .environment(\.pageWidth, width)
+            }
         }
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .background(Palette.background)
     }
 }
@@ -418,9 +421,39 @@ struct ColorTabs<Item: Identifiable>: View {
     }
 }
 
+/// Whether the pointer is over a row. A row keeps one in `@State` and sets it from `onHover`; only the views that
+/// read `isOn` (its highlight, `RowActions`) redraw when it changes. Hover in plain `@State` redraws the whole row,
+/// and scrolling a long list moves rows under the pointer one after another.
+@Observable final class HoverState {
+    var isOn = false
+}
+
+/// Fades a view in on hover (`off` opacity otherwise, or full while `forced`); always shown on touch platforms.
+struct HoverOpacity: ViewModifier {
+    var hover: HoverState
+    var off: Double = 0
+    var forced = false
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content.opacity(hover.isOn || forced ? 1 : off)
+        #else
+        content
+        #endif
+    }
+}
+
+/// Fills a row's background with `color` on hover.
+struct HoverFill: View {
+    var hover: HoverState
+    var color: Color
+
+    var body: some View { hover.isOn ? color : .clear }
+}
+
 /// Edit / delete buttons that appear on hover (always visible on touch platforms).
 struct RowActions: View {
-    var isHovering: Bool
+    var hover: HoverState
     var onEdit: (() -> Void)? = {}
     var onDelete: () -> Void = {}
 
@@ -429,9 +462,7 @@ struct RowActions: View {
             if let onEdit { iconButton("pencil", "Edit", onEdit) }
             iconButton("trash", "Delete", onDelete)
         }
-        #if os(macOS)
-        .opacity(isHovering ? 1 : 0)
-        #endif
+        .modifier(HoverOpacity(hover: hover))
     }
 
     private func iconButton(_ name: String, _ help: String, _ action: @escaping () -> Void) -> some View {
