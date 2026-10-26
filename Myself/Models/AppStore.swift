@@ -134,7 +134,14 @@ final class AppStore {
     private(set) var jobStudy: [StudySubject] = []
     var workout = SampleData.workout()
     private(set) var noteCategories: [NoteCategory] = []
-    private(set) var notes: [Note] = []
+    private(set) var notes: [Note] = [] {
+        didSet {
+            let summaries = notes.map(NoteSummary.init)
+            if summaries != noteSummaries { noteSummaries = summaries }
+        }
+    }
+    /// The notes list's view of `notes`; read it instead of `notes` where only these fields are shown.
+    private(set) var noteSummaries: [NoteSummary] = []
 
     // Navigation history (⌘[ / ⌘])
     private(set) var history: [Page] = [.dashboard]

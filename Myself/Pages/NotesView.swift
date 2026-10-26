@@ -46,7 +46,8 @@ struct NotesView: View {
     var body: some View {
         let scope = validScope
         let list = filtered(scope)
-        let open = store.notes.first { $0.id == openID } ?? list.first
+        // The list reads `noteSummaries`, not `notes`, so typing in the open note doesn't redraw it.
+        let open = (store.noteSummaries.first { $0.id == openID } ?? list.first)?.id
 
         GeometryReader { geo in
             let railShown = showsBrowser && geo.size.width >= 940
@@ -71,9 +72,9 @@ struct NotesView: View {
                 }
                 Group {
                     if let open {
-                        NoteEditor(note: open, isFresh: freshID == open.id, showsBrowser: $showsBrowser,
-                                   onDuplicate: { duplicate(open.id) }, onDelete: { delete([open.id]) })
-                            .id(open.id)
+                        OpenNoteEditor(id: open, isFresh: freshID == open, showsBrowser: $showsBrowser,
+                                       onDuplicate: { duplicate(open) }, onDelete: { delete([open]) })
+                            .id(open)
                     } else {
                         EmptyStateView(systemImage: "note.text", title: "No note selected", subtitle: "Pick a note from the list or create a new one.")
                             .frame(maxHeight: .infinity)
@@ -87,7 +88,7 @@ struct NotesView: View {
         }
         .overlay(alignment: .top) { Divider() }
         .onAppear {
-            if let open { selection = [open.id] }
+            if let open { selection = [open] }
             handle(store.noteRequest)
         }
         .onChange(of: store.noteRequest) { handle(store.noteRequest) }
@@ -107,7 +108,7 @@ struct NotesView: View {
                 if let category = pendingCategoryDelete { deleteCategory(category, confirmed: true) }
             }
         } message: {
-            let n = store.notes.filter { $0.categoryID == pendingCategoryDelete?.id }.count
+            let n = store.noteSummaries.filter { $0.categoryID == pendingCategoryDelete?.id }.count
             Text("\(n) \(n == 1 ? "note" : "notes") will be deleted. You can undo this with ⌘Z.")
         }
     }
@@ -129,12 +130,14 @@ struct NotesView: View {
 
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespaces).lowercased() }
 
-    private func filtered(_ scope: String) -> [Note] {
+    private func filtered(_ scope: String) -> [NoteSummary] {
         let q = trimmedQuery
         let everywhere = (!q.isEmpty && searchesAll) || scope == "all"
-        var list = store.notes.filter { note in
+        // Searching needs the notes' text; only then does the list follow every edit.
+        let matches = q.isEmpty ? nil : Set(store.notes.filter { index.text(for: $0).contains(q) }.map(\.id))
+        var list = store.noteSummaries.filter { note in
             guard everywhere || (scope == "pinned" ? note.pinned : note.categoryID == scope) else { return false }
-            return q.isEmpty || index.text(for: note).contains(q)
+            return matches?.contains(note.id) ?? true
         }
         switch sort {
         case .edited: list.sort { $0.editedAt > $1.editedAt }
@@ -145,12 +148,12 @@ struct NotesView: View {
     }
 
     /// List sections: search results, or Pinned followed by date (or first-letter) groups.
-    private func sections(_ list: [Note], scope: String) -> [(title: String, notes: [Note])] {
+    private func sections(_ list: [NoteSummary], scope: String) -> [(title: String, notes: [NoteSummary])] {
         if !trimmedQuery.isEmpty {
             let n = list.count
             return [("\(n) result\(n == 1 ? "" : "s")\(searchesAll ? " in all notes" : "")", list)]
         }
-        var out: [(title: String, notes: [Note])] = []
+        var out: [(title: String, notes: [NoteSummary])] = []
         let pinned = scope == "pinned" ? [] : list.filter(\.pinned)
         if !pinned.isEmpty { out.append(("Pinned", pinned)) }
         for note in list where scope == "pinned" || !note.pinned {
@@ -170,9 +173,9 @@ struct NotesView: View {
 
     private func count(_ scope: String) -> Int {
         switch scope {
-        case "all": store.notes.count
-        case "pinned": store.notes.filter(\.pinned).count
-        default: store.notes.filter { $0.categoryID == scope }.count
+        case "all": store.noteSummaries.count
+        case "pinned": store.noteSummaries.filter(\.pinned).count
+        default: store.noteSummaries.filter { $0.categoryID == scope }.count
         }
     }
 
@@ -257,8 +260,9 @@ struct NotesView: View {
 
     // MARK: Note list
 
-    private func noteList(_ list: [Note], scope: String) -> some View {
+    private func noteList(_ list: [NoteSummary], scope: String) -> some View {
         let q = trimmedQuery
+        let found = q.isEmpty ? [:] : Dictionary(store.notes.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let wide = scope == "all" || scope == "pinned" || (!q.isEmpty && searchesAll)
         return VStack(spacing: 0) {
             listHeader(list, scope: scope)
@@ -294,7 +298,7 @@ struct NotesView: View {
                     ForEach(sections(list, scope: scope), id: \.title) { section in
                         Section(section.title) {
                             ForEach(section.notes) { note in
-                                NoteRow(note: note, category: wide ? store.noteCategory(note.categoryID) : nil, query: q, sort: sort)
+                                NoteRow(note: note, match: found[note.id], category: wide ? store.noteCategory(note.categoryID) : nil, query: q, sort: sort)
                                     .tag(note.id)
                                     .draggable(dragPayload(for: note.id))
                             }
@@ -319,7 +323,7 @@ struct NotesView: View {
         }
     }
 
-    private func listHeader(_ list: [Note], scope: String) -> some View {
+    private func listHeader(_ list: [NoteSummary], scope: String) -> some View {
         HStack(spacing: 2) {
             Menu {
                 Picker("Show", selection: Binding(get: { scope }, set: pick)) {
@@ -373,7 +377,7 @@ struct NotesView: View {
 
     @ViewBuilder
     private func rowMenu(_ ids: [ID]) -> some View {
-        let allPinned = ids.allSatisfy { id in store.notes.first { $0.id == id }?.pinned == true }
+        let allPinned = ids.allSatisfy { id in store.noteSummaries.first { $0.id == id }?.pinned == true }
         Button(allPinned ? "Unpin" : "Pin", systemImage: allPinned ? "pin.slash" : "pin") { store.setPinned(ids, !allPinned) }
         Menu("Move to") {
             ForEach(store.noteCategories) { category in
@@ -394,7 +398,7 @@ struct NotesView: View {
 
     private var bulkBar: some View {
         let ids = Array(selection)
-        let allPinned = ids.allSatisfy { id in store.notes.first { $0.id == id }?.pinned == true }
+        let allPinned = ids.allSatisfy { id in store.noteSummaries.first { $0.id == id }?.pinned == true }
         return HStack(spacing: 2) {
             Text("\(selection.count) selected").font(.system(size: 12.5, weight: .semibold))
             Spacer()
@@ -509,8 +513,26 @@ struct NotesView: View {
 
 // MARK: - Pieces
 
+/// The editor for the open note. It reads the note itself, so its edits redraw only the editor, not the list.
+private struct OpenNoteEditor: View {
+    var id: ID
+    var isFresh: Bool
+    var showsBrowser: Binding<Bool>
+    var onDuplicate: () -> Void
+    var onDelete: () -> Void
+    @Environment(AppStore.self) private var store
+
+    var body: some View {
+        if let note = store.notes.first(where: { $0.id == id }) {
+            NoteEditor(note: note, isFresh: isFresh, showsBrowser: showsBrowser, onDuplicate: onDuplicate, onDelete: onDelete)
+        }
+    }
+}
+
 private struct NoteRow: View {
-    var note: Note
+    var note: NoteSummary
+    /// The full note while searching, for the text around the match.
+    var match: Note?
     /// Shown when the list mixes categories.
     var category: NoteCategory?
     var query: String
@@ -552,7 +574,8 @@ private struct NoteRow: View {
 
     /// Text around the first match, for search results.
     private var excerpt: String {
-        let text = NoteText.plain(note.blocks.map(\.text).joined(separator: " · "))
+        guard let match else { return note.snippet }
+        let text = NoteText.plain(match.blocks.map(\.text).joined(separator: " · "))
         guard let range = text.range(of: query, options: .caseInsensitive) else { return note.snippet }
         let start = text.index(range.lowerBound, offsetBy: -28, limitedBy: text.startIndex) ?? text.startIndex
         let end = text.index(range.upperBound, offsetBy: 90, limitedBy: text.endIndex) ?? text.endIndex

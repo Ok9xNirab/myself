@@ -94,8 +94,26 @@ enum NoteMarkdown {
         return out
     }
 
+    private struct TextKey: Hashable {
+        var source: String
+        var size: CGFloat
+        var weight: CGFloat
+    }
+
+    /// Rendered blocks, so a block that's drawn again unchanged isn't parsed again.
+    private static var textCache: [TextKey: Text] = [:]
+
     /// Read-mode rendering of a text block.
     static func text(_ source: String, size: CGFloat, weight: PlatformFont.Weight) -> Text {
+        let key = TextKey(source: source, size: size, weight: weight.rawValue)
+        if let hit = textCache[key] { return hit }
+        let result = render(source, size: size, weight: weight)
+        if textCache.count >= 2000 { textCache.removeAll(keepingCapacity: true) }
+        textCache[key] = result
+        return result
+    }
+
+    private static func render(_ source: String, size: CGFloat, weight: PlatformFont.Weight) -> Text {
         var result = Text("")
         for run in parse(source) {
             let piece: Text

@@ -34,8 +34,9 @@ struct NoteEditor: View {
     /// Blocks selected as blocks (Esc in a block, or ⌘A twice), which Delete removes.
     @State private var selectedBlocks: Set<ID> = []
     @FocusState private var selectionFocused: Bool
-    /// Each block's frame on the page, for drag selection.
-    @State private var blockFrames: [ID: CGRect] = [:]
+    /// Each block's frame on the page, for drag selection. Kept out of SwiftUI state: a block growing a line moves
+    /// every block below it, and redrawing the editor for each of those would be wasted.
+    @State private var blockFrames = BlockFrames()
     /// The drag-selection box while dragging.
     @State private var band: CGRect?
     private static let paperSpace = "paper"
@@ -121,8 +122,14 @@ struct NoteEditor: View {
 
     private var paper: some View {
         let category = store.noteCategory(note.categoryID)
+        // Numbers for numbered items, worked out up front: a lazy stack builds its rows out of order.
         var number = 0
-        return VStack(alignment: .leading, spacing: 0) {
+        let numbers = note.blocks.map { block in
+            number = block.kind == .num ? number + 1 : 0
+            return number
+        }
+        // Lazy, so blocks off screen aren't built or laid out on every change.
+        return LazyVStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
                 ColorDot(color: category?.color ?? Palette.ink3, size: 8)
                 Text(category?.name ?? "Uncategorized")
@@ -153,11 +160,12 @@ struct NoteEditor: View {
             .foregroundStyle(Palette.ink3)
             .padding(.bottom, 20)
 
-            ForEach(note.blocks) { block in
-                let _ = (number = block.kind == .num ? number + 1 : 0)
-                NoteBlockRow(block: block, number: number, selected: selectedBlocks.contains(block.id), editor: self)
+            ForEach(Array(zip(note.blocks, numbers)), id: \.0.id) { block, number in
+                NoteBlockRow(block: block, number: number, selected: selectedBlocks.contains(block.id), editing: isEditing(block.id),
+                             focus: request(for: block.id), slash: slash?.id == block.id ? slash : nil, editor: self)
+                    .equatable()
                     .zIndex(slash?.id == block.id ? 1 : 0)
-                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.paperSpace)) } action: { blockFrames[block.id] = $0 }
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.paperSpace)) } action: { blockFrames.frames[block.id] = $0 }
             }
 
             Color.clear
@@ -178,7 +186,7 @@ struct NoteEditor: View {
                                       width: abs(value.location.x - value.startLocation.x), height: abs(value.location.y - value.startLocation.y))
                     band = rect
                     selectedBlocks = Set(current.blocks.filter { block in
-                        blockFrames[block.id].map { $0.minY < rect.maxY && $0.maxY > rect.minY } ?? false
+                        blockFrames.frames[block.id].map { $0.minY < rect.maxY && $0.maxY > rect.minY } ?? false
                     }.map(\.id))
                 }
                 .onEnded { _ in
@@ -272,14 +280,14 @@ struct NoteEditor: View {
     /// A text selection dragged `overshoot` points past the top (negative) or bottom of block `id`'s text: selects
     /// the blocks from that one to the mouse, as in Notion. Nil when the mouse is back inside the block.
     fileprivate func dragOut(of id: ID, _ overshoot: CGFloat?) {
-        guard !reading, let overshoot, let frame = blockFrames[id] else {
+        guard !reading, let overshoot, let frame = blockFrames.frames[id] else {
             selectedBlocks = []
             return
         }
         let y = overshoot < 0 ? frame.minY + overshoot : frame.maxY + overshoot
         let top = min(frame.minY, y), bottom = max(frame.maxY, y)
         selectedBlocks = Set(current.blocks.filter { block in
-            blockFrames[block.id].map { $0.minY < bottom && $0.maxY > top } ?? false
+            blockFrames.frames[block.id].map { $0.minY < bottom && $0.maxY > top } ?? false
         }.map(\.id))
     }
 
@@ -976,7 +984,7 @@ struct NoteEditor: View {
     // MARK: Status bar
 
     private var statusBar: some View {
-        let characters = (note.title + " " + note.blocks.map(\.text).joined(separator: " ")).count
+        let characters = note.characterCount
         let codeCount = note.blocks.filter { $0.kind == .code }.count
         return HStack(spacing: 14) {
             Text("\(note.wordCount) words")
@@ -1005,14 +1013,30 @@ struct NoteEditor: View {
 
 // MARK: - Blocks
 
-private struct NoteBlockRow: View {
+/// Block frames on the page, for drag selection; a class so writing them doesn't redraw the editor.
+private final class BlockFrames {
+    var frames: [ID: CGRect] = [:]
+}
+
+private struct NoteBlockRow: View, Equatable {
     var block: NoteBlock
     /// Position in a run of numbered items.
     var number: Int
     /// Selected as a block (Esc, ⌘A twice, a drag or Shift-click).
     var selected: Bool
+    /// Showing its text view, the focus request for it, and the "/" menu under it.
+    var editing: Bool
+    var focus: NoteFocusRequest?
+    var slash: NoteEditor.SlashMenu?
     var editor: NoteEditor
     @State private var hovering = false
+
+    /// Compares what the row shows and leaves out `editor`, which SwiftUI can't compare; otherwise typing in one
+    /// block redraws every block. `editor` is only used in actions, and its state lives outside the copy.
+    static func == (a: Self, b: Self) -> Bool {
+        a.block == b.block && a.number == b.number && a.selected == b.selected && a.editing == b.editing && a.focus == b.focus
+            && a.slash == b.slash
+    }
 
     private var size: CGFloat { NoteTypeface.bodySize }
     private var bengali: Bool { NoteText.hasBengali(block.text) }
@@ -1035,7 +1059,7 @@ private struct NoteBlockRow: View {
                     .opacity(hovering ? 1 : 0)
             }
             .overlay(alignment: .bottomLeading) {
-                if let menu = editor.slashMenu, menu.id == block.id, !menu.items.isEmpty {
+                if let menu = slash, !menu.items.isEmpty {
                     SlashMenuView(menu: menu) { editor.turnInto(block, $0, clear: true) }
                         .alignmentGuide(.bottom) { $0[.top] - 4 }
                 }
@@ -1067,11 +1091,11 @@ private struct NoteBlockRow: View {
         case .hr:
             Rectangle().fill(Palette.border).frame(height: 1).padding(.vertical, 14)
         case .code:
-            CodeBlockView(block: block, editor: editor).padding(.bottom, 8)
+            CodeBlockView(block: block, editing: editing, focus: focus, editor: editor).padding(.bottom, 8)
         case .math:
-            MathBlockView(block: block, editor: editor).padding(.bottom, 8)
+            MathBlockView(block: block, editing: editing, focus: focus, editor: editor).padding(.bottom, 8)
         case .table:
-            TableBlockView(block: block, editor: editor).padding(.bottom, 8)
+            TableBlockView(block: block, editing: editing, focus: focus, editor: editor).padding(.bottom, 8)
         case .image:
             ImageBlockView(block: block, editor: editor).padding(.bottom, 8)
         default:
@@ -1118,14 +1142,14 @@ private struct NoteBlockRow: View {
                 EmptyView()
             }
             Group {
-                if editor.isEditing(block.id) {
+                if editing {
                     NoteTextView(text: Binding(get: { block.text }, set: { editor.change(block, to: $0) }),
                                  font: NoteTypeface.platformFont(size: textSize, weight: textWeight),
                                  lineSpacing: lineSpacing,
                                  textColor: block.kind == .quote ? PlatformColor.secondaryLabelCompat : PlatformColor.labelCompat,
                                  placeholder: block.kind == .p ? "Type \u{201C}/\u{201D} for blocks, $x^2$ for inline math" : block.kind.title,
                                  formatting: true,
-                                 focus: editor.request(for: block.id),
+                                 focus: focus,
                                  focusTracker: editor.textFocusTracker,
                                  onPasteImage: { editor.pasteImage($0, ext: $1, in: block.id) },
                                  onPasteText: { editor.pasteText($0, in: block.id, replacing: $1) },
@@ -1243,13 +1267,14 @@ private struct SlashMenuView: View {
 
 private struct CodeBlockView: View {
     var block: NoteBlock
+    var editing: Bool
+    var focus: NoteFocusRequest?
     var editor: NoteEditor
     @State private var copied = false
 
     var body: some View {
         let lang = block.lang ?? .plaintext
         let lines = block.text.isEmpty ? 0 : block.text.components(separatedBy: "\n").count
-        let editing = editor.isEditing(block.id)
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Picker("Language", selection: Binding(get: { lang }, set: { v in editor.update(block.id) { $0.lang = v } })) {
@@ -1282,7 +1307,7 @@ private struct CodeBlockView: View {
                          lineSpacing: 12.5 * 0.45,
                          placeholder: "// code",
                          code: lang,
-                         focus: editor.request(for: block.id),
+                         focus: focus,
                          focusTracker: editor.textFocusTracker,
                          onKey: { editor.codeKey(block.id, $0, $1) },
                          onFocusChange: { editor.focusChanged(block.id, $0) },
@@ -1475,13 +1500,15 @@ private struct ImageBlockView: View {
 
 private struct MathBlockView: View {
     var block: NoteBlock
+    var editing: Bool
+    var focus: NoteFocusRequest?
     var editor: NoteEditor
     @State private var hovering = false
 
     private var size: CGFloat { NoteTypeface.bodySize }
 
     var body: some View {
-        if editor.isEditing(block.id) {
+        if editing {
             VStack(spacing: 0) {
                 HStack {
                     Text("LaTeX")
@@ -1496,7 +1523,7 @@ private struct MathBlockView: View {
                              font: NoteTypeface.platformFont(size: 12.5, monospaced: true),
                              lineSpacing: 12.5 * 0.45,
                              placeholder: #"e.g. \int_0^1 x^2\,dx = \frac{1}{3}"#,
-                             focus: editor.request(for: block.id),
+                             focus: focus,
                              focusTracker: editor.textFocusTracker,
                              onKey: { editor.mathKey(block.id, $0, $1) },
                              onFocusChange: { editor.focusChanged(block.id, $0) })
@@ -1546,12 +1573,14 @@ private struct MathBlockView: View {
 /// A table block: the rendered table, which turns into its markdown (with a live preview) when clicked.
 private struct TableBlockView: View {
     var block: NoteBlock
+    var editing: Bool
+    var focus: NoteFocusRequest?
     var editor: NoteEditor
     @State private var hovering = false
 
     var body: some View {
         let table = NoteTable(block.text)
-        if editor.isEditing(block.id) {
+        if editing {
             VStack(spacing: 0) {
                 HStack(spacing: 12) {
                     Text("Markdown table")
@@ -1569,7 +1598,7 @@ private struct TableBlockView: View {
                              font: NoteTypeface.platformFont(size: 12.5, monospaced: true),
                              lineSpacing: 12.5 * 0.45,
                              placeholder: "| Column | Column |",
-                             focus: editor.request(for: block.id),
+                             focus: focus,
                              focusTracker: editor.textFocusTracker,
                              onKey: { editor.tableKey(block.id, $0, $1) },
                              onFocusChange: { editor.focusChanged(block.id, $0) })
@@ -1642,7 +1671,6 @@ struct NoteTableGrid: View {
 }
 
 extension NoteEditor {
-    fileprivate var slashMenu: SlashMenu? { slash }
     fileprivate var textFocusTracker: NoteTextFocus { textFocus }
 }
 

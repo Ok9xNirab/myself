@@ -15,6 +15,30 @@ struct NoteCategory: Identifiable, Hashable, Codable, SyncRecord {
     static let palette: [UInt32] = [0xAF52DE, 0x007AFF, 0xFF9500, 0x34C759, 0xFF2D55, 0x5AC8FA, 0xA2845E, 0x8E8E93]
 }
 
+/// What the notes list shows of a note. The store only replaces it when one of these changes, so typing in a note
+/// doesn't redraw the list on every keystroke: the edit date is kept to the minute, the precision the list shows.
+struct NoteSummary: Identifiable, Equatable {
+    let id: ID
+    var categoryID: ID
+    var title: String
+    var snippet: String
+    var pinned: Bool
+    var createdAt: Date
+    var editedAt: Date
+
+    var displayTitle: String { title.isEmpty ? "Untitled" : title }
+
+    init(_ note: Note) {
+        id = note.id
+        categoryID = note.categoryID
+        title = note.title
+        snippet = note.snippet
+        pinned = note.pinned
+        createdAt = note.createdAt
+        editedAt = Date(timeIntervalSinceReferenceDate: (note.editedAt.timeIntervalSinceReferenceDate / 60).rounded(.down) * 60)
+    }
+}
+
 /// A notes page: a title and a list of blocks. Synced as `notes/<id>.json`, one file per page.
 struct Note: Identifiable, Equatable, Codable, SyncRecord {
     static let folder = "notes"
@@ -52,10 +76,21 @@ struct Note: Identifiable, Equatable, Codable, SyncRecord {
         return "No additional text"
     }
 
-    var wordCount: Int {
+    var wordCount: Int { stats.words }
+    var characterCount: Int { stats.characters }
+
+    /// Word and character counts, worked out once per version of the note (the editor shows them twice and redraws
+    /// on every keystroke).
+    private var stats: (words: Int, characters: Int) {
+        if let hit = Self.statsCache[id], hit.updatedAt == updatedAt { return (hit.words, hit.characters) }
         let text = title + " " + blocks.map { $0.kind == .table ? NoteTable($0.text).cells.joined(separator: " ") : $0.text }.joined(separator: " ")
-        return text.split { $0.isWhitespace || "$`*#=~\\{}()".contains($0) }.count
+        let words = text.split { $0.isWhitespace || "$`*#=~\\{}()".contains($0) }.count
+        let characters = (title + " " + blocks.map(\.text).joined(separator: " ")).count
+        Self.statsCache[id] = (updatedAt, words, characters)
+        return (words, characters)
     }
+
+    private static var statsCache: [ID: (updatedAt: Date, words: Int, characters: Int)] = [:]
 
     var hasBengali: Bool { NoteText.hasBengali(title) || blocks.contains { NoteText.hasBengali($0.text) } }
 }
