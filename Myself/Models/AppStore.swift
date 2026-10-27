@@ -811,6 +811,17 @@ final class AppStore {
         editStudySubject(subject, undoManager: undoManager, action: "Delete Topic") { $0.topics.removeAll { $0.id == topic } }
     }
 
+    /// Moves a topic above `before`, or to the end when it's nil.
+    func moveStudyTopic(subject: ID, topic: ID, before: ID? = nil, undoManager: UndoManager? = nil) {
+        guard topic != before else { return }
+        editStudySubject(subject, undoManager: undoManager, action: "Move Topic") { s in
+            guard let from = s.topics.firstIndex(where: { $0.id == topic }) else { return }
+            let moved = s.topics.remove(at: from)
+            let to = before.flatMap { b in s.topics.firstIndex { $0.id == b } } ?? s.topics.endIndex
+            s.topics.insert(moved, at: to)
+        }
+    }
+
     /// Links a note to a topic, or unlinks it if it's linked already.
     func toggleTopicNote(subject: ID, topic: ID, note: ID) {
         editStudyTopic(subject, topic) { t in

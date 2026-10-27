@@ -238,6 +238,7 @@ private struct SubjectChecklist: View {
                     .padding(.leading, 18)
                     .padding(.trailing, 12)
                     .padding(.vertical, 8)
+                    .modifier(TopicDrop(subject: subject.id, before: nil))
             }
         }
         .cardBackground()
@@ -321,6 +322,8 @@ private struct TopicRow: View {
         .background { HoverFill(hover: hover, color: Palette.surface2.opacity(0.6)) }
         .overlay(alignment: .bottom) { Rectangle().fill(Palette.border).frame(height: 0.5) }
         .onHover { hover.isOn = $0 }
+        .modifier(TopicDrag(topic: topic.id, enabled: !renaming))
+        .modifier(TopicDrop(subject: subject, before: topic.id))
     }
 
     // MARK: Parts
@@ -441,6 +444,43 @@ private struct TopicRow: View {
         #else
         store.openNote(id)
         #endif
+    }
+}
+
+/// Topics drag as `topic:<id>`, so a card or note dragged in from elsewhere isn't taken for one.
+private let topicDragPrefix = "topic:"
+
+private struct TopicDrag: ViewModifier {
+    var topic: ID
+    var enabled: Bool
+
+    func body(content: Content) -> some View {
+        // Off while renaming, so dragging in the text field selects text.
+        if enabled { content.draggable(topicDragPrefix + topic) } else { content }
+    }
+}
+
+/// Dropping a topic on a row moves it above that row; on the adder (`before` nil), to the end.
+private struct TopicDrop: ViewModifier {
+    @Environment(AppStore.self) private var store
+    @Environment(\.undoManager) private var undoManager
+    var subject: ID
+    var before: ID?
+    @State private var isTargeted = false
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: .top) {
+                if isTargeted {
+                    Capsule().fill(Color.accentColor).frame(height: 3).offset(y: -1.5).padding(.horizontal, 12)
+                }
+            }
+            .dropDestination(for: String.self) { items, _ in
+                guard let item = items.first, item.hasPrefix(topicDragPrefix) else { return false }
+                let topic = String(item.dropFirst(topicDragPrefix.count))
+                withAnimation(.snappy) { store.moveStudyTopic(subject: subject, topic: topic, before: before, undoManager: undoManager) }
+                return true
+            } isTargeted: { isTargeted = $0 }
     }
 }
 
