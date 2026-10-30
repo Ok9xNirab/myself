@@ -4,7 +4,38 @@ import SwiftUI
 /// and topics can link notes, which open in their own window.
 struct JobStudyView: View {
     var body: some View {
-        PageScroll { JobStudyContent() }
+        GeometryReader { geo in
+            if geo.size.width >= 820 {
+                // Side by side, the page itself doesn't scroll: the subjects and topics scroll inside their cards.
+                JobStudyContent()
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 18)
+                    .frame(maxWidth: 1140, maxHeight: .infinity, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .environment(\.pageWidth, geo.size.width)
+            } else {
+                PageScroll { JobStudyContent() }
+            }
+        }
+        .background(Palette.background)
+    }
+}
+
+/// Scrolls `content` when `enabled`, staying only as tall as the content (so a short list keeps its card short).
+private struct CardScroll<Content: View>: View {
+    var enabled: Bool
+    @ViewBuilder var content: Content
+    @State private var height: CGFloat = 0
+
+    var body: some View {
+        if enabled {
+            ScrollView {
+                content.onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+            }
+            .frame(maxHeight: height)
+        } else {
+            content
+        }
     }
 }
 
@@ -75,7 +106,9 @@ private struct JobStudyContent: View {
 
             Group {
                 if width >= 820 {
-                    VStack(spacing: 2) { subjectButtons(active: active) }
+                    CardScroll(enabled: true) {
+                        VStack(spacing: 2) { subjectButtons(active: active) }
+                    }
                 } else {
                     FlowLayout(spacing: 2, lineSpacing: 2) { subjectButtons(active: active) }
                 }
@@ -224,21 +257,25 @@ private struct SubjectChecklist: View {
             .padding(.bottom, 10)
             Divider().overlay(Palette.border)
 
-            // Lazy, so opening a subject with many topics builds only the rows on screen, not all of them at once.
-            LazyVStack(spacing: 0) {
-                ForEach(shown) { t in
-                    TopicRow(subject: subject.id, topic: t)
+            CardScroll(enabled: width >= 820) {
+                VStack(alignment: .leading, spacing: 0) {
+                    // Lazy, so opening a subject with many topics builds only the rows on screen, not all of them at once.
+                    LazyVStack(spacing: 0) {
+                        ForEach(shown) { t in
+                            TopicRow(subject: subject.id, topic: t)
+                        }
+                    }
+                    if shown.isEmpty {
+                        Text(emptyMessage).font(.system(size: 12)).foregroundStyle(Palette.ink3).padding(18)
+                    }
+                    if filter == .all {
+                        InlineAdder(placeholder: "Add topic…") { store.addStudyTopic(subject: subject.id, name: $0) }
+                            .padding(.leading, 18)
+                            .padding(.trailing, 12)
+                            .padding(.vertical, 8)
+                            .modifier(TopicDrop(subject: subject.id, before: nil))
+                    }
                 }
-            }
-            if shown.isEmpty {
-                Text(emptyMessage).font(.system(size: 12)).foregroundStyle(Palette.ink3).padding(18)
-            }
-            if filter == .all {
-                InlineAdder(placeholder: "Add topic…") { store.addStudyTopic(subject: subject.id, name: $0) }
-                    .padding(.leading, 18)
-                    .padding(.trailing, 12)
-                    .padding(.vertical, 8)
-                    .modifier(TopicDrop(subject: subject.id, before: nil))
             }
         }
         .cardBackground()
