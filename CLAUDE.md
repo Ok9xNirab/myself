@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Git
+
+Commit straight to the current branch (usually `main`). Don't create a new branch unless asked.
+
 ## What this is
 
 MySelf is a "personal OS" SwiftUI app: dashboard, TODOs, University (classes, syllabus, assignments, exams), Office Tasks, Job Study, Product Dev (Kanban), Workout, and Notes. The UI is a native port of a Claude Design HTML/React prototype (`MySelf.zip`; the macOS variant is `MySelf macOS.html` + `native-app.jsx` + `native.css`; Notes is `notes.jsx` + `notes-editor.jsx` + `notes.css`). When adding or changing screens, treat that prototype as the visual spec.
