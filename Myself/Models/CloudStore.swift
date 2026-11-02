@@ -3,12 +3,6 @@ import SwiftData
 import CoreData
 import CloudKit
 
-/// A record type the store keeps. `folder` is where the pre-CloudKit versions kept its JSON files (see `FolderImport`).
-protocol SyncRecord: Codable, Identifiable where ID == String {
-    static var folder: String { get }
-    var updatedAt: Date { get set }
-}
-
 /// Appearance and feature visibility, shared through iCloud key-value storage (Settings › iCloud › Also sync).
 struct SyncedSettings: Codable, Equatable {
     var appearance: [String: String]?
@@ -33,11 +27,6 @@ final class CloudStore {
     enum ImageState { case ready(URL), downloading, missing }
 
     static let containerID = "iCloud.com.quorrelapps.myself"
-    #if os(macOS)
-    static let appGroup = "CR9Y3LFYH4.com.quorrelapps.myself"
-    #else
-    static let appGroup = "group.com.quorrelapps.myself"
-    #endif
 
     private(set) var status: Status = .local
     private(set) var lastSynced: Date?
@@ -87,19 +76,8 @@ final class CloudStore {
 
     // MARK: Container
 
-    /// The store file: in the App Group container, so widgets can read it later. Builds not signed for the group
-    /// (unsigned development builds) can't write there and use the app's own Application Support instead.
-    static let storeURL: URL = {
-        let fm = FileManager.default
-        if let group = fm.containerURL(forSecurityApplicationGroupIdentifier: appGroup)?
-            .appending(path: "Library/Application Support", directoryHint: .isDirectory),
-           (try? fm.createDirectory(at: group, withIntermediateDirectories: true)) != nil {
-            return group.appending(path: "MySelf.store")
-        }
-        let local = URL.applicationSupportDirectory.appending(path: Bundle.main.bundleIdentifier ?? "MySelf", directoryHint: .isDirectory)
-        try? fm.createDirectory(at: local, withIntermediateDirectories: true)
-        return local.appending(path: "MySelf.store")
-    }()
+    /// The store file, in the App Group container so the widget extension reads the same data (`SharedStore`).
+    static var storeURL: URL { SharedStore.url }
 
     /// Whether this build carries the iCloud entitlement. Unsigned builds (`CODE_SIGNING_ALLOWED=NO`) don't, and
     /// touching CloudKit there would crash, so they run on the local store only.
@@ -266,7 +244,9 @@ final class CloudStore {
     private func save() {
         guard !batching, let context, context.hasChanges else { return }
         do {
+            let widgets = WidgetRefresh.affectsWidgets(context)
             try context.save()
+            if widgets { WidgetRefresh.schedule() }
         } catch {
             syncError = error.localizedDescription
             updateStatus()
@@ -359,6 +339,8 @@ final class CloudStore {
             MainActor.assumeIsolated { self?.scheduleReload() }
         })
         keyValueStore.synchronize()
+        // A widget ticked a task or logged a revision: read the store again.
+        WidgetRefresh.observeWidgetWrites { [weak self] in self?.scheduleReload(after: .milliseconds(100)) }
     }
 
     private func handle(_ event: NSPersistentCloudKitContainer.Event) {
@@ -375,7 +357,10 @@ final class CloudStore {
                     lastSynced = end
                     UserDefaults.standard.set(end.timeIntervalSince1970, forKey: PrefKey.lastSynced)
                 }
-                if event.type == .import { scheduleReload() }
+                if event.type == .import {
+                    scheduleReload()
+                    WidgetRefresh.schedule()
+                }
             }
         }
         updateStatus()

@@ -63,6 +63,11 @@ struct ContentView: View {
         .sheet(isPresented: $store.isQuickOpenPresented) {
             QuickOpenView()
         }
+        // Widget links (`myself://todos`, `myself://notes/new`, …) go to this window rather than a new one.
+        .onOpenURL { url in
+            if let link = DeepLink(url) { store.open(link) }
+        }
+        .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
         #if os(macOS)
         // The Settings window is its own scene; the store only signals that it should open.
         .onChange(of: store.isSettingsPresented) {

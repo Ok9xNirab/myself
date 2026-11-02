@@ -105,7 +105,7 @@ enum SampleData {
         func add(_ product: ID, _ status: KanbanStatus, _ title: String, desc: String = "", label: ID, _ priority: Priority, due: Int? = nil) {
             let order = Double(cards.filter { $0.productID == product && $0.status == status }.count)
             cards.append(KanbanCard(productID: product, status: status, title: title, desc: desc, labelIDs: [label],
-                                    priority: priority, due: due.map(Day.offset), order: order))
+                                    priority: priority, due: due.map { Day.offset($0) }, order: order))
         }
         add("p1", .backlog, "Stripe billing integration", desc: "Metered usage + free tier cap.", label: "pl1", .medium, due: 12)
         add("p1", .backlog, "Dark mode for the builder", label: "pl6", .low)

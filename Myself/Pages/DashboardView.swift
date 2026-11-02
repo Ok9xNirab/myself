@@ -3,32 +3,10 @@ import SwiftUI
 struct DashboardView: View {
     @Environment(AppStore.self) private var store
 
-    private struct FocusItem: Identifiable {
-        enum Kind { case todo, office, assignment }
-        let id: ID
-        let kind: Kind
-        let title: String
-        let due: Date?
-
-        var label: String { switch kind { case .todo: "Todo"; case .office: "Office"; case .assignment: "Assignment" } }
-        var color: Color { switch kind { case .todo: Palette.blue; case .office: .accentColor; case .assignment: Palette.red } }
-        var page: Page { switch kind { case .todo: .todos; case .office: .office; case .assignment: .university } }
-    }
-
     /// Due today or overdue (assignments: due tomorrow too).
     private var focus: [FocusItem] {
-        var items: [FocusItem] = []
-        items += store.todos.filter { !$0.done && (Day.fromToday($0.due) ?? 1) <= 0 }
-            .map { FocusItem(id: $0.id, kind: .todo, title: $0.title, due: $0.due) }
-        if store.isEnabled(.office) {
-            items += store.office.filter { !$0.done && (Day.fromToday($0.due) ?? 1) <= 0 }
-                .map { FocusItem(id: $0.id, kind: .office, title: $0.title, due: $0.due) }
-        }
-        if store.isEnabled(.university) {
-            items += store.university.assignments.filter { !$0.done && (Day.fromToday($0.due) ?? 2) <= 1 }
-                .map { FocusItem(id: $0.id, kind: .assignment, title: $0.title, due: $0.due) }
-        }
-        return items.sorted { (Day.fromToday($0.due) ?? 0) < (Day.fromToday($1.due) ?? 0) }
+        FocusItem.list(todos: store.todos, office: store.office, assignments: store.university.assignments,
+                       officeOn: store.isEnabled(.office), universityOn: store.isEnabled(.university))
     }
 
     private var classesToday: [UniClass] {
@@ -287,4 +265,8 @@ struct DashboardView: View {
 
 #Preview {
     DashboardView().environment(AppStore()).frame(width: 1000, height: 900)
+}
+
+private extension FocusItem {
+    var page: Page { switch kind { case .todo: .todos; case .office: .office; case .assignment: .university } }
 }

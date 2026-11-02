@@ -336,7 +336,7 @@ struct NoteTable: Equatable {
 
     /// A row's cells, trimmed and still escaped. Pipes split cells unless escaped (`\|`) or inside backticks; the
     /// outer pipes are optional.
-    static func cells(_ line: String) -> [String] {
+    nonisolated static func cells(_ line: String) -> [String] {
         var cells: [String] = []
         var cell = ""
         var code = false

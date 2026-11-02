@@ -17,6 +17,8 @@ import SwiftUI
                 .appPreferences(appearance: appearance, density: density)
         }
         .defaultSize(width: 1240, height: 820)
+        // Widget links open in the main window (a new one only if it was closed), never a note or image window.
+        .handlesExternalEvents(matching: ["*"])
         .commands {
             #if os(macOS)
             CommandGroup(replacing: .appInfo) {
@@ -54,6 +56,7 @@ import SwiftUI
             }
         }
         .defaultSize(width: 760, height: 680)
+        .handlesExternalEvents(matching: [])
 
         // An image from a note at full size, opened by clicking it or its zoom button.
         WindowGroup("Image", id: NoteImageViewer.windowID, for: String.self) { $name in
@@ -64,6 +67,7 @@ import SwiftUI
             }
         }
         .defaultSize(width: 900, height: 700)
+        .handlesExternalEvents(matching: [])
 
         Window("About \(AppInfo.name)", id: "about") {
             AboutView()
@@ -74,6 +78,7 @@ import SwiftUI
         .windowResizability(.contentSize)
         .restorationBehavior(.disabled)
         .defaultPosition(.center)
+        .handlesExternalEvents(matching: [])
 
         MenuBarExtra(AppInfo.name, image: "MenuBarIcon", isInserted: $showsMenuBarIcon) {
             MenuBarMenu()

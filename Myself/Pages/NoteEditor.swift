@@ -541,7 +541,7 @@ struct NoteEditor: View {
     /// Stores the first image file in `urls` and shows it in image block `id`. False if none was an image.
     @discardableResult
     fileprivate func setImage(_ id: ID, from urls: [URL]) -> Bool {
-        guard let file = urls.lazy.compactMap(NoteImages.read).first,
+        guard let file = urls.lazy.compactMap({ NoteImages.read($0) }).first,
               let name = store.addNoteImage(file.data, ext: file.ext) else { return false }
         update(id) { $0.image = name }
         return true

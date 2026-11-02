@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 /// note doesn't decode full-size photos again); the viewer loads the full image.
 enum NoteImages {
     /// Longest side of the editor's copy, in pixels: the page is at most 780 pt wide on a 2× display.
-    private static let previewPixels = 1800
+    nonisolated private static let previewPixels = 1800
     nonisolated(unsafe) private static let cache = NSCache<NSString, CGImage>()
 
     nonisolated static func preview(at url: URL) -> CGImage? {

@@ -29,6 +29,13 @@ enum Day {
 
     static func isToday(_ date: Date?) -> Bool { fromToday(date) == 0 }
 
+    /// Whole days from the day of `reference` to the day of `date`. Widgets work out future timeline entries with
+    /// it, where "today" is the entry's date rather than now.
+    static func between(_ reference: Date, _ date: Date?) -> Int? {
+        guard let date else { return nil }
+        return calendar.dateComponents([.day], from: calendar.startOfDay(for: reference), to: calendar.startOfDay(for: date)).day
+    }
+
     /// Next `count` dates (from today) that fall on any of `days`.
     static func sessions(on days: [Weekday], count: Int) -> [Date] {
         var out: [Date] = []

@@ -146,7 +146,7 @@ final class AppStore {
     private(set) var noteCategories: [NoteCategory] = []
     private(set) var notes: [Note] = [] {
         didSet {
-            let summaries = notes.map(NoteSummary.init)
+            let summaries = notes.map { NoteSummary($0) }
             if summaries != noteSummaries { noteSummaries = summaries }
         }
     }
@@ -185,10 +185,19 @@ final class AppStore {
     /// Features turned off in Settings. Their data is kept; they're only hidden.
     private(set) var disabledPages: Set<Page> = Set(
         (UserDefaults.standard.stringArray(forKey: "disabledFeatures") ?? []).compactMap(Page.init(rawValue:))
-    )
+    ) {
+        didSet { if disabledPages != oldValue { shareDisabledFeatures() } }
+    }
+
+    /// Copies Settings › Features into the App Group, where widgets of turned-off features read it.
+    private func shareDisabledFeatures() {
+        SharedStore.defaults.set(Page.allCases.filter { !isEnabled($0) }.map(\.rawValue).sorted(), forKey: SharedStore.disabledFeaturesKey)
+        WidgetRefresh.schedule()
+    }
 
     init() {
         loadSampleFeatures()
+        shareDisabledFeatures()
         sync.onChange = { [weak self] in self?.reloadSynced() }
         reloadSynced()
         importLocalFolderOnce()
@@ -284,6 +293,20 @@ final class AppStore {
         guard page != self.page, isEnabled(page) else { return }
         history = Array(history.prefix(historyIndex + 1)) + [page]
         historyIndex += 1
+    }
+
+    /// Follows a `myself://` link from a widget. A turned-off feature's link lands on the Dashboard.
+    func open(_ link: DeepLink) {
+        switch link {
+        case .dashboard: go(.dashboard)
+        case .todos: go(.todos)
+        case .newTodo: newTodo()
+        case .office: go(isEnabled(.office) ? .office : .dashboard)
+        case .university: go(isEnabled(.university) ? .university : .dashboard)
+        case .jobStudy: go(isEnabled(.jobStudy) ? .jobStudy : .dashboard)
+        case .notes: go(isEnabled(.notes) ? .notes : .dashboard)
+        case .newNote: if isEnabled(.notes) { newNote() } else { newTodo() }
+        }
     }
 
     func back() { if canGoBack { historyIndex -= 1 } }
@@ -948,7 +971,7 @@ final class AppStore {
         (cards(of: product, in: status).last?.order ?? -1) + 1
     }
 
-    private static func cardOrder(_ a: KanbanCard, _ b: KanbanCard) -> Bool { (a.order, a.createdAt) < (b.order, b.createdAt) }
+    nonisolated private static func cardOrder(_ a: KanbanCard, _ b: KanbanCard) -> Bool { (a.order, a.createdAt) < (b.order, b.createdAt) }
 
     // MARK: Sync
 
