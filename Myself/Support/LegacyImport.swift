@@ -3,7 +3,8 @@ import AppKit
 
 /// MySelf 1.3.1 and earlier used the bundle ID `com.ok9xnirab.myself`, so their data and settings sit in another
 /// sandbox container that this app can't open by itself. The user picks that container in an open panel, which
-/// grants access, and `AppStore.importLegacyData` copies everything across. The old container is left untouched.
+/// grants access, and `AppStore.importLegacyData` reads its records (`FolderImport`) and preferences. The old container
+/// is left untouched.
 enum LegacyImport {
     static let oldBundleID = "com.ok9xnirab.myself"
 
@@ -52,15 +53,18 @@ enum LegacyImport {
         return (data, preferences)
     }
 
+    /// The old app's saved iCloud Drive folder; present when it synced through one.
+    static let folderBookmarkKey = "syncFolderBookmark"
+
     /// Copies the old app's own preferences into this app's UserDefaults. System keys (window frames, AppKit state)
-    /// are skipped. When this Mac already has a working sync folder, its sync settings are kept.
-    static func apply(_ preferences: [String: Any], keepingSyncFolder: Bool) {
+    /// and the old folder-sync state are skipped: sync is CloudKit now, and stays as this device has it.
+    static func apply(_ preferences: [String: Any]) {
         let systemPrefixes = ["NS", "Apple", "com.apple.", "WebKit", "_"]
-        let syncKeys = [SyncEngine.bookmarkKey, PrefKey.iCloudSync, PrefKey.lastSynced]
+        let skipped = [folderBookmarkKey, PrefKey.iCloudSync, PrefKey.lastSynced, "settingsSyncedAt",
+                       PrefKey.importedLocalFolder, PrefKey.legacyImportOffered]
         let defaults = UserDefaults.standard
         for (key, value) in preferences {
-            if systemPrefixes.contains(where: key.hasPrefix) { continue }
-            if keepingSyncFolder, syncKeys.contains(key) { continue }
+            if systemPrefixes.contains(where: key.hasPrefix) || skipped.contains(key) { continue }
             defaults.set(value, forKey: key)
         }
         if let raw = preferences[SearchShortcut.defaultsKey] as? String {

@@ -8,9 +8,6 @@ struct ContentView: View {
     #endif
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(PrefKey.sidebarStyle) private var sidebarStyle = SidebarStyle.floating
-    /// Shown once per launch when the saved sync folder no longer opens; the sidebar status stays red until it's fixed.
-    @State private var showsLostFolder = false
-    @State private var warnedLostFolder = false
     /// Asked once on a fresh install: import from MySelf 1.3.1 and earlier, which used another bundle ID.
     @State private var showsLegacyImport = false
     @State private var legacyImportError: String?
@@ -42,9 +39,6 @@ struct ContentView: View {
             #if os(macOS)
             if store.shouldOfferLegacyImport { showsLegacyImport = true }
             #endif
-            guard store.sync.lostFolder != nil, !warnedLostFolder else { return }
-            warnedLostFolder = true
-            showsLostFolder = true
         }
         #if os(macOS)
         .alert("Used MySelf before?", isPresented: $showsLegacyImport) {
@@ -62,12 +56,6 @@ struct ContentView: View {
             Text(legacyImportError ?? "")
         }
         #endif
-        .alert("Choose your sync folder again", isPresented: $showsLostFolder) {
-            Button("Choose Folder\u{2026}") { store.openSettings(.iCloud) }
-            Button("Later", role: .cancel) {}
-        } message: {
-            Text("MySelf can\u{2019}t open \(store.sync.lostFolder ?? "the sync folder") any more, which can happen after installing an update. Until you choose it again in Settings \u{203A} iCloud, changes are saved on this Mac only and won\u{2019}t sync.")
-        }
         // Pick up changes made on other Macs while the app was in the background.
         .onChange(of: scenePhase) {
             if scenePhase == .active { store.reloadSynced() } else { store.saveTypedText() }
@@ -210,13 +198,13 @@ private struct Sidebar: View {
         .overlay(alignment: .top) { Divider() }
     }
 
-    private func detail(_ sync: SyncEngine, now: Date) -> String {
+    private func detail(_ sync: CloudStore, now: Date) -> String {
         switch sync.status {
         case .local: return "Turn on in Settings"
-        case .needsFolder: return "Click to set up sync"
+        case .noAccount: return "Sign in to sync"
         case .failed: return "Click for details"
         case .syncing, .upToDate:
-            guard let date = sync.lastSynced else { return "Waiting for iCloud Drive" }
+            guard let date = sync.lastSynced else { return "Waiting for iCloud" }
             if now.timeIntervalSince(date) < 45 { return "Updated just now" }
             return "Updated " + RelativeDateTimeFormatter().localizedString(for: date, relativeTo: now)
         }

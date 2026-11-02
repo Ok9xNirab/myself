@@ -14,6 +14,7 @@ enum PrefKey {
     static let lastUpdateCheck = "lastUpdateCheck" // TimeInterval since 1970
     static let skippedVersion = "skippedVersion"  // a release version the automatic check won't offer again
     static let legacyImportOffered = "legacyImportOffered" // asked once whether to import from com.ok9xnirab.myself
+    static let importedLocalFolder = "importedLocalFolder" // the pre-CloudKit local folder was read into the store
 }
 
 enum SidebarStyle: String, CaseIterable, Identifiable {

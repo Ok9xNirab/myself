@@ -122,7 +122,7 @@ private struct GeneralSettings: View {
         .confirmationDialog("Reset sample data?", isPresented: $confirmingReset) {
             Button("Reset", role: .destructive, action: store.loadSampleData)
         } message: {
-            Text("Your todos, labels, office tasks, notes, classes, boards and workouts will be replaced with the original sample content. Todos, labels, office tasks, notes and University are replaced on every Mac that syncs this folder.")
+            Text("Your todos, labels, office tasks, notes, classes, boards and workouts will be replaced with the original sample content. Synced data is replaced on all your devices.")
         }
         .alert("Couldn\u{2019}t import", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) {
             Button("OK", role: .cancel) {}
@@ -177,13 +177,13 @@ private struct FeatureSettings: View {
 
 // MARK: iCloud
 
-/// Sync goes through a folder the user picks in iCloud Drive (see `SyncEngine`), so it needs no iCloud entitlement.
+/// Sync goes through the user's private CloudKit database (see `CloudStore`); settings through iCloud key-value storage.
 private struct ICloudSettings: View {
     @Environment(AppStore.self) private var store
     @AppStorage(PrefKey.syncFeatures) private var syncFeatures = true
     @AppStorage(PrefKey.syncAppearance) private var syncAppearance = true
     @State private var choosingFolder = false
-    @State private var folderError: String?
+    @State private var importMessage: (title: String, text: String)?
 
     var body: some View {
         let sync = store.sync
@@ -198,14 +198,14 @@ private struct ICloudSettings: View {
                             .background(Palette.blue.gradient, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                         VStack(alignment: .leading, spacing: 1) {
                             Text("Sync with iCloud")
-                            Text("Keeps your Macs in step through a folder in iCloud Drive.").font(.system(size: 11)).foregroundStyle(.secondary)
+                            Text("Keeps your devices in step through your iCloud account.").font(.system(size: 11)).foregroundStyle(.secondary)
                         }
                     }
                 }
                 .toggleStyle(.switch)
 
                 LabeledContent {
-                    Button("Sync Now", action: store.reloadSynced).disabled(!sync.usesCloud)
+                    EmptyView()
                 } label: {
                     HStack(spacing: 6) {
                         Circle().fill(sync.status.color).frame(width: 7, height: 7)
@@ -218,34 +218,9 @@ private struct ICloudSettings: View {
             }
 
             Section {
-                LabeledContent {
-                    Button(sync.cloudFolder == nil ? "Choose…" : "Change…") { choosingFolder = true }
-                } label: {
-                    Text("Sync folder")
-                    if let name = sync.cloudFolderDisplayName {
-                        Text(name)
-                    } else if let lost = sync.lostFolder {
-                        Text("Can\u{2019}t open \(lost). Choose it again to resume syncing.").foregroundStyle(Palette.red)
-                    } else {
-                        Text("Pick or create a folder in iCloud Drive, such as iCloud Drive › MySelf.")
-                    }
-                }
-                if sync.cloudFolder != nil, !sync.cloudFolderIsInICloud {
-                    Label("This folder isn\u{2019}t in iCloud Drive, so it won\u{2019}t sync between Macs.", systemImage: "exclamationmark.triangle.fill")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Palette.amber)
-                }
-            } footer: {
-                Text("Choose the same folder on each Mac. Your todos and notes are copied into it, and changes made on any Mac appear on the others within a minute.")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .disabled(!sync.isCloudEnabled)
-
-            Section {
                 Toggle(isOn: $syncFeatures) {
                     Text("Feature visibility")
-                    Text("Use the same features on all your Macs.")
+                    Text("Use the same features on all your devices.")
                 }
                 Toggle(isOn: $syncAppearance) {
                     Text("Appearance")
@@ -254,51 +229,74 @@ private struct ICloudSettings: View {
             } header: {
                 Text("Also sync")
             } footer: {
-                Text("Todos, office tasks, notes, University, Job Study and Product Dev sync when iCloud is on. Workouts stay on this Mac for now.")
+                Text("Todos, office tasks, notes, University, Job Study and Product Dev sync when iCloud is on. Workouts stay on this device for now.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .toggleStyle(.switch)
             .disabled(!sync.usesCloud)
+
+            Section {
+                LabeledContent {
+                    Button("Import\u{2026}") { choosingFolder = true }
+                } label: {
+                    Text("Import a sync folder")
+                    Text("Earlier versions synced through a folder in iCloud Drive, such as iCloud Drive \u{203A} MySelf. Choose it to bring its data in; newer changes here are kept.")
+                }
+            }
         }
         .formStyle(.grouped)
         .fixedSize(horizontal: false, vertical: true)
         .fileImporter(isPresented: $choosingFolder, allowedContentTypes: [.folder]) { result in
             do {
-                try store.useICloudFolder(result.get())
+                let imported = try store.importFolder(result.get())
+                var text = imported.imported == 1 ? "1 item was imported." : "\(imported.imported) items were imported."
+                if imported.pending > 0 {
+                    text += " \(imported.pending) files are still downloading from iCloud Drive; import the folder again in a minute to add them."
+                }
+                importMessage = ("Import finished", text)
             } catch {
-                folderError = error.localizedDescription
+                importMessage = ("Couldn\u{2019}t import that folder", error.localizedDescription)
             }
         }
         #if os(macOS)
-        .fileDialogDefaultDirectory(sync.cloudFolder ?? SyncEngine.iCloudDriveURL)
-        .fileDialogMessage("Choose a folder in iCloud Drive for MySelf to sync through. Pick the same folder on each Mac.")
-        .fileDialogConfirmationLabel("Use Folder")
+        .fileDialogDefaultDirectory(ICloudSettings.iCloudDriveURL)
+        .fileDialogMessage("Choose the folder earlier versions of MySelf synced through.")
+        .fileDialogConfirmationLabel("Import")
         #endif
-        .alert("Couldn\u{2019}t use that folder", isPresented: Binding(get: { folderError != nil }, set: { if !$0 { folderError = nil } })) {
+        .alert(importMessage?.title ?? "", isPresented: Binding(get: { importMessage != nil }, set: { if !$0 { importMessage = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(folderError ?? "")
+            Text(importMessage?.text ?? "")
         }
     }
 
-    private func statusTitle(_ status: SyncEngine.Status) -> String {
+    #if os(macOS)
+    /// The user's iCloud Drive folder, the import panel's starting point.
+    private static var iCloudDriveURL: URL? {
+        guard let home = getpwuid(getuid())?.pointee.pw_dir else { return nil }
+        let url = URL(filePath: String(cString: home)).appending(path: "Library/Mobile Documents/com~apple~CloudDocs", directoryHint: .isDirectory)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+    #endif
+
+    private func statusTitle(_ status: CloudStore.Status) -> String {
         switch status {
         case .local: "Sync is off"
-        case .needsFolder: "No sync folder chosen"
+        case .noAccount: "Not signed in to iCloud"
         case .syncing: "Syncing\u{2026}"
         case .upToDate: "Up to date"
         case .failed: "Sync problem"
         }
     }
 
-    private func statusDetail(_ sync: SyncEngine, now: Date) -> String {
+    private func statusDetail(_ sync: CloudStore, now: Date) -> String {
         switch sync.status {
-        case .local: return "Data stays on this Mac."
-        case .needsFolder: return "Todos and notes are saved on this Mac until you choose a folder."
+        case .local: return "Data stays on this device."
+        case .noAccount: return "Sign in to iCloud in System Settings to sync. Until then, changes are saved on this device."
         case .failed(let message): return message
         case .syncing, .upToDate:
-            guard let date = sync.lastSynced else { return "Waiting for iCloud Drive" }
+            guard let date = sync.lastSynced else { return "Waiting for iCloud" }
             if now.timeIntervalSince(date) < 45 { return "Last synced just now" }
             return "Last synced " + RelativeDateTimeFormatter().localizedString(for: date, relativeTo: now)
         }

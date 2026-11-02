@@ -4,7 +4,7 @@
 
 # MySelf: a personal productivity app for macOS
 
-**One native Mac app for your to-dos, notes, university classes, office tasks, interview prep and product boards. Built with SwiftUI and synced over iCloud Drive.**
+**One native Mac app for your to-dos, notes, university classes, office tasks, interview prep and product boards. Built with SwiftUI and SwiftData, synced through iCloud.**
 
 [![macOS 26+](https://img.shields.io/badge/macOS-26%2B-000000?logo=apple&logoColor=white)](#requirements)
 [![Swift](https://img.shields.io/badge/Swift-5-F05138?logo=swift&logoColor=white)](https://www.swift.org)
@@ -24,8 +24,8 @@
 Most people track their life across five apps: a todo list, a notes app, a Kanban board, a study tracker and a calendar for classes. **MySelf puts all of them in one fast, native macOS window**, with a dashboard that shows what's due today across everything.
 
 - 🖥️ **Native Mac app**: SwiftUI with a real sidebar, toolbar, menus, multiple windows and keyboard shortcuts. Not a web wrapper.
-- 🔒 **Your data stays yours**: no account, no server, no tracking. Every item is a small JSON file in a folder you choose.
-- ☁️ **Free iCloud sync**: syncs between your Macs through iCloud Drive.
+- 🔒 **Your data stays yours**: no sign-up, no MySelf server, no tracking. Everything lives on your devices and in your own iCloud account.
+- ☁️ **Free iCloud sync**: syncs between your devices through your iCloud account (CloudKit).
 - ⌨️ **Keyboard-first**: Quick Open (<kbd>⌘K</kbd>), a system-wide search shortcut (<kbd>⌥⌘K</kbd>) and a shortcut for every page.
 - 🧩 **Only what you use**: switch off any section you don't need and it disappears everywhere.
 
@@ -90,19 +90,16 @@ The same command fixes the *"Myself is damaged and can't be opened"* message.
 
 ### Updating and uninstalling
 
-- **Update**: MySelf checks GitHub for a new release once a day (Settings › General › Updates, or **MySelf › Check for Updates…**) and links the DMG. Quit MySelf, drag the new version from the DMG into Applications and replace the old one. You may need to allow it once more. If MySelf then says it can't open your sync folder, choose the same folder again in Settings › iCloud.
-- **Uninstall**: move `Myself.app` to the Trash. To also delete its local data, run `rm -rf ~/Library/Containers/com.quorrelapps.myself` (and `com.ok9xnirab.myself` if you used version 1.3.1 or earlier). Anything in your iCloud sync folder stays there until you delete it.
+- **Update**: MySelf checks GitHub for a new release once a day (Settings › General › Updates, or **MySelf › Check for Updates…**) and links the DMG. Quit MySelf, drag the new version from the DMG into Applications and replace the old one. You may need to allow it once more.
+- **Uninstall**: move `Myself.app` to the Trash. To also delete its local data, run `rm -rf ~/Library/Containers/com.quorrelapps.myself` (and `com.ok9xnirab.myself` if you used version 1.3.1 or earlier). Synced data stays in your iCloud account until you delete it in System Settings › Apple Account › iCloud › Manage storage.
 
 ## iCloud sync
 
-MySelf syncs through **a folder in iCloud Drive** instead of CloudKit, so it works without an Apple developer account.
+MySelf keeps its data in a SwiftData store on each device and syncs it through **your private iCloud database** (CloudKit), so every device signed in to the same Apple Account sees the same todos, notes, classes and boards. It's on by default; turn it off in **Settings › iCloud**. Appearance and feature visibility can sync too.
 
-1. Open **Settings › iCloud** and choose or create a folder, such as *iCloud Drive › MySelf*.
-2. Pick the same folder on each of your Macs.
+There's nothing to set up: no folder to pick. If the same item was changed on two devices, the newer change wins. Your data counts towards your own iCloud storage, and nobody else, including the developer, can read it.
 
-Each todo, label, office task, note, class, assignment, exam, study subject, board and card is saved as its own JSON file, and iCloud Drive copies them between Macs. If the same item was changed on two Macs, the newer change wins. With sync off, the same files live in the app's local Application Support folder.
-
-Sync works between Macs only. The iPhone and iPad builds keep their data on the device.
+**Coming from an earlier version?** Versions up to 1.3.1 synced through a folder in iCloud Drive. Open **Settings › iCloud › Import a sync folder** and choose that folder (for example *iCloud Drive › MySelf*) to bring its data in. Data that stayed on the Mac is imported automatically, and **Settings › General › Import from an earlier MySelf** reads data from the old `com.ok9xnirab.myself` app. The old files are never changed.
 
 > [!NOTE]
 > MySelf is in active development. TODOs, Office Tasks, Notes, University, Job Study and Product Dev are saved and synced. Workout still uses sample data and doesn't save yet.
@@ -133,7 +130,7 @@ If `xcodebuild` says it needs Xcode while only the Command Line Tools are select
 Myself/
 ├── MyApp.swift          App entry point, scenes, menu commands
 ├── ContentView.swift    Sidebar, toolbar and page switching
-├── Models/              AppStore (state and mutations), models, sync engine
+├── Models/              AppStore (state and mutations), models, SwiftData schema, CloudKit sync
 ├── Pages/               One view per section, plus Quick Open and Settings
 ├── Components/          Shared design-system views (cards, badges, progress…)
 ├── Support/             Dates, theme palette, preferences, markdown & code rendering

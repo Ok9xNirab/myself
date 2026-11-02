@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Privacy Policy — MySelf for Mac</title>
-<meta name="description" content="MySelf collects no data. Everything you add stays in files on your Mac, or in an iCloud Drive folder you choose.">
+<meta name="description" content="MySelf collects no data. Everything you add stays on your devices and in your own iCloud account.">
 <link rel="icon" href="icon.png">
 <link rel="stylesheet" href="landing.css">
 <style>
@@ -29,16 +29,17 @@
 <p><strong>MySelf doesn't collect any data.</strong> There's no account, no analytics, no advertising and no MySelf server. Nothing you add to the app is sent to us or to anyone else.</p>
 
 <h2>Where your data lives</h2>
-<p>Your to-dos, labels, office tasks, notes, images, University, Job Study and Product Dev data are saved as files on your Mac, inside the app's own storage.</p>
-<p>If you turn on sync in Settings › iCloud, the app saves them instead in a folder you choose, usually in your iCloud Drive. Apple's iCloud Drive then copies that folder between your Macs under your Apple Account, as it does for any of your files. MySelf has no access to your iCloud account beyond that folder, and Apple's own <a href="https://www.apple.com/legal/privacy/">privacy policy</a> covers iCloud Drive.</p>
-<p>Settings such as appearance and which features are shown are stored on your Mac, and copied to that folder only when you choose to sync them.</p>
+<p>Your to-dos, labels, office tasks, notes, images, University, Job Study and Product Dev data are kept in a database on your device, inside the app's own storage.</p>
+<p>When Sync with iCloud is on (Settings › iCloud), Apple's CloudKit copies that database into MySelf's area of your <strong>private iCloud database</strong>, so your other devices signed in to the same Apple Account get the same data. It is stored by Apple under your Apple Account, counts towards your iCloud storage, and can't be read by us or anyone else. Apple's <a href="https://www.apple.com/legal/privacy/">privacy policy</a> covers iCloud.</p>
+<p>Appearance and which features are shown are stored on your device and, if you choose to sync them, in your iCloud account's key-value storage.</p>
+<p>Versions up to 1.3.1 synced through a folder you chose in iCloud Drive instead. If you import that folder, its data is read into the app's database; the folder itself isn't changed.</p>
 
 <h2>Network requests</h2>
-<p>The Mac App Store version of MySelf makes no network requests. The version downloaded from GitHub checks once a day whether a newer release exists by loading the project's public GitHub releases page. That request carries no personal data, and you can turn it off in Settings › General.</p>
+<p>Apart from iCloud sync, which goes to Apple, the Mac App Store version of MySelf makes no network requests. The version downloaded from GitHub checks once a day whether a newer release exists by loading the project's public GitHub releases page. That request carries no personal data, and you can turn it off in Settings › General.</p>
 <p>When you open a link you saved, it opens in your web browser, which follows its own privacy policy.</p>
 
 <h2>Deleting your data</h2>
-<p>Delete any item in the app, or delete the app and its data together. Anything in your sync folder stays there until you delete the folder.</p>
+<p>Delete any item in the app and it's removed from all your devices and from iCloud. To remove everything MySelf keeps in iCloud, open System Settings › Apple Account › iCloud › Manage storage and delete MySelf's data.</p>
 
 <h2>Children</h2>
 <p>MySelf collects no information from anyone, including children.</p>

@@ -127,7 +127,7 @@ enum UniversityEditor: Identifiable {
     }
 }
 
-/// App state. TODOs, labels, office tasks, notes, University and Job Study are persisted and synced through `SyncEngine`; the other features are still
+/// App state. TODOs, labels, office tasks, notes, University and Job Study are persisted and synced through `CloudStore`; the other features are still
 /// in-memory sample content. Feature visibility is stored in UserDefaults.
 @Observable
 final class AppStore {
@@ -170,8 +170,8 @@ final class AppStore {
     var selectedProduct: ID?
 
 
-    let sync = SyncEngine()
-    /// Last appearance/feature snapshot pushed to or pulled from `settings.json`.
+    let sync = CloudStore()
+    /// Last appearance/feature snapshot pushed to or pulled from iCloud key-value storage.
     @ObservationIgnored private var syncedSettings: SyncedSettings?
     @ObservationIgnored private var applyingRemoteSettings = false
     @ObservationIgnored private var defaultsObserver: NSObjectProtocol?
@@ -191,17 +191,18 @@ final class AppStore {
         loadSampleFeatures()
         sync.onChange = { [weak self] in self?.reloadSynced() }
         reloadSynced()
+        importLocalFolderOnce()
         #if os(macOS)
         terminateObserver = NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.saveTypedText() }
         }
         #endif
         // Fresh folder: create the default labels. Their fixed IDs stop two Macs from seeding duplicates.
-        if labels.isEmpty, !sync.hasFiles(TaskLabel.self) {
+        if labels.isEmpty, !sync.hasRecords(TaskLabel.self) {
             for label in SampleData.labels { sync.save(label, onlyIfNewer: true) }
             reloadSynced()
         }
-        if noteCategories.isEmpty, !sync.hasFiles(NoteCategory.self) {
+        if noteCategories.isEmpty, !sync.hasRecords(NoteCategory.self) {
             for category in SampleData.noteCategories { sync.save(category, onlyIfNewer: true) }
             reloadSynced()
         }
@@ -218,8 +219,13 @@ final class AppStore {
         }
     }
 
-    /// Settings › Reset: replaces todos, labels, office tasks, notes, University, Job Study and Product Dev (in the sync folder too) and every other feature with the samples.
+    /// Settings › Reset: replaces todos, labels, office tasks, notes, University, Job Study and Product Dev (in iCloud too) and every other feature with the samples.
     func loadSampleData() {
+        sync.batch(replaceWithSamples)
+        reloadSynced()
+    }
+
+    private func replaceWithSamples() {
         for todo in todos { sync.delete(Todo.self, id: todo.id) }
         allLabels = SampleData.labels + SampleData.productLabels
         todos = SampleData.todos()
@@ -339,7 +345,7 @@ final class AppStore {
         editingTodo = Todo(title: "")
     }
 
-    /// Adds or updates a todo and writes it to the sync folder.
+    /// Adds or updates a todo and saves it.
     func saveTodo(_ todo: Todo, undoManager: UndoManager? = nil) {
         var todo = todo
         todo.updatedAt = .now
@@ -463,7 +469,7 @@ final class AppStore {
         return note
     }
 
-    /// Edits a note's content. Memory updates straight away; the file is written once typing pauses.
+    /// Edits a note's content. Memory updates straight away; the store saves once typing pauses.
     /// Returns the data of image files the edit deleted, for an undo.
     @discardableResult
     func editNote(_ id: ID, _ edit: (inout Note) -> Void) -> [String: Data] {
@@ -720,8 +726,8 @@ final class AppStore {
         }
     }
 
-    /// Adds or replaces a record in one of the synced lists (office tasks, University, Product Dev) and writes its file.
-    private func put<T: SyncRecord & Equatable>(_ record: T, in list: ReferenceWritableKeyPath<AppStore, [T]>, undoManager: UndoManager?, action: String) {
+    /// Adds or replaces a record in one of the synced lists (office tasks, University, Product Dev) and saves it.
+    private func put<T: CloudBacked & Equatable>(_ record: T, in list: ReferenceWritableKeyPath<AppStore, [T]>, undoManager: UndoManager?, action: String) {
         var record = record
         record.updatedAt = .now
         let old = self[keyPath: list].first { $0.id == record.id }
@@ -734,7 +740,7 @@ final class AppStore {
         undoManager.setActionName(action)
     }
 
-    private func remove<T: SyncRecord & Equatable>(_ id: ID, from list: ReferenceWritableKeyPath<AppStore, [T]>, undoManager: UndoManager?, action: String) {
+    private func remove<T: CloudBacked & Equatable>(_ id: ID, from list: ReferenceWritableKeyPath<AppStore, [T]>, undoManager: UndoManager?, action: String) {
         guard let record = self[keyPath: list].first(where: { $0.id == id }) else { return }
         self[keyPath: list].removeAll { $0.id == id }
         sync.delete(T.self, id: id)
@@ -742,7 +748,7 @@ final class AppStore {
         undoManager?.setActionName(action)
     }
 
-    /// Edits the University notes. Memory updates straight away; the file is written once typing pauses.
+    /// Edits the University notes. Memory updates straight away; the store saves once typing pauses.
     func editUniversityNotes(_ text: String) {
         guard text != universityNotes.text else { return }
         universityNotes.text = text
@@ -921,7 +927,7 @@ final class AppStore {
         remove(id, from: \.cards, undoManager: undoManager, action: "Delete Card")
     }
 
-    /// Moves a card to a column, just above `before` or at the bottom when that's nil. Only the moved card's file changes.
+    /// Moves a card to a column, just above `before` or at the bottom when that's nil. Only the moved card is saved.
     func moveCard(_ id: ID, to status: KanbanStatus, before: ID? = nil, undoManager: UndoManager? = nil) {
         guard var card = cards.first(where: { $0.id == id }), before != id else { return }
         let column = cards(of: card.productID, in: status).filter { $0.id != id }
@@ -946,7 +952,7 @@ final class AppStore {
 
     // MARK: Sync
 
-    /// Re-reads todos, labels, office tasks, notes, University, Job Study and Product Dev from the sync folder and pulls shared settings.
+    /// Re-reads todos, labels, office tasks, notes, University, Job Study and Product Dev from the store and pulls shared settings.
     func reloadSynced() {
         sync.scan {
             let todos = sync.load(Todo.self, keeping: todos).sorted { $0.createdAt < $1.createdAt }
@@ -988,18 +994,37 @@ final class AppStore {
     }
 
     func setICloudSync(_ on: Bool) {
-        carryData { sync.setCloudEnabled(on) }
+        saveTypedText()
+        sync.setCloudEnabled(on)
+        syncedSettings = nil
+        reloadSynced()
     }
 
-    func useICloudFolder(_ url: URL) throws {
-        try carryData { try sync.useCloudFolder(url) }
+    /// Imports the pre-CloudKit local folder (`Application Support/<bundle id>/`) the first time this version runs.
+    private func importLocalFolderOnce() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: PrefKey.importedLocalFolder) else { return }
+        defaults.set(true, forKey: PrefKey.importedLocalFolder)
+        guard FolderImport.isDataFolder(FolderImport.localFolder) else { return }
+        if FolderImport.run(from: FolderImport.localFolder, into: sync).imported > 0 { reloadSynced() }
+    }
+
+    /// Settings › iCloud › Import: brings in a folder the earlier versions synced through. Newer records already
+    /// here are kept.
+    func importFolder(_ url: URL) throws -> FolderImport.Result {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard FolderImport.isDataFolder(url) else { throw FolderImportError.notDataFolder }
+        saveTypedText()
+        let result = FolderImport.run(from: url, into: sync)
+        reloadSynced()
+        return result
     }
 
     #if os(macOS)
     /// True on what looks like a fresh install that hasn't been asked yet about importing from the old bundle ID.
     var shouldOfferLegacyImport: Bool {
         !UserDefaults.standard.bool(forKey: PrefKey.legacyImportOffered)
-            && sync.cloudFolder == nil && sync.lostFolder == nil
             && todos.isEmpty && office.isEmpty && notes.isEmpty && jobStudy.isEmpty && products.isEmpty
             && university.classes.isEmpty && university.assignments.isEmpty
     }
@@ -1009,70 +1034,41 @@ final class AppStore {
     }
 
     /// Asks for the old app's container and imports from it. Returns an error message, or nil when it worked or was
-    /// cancelled. Opens Settings › iCloud afterwards if the old sync folder has to be chosen again.
+    /// cancelled. Opens Settings › iCloud afterwards when the old app synced through an iCloud Drive folder, which
+    /// has to be imported from there.
     func runLegacyImport() -> String? {
         guard let picked = LegacyImport.choose() else { return nil }
         do {
-            try importLegacyData(from: picked)
+            if try importLegacyData(from: picked) { openSettings(.iCloud) }
         } catch {
             return error.localizedDescription
         }
-        if sync.lostFolder != nil { openSettings(.iCloud) }
         return nil
     }
 
     /// Brings over records and settings from MySelf 1.3.1 and earlier (bundle ID `com.ok9xnirab.myself`), keeping
-    /// any file this install already has.
-    func importLegacyData(from picked: URL) throws {
+    /// newer records already here. Returns true if that app synced through an iCloud Drive folder.
+    @discardableResult
+    func importLegacyData(from picked: URL) throws -> Bool {
         let scoped = picked.startAccessingSecurityScopedResource()
         defer { if scoped { picked.stopAccessingSecurityScopedResource() } }
         let source = LegacyImport.locate(in: picked)
         guard source.data != nil || source.preferences != nil else { throw LegacyImport.Failure.notFound }
-        saveUnsavedNotes()
-        saveUniversityNotes()
-        if let data = source.data { sync.importLocalFiles(from: data) }
-        if let preferences = source.preferences {
-            LegacyImport.apply(preferences, keepingSyncFolder: sync.cloudFolder != nil)
-        }
+        saveTypedText()
+        if let data = source.data { FolderImport.run(from: data, into: sync) }
+        if let preferences = source.preferences { LegacyImport.apply(preferences) }
         UserDefaults.standard.set(true, forKey: PrefKey.legacyImportOffered)
         disabledPages = Set((UserDefaults.standard.stringArray(forKey: "disabledFeatures") ?? []).compactMap(Page.init(rawValue:)))
-        sync.reloadConfiguration()
         syncedSettings = nil
         reloadSynced()
+        return source.preferences?[LegacyImport.folderBookmarkKey] != nil
     }
     #endif
-
-    /// Switches the sync folder and copies over what's in memory, without overwriting newer files already there.
-    private func carryData(_ change: () throws -> Void) rethrows {
-        saveUnsavedNotes()
-        saveUniversityNotes()
-        let (todos, labels, office, categories, notes) = (todos, allLabels, office, noteCategories, notes)
-        let (u, uniNotes, jobStudy) = (university, universityNotes, jobStudy)
-        let (products, cards) = (products, cards)
-        let oldRoot = sync.root
-        try change()
-        sync.copyImages(from: oldRoot)
-        for r in products { sync.save(r, onlyIfNewer: true) }
-        for r in cards { sync.save(r, onlyIfNewer: true) }
-        for r in jobStudy { sync.save(r, onlyIfNewer: true) }
-        for r in u.classes { sync.save(r, onlyIfNewer: true) }
-        for r in u.syllabus { sync.save(r, onlyIfNewer: true) }
-        for r in u.assignments { sync.save(r, onlyIfNewer: true) }
-        for r in u.exams { sync.save(r, onlyIfNewer: true) }
-        if uniNotes.updatedAt > .distantPast { sync.save(uniNotes, onlyIfNewer: true) }
-        for label in labels { sync.save(label, onlyIfNewer: true) }
-        for todo in todos { sync.save(todo, onlyIfNewer: true) }
-        for task in office { sync.save(task, onlyIfNewer: true) }
-        for category in categories { sync.save(category, onlyIfNewer: true) }
-        for note in notes { sync.save(note, onlyIfNewer: true) }
-        syncedSettings = nil
-        reloadSynced()
-    }
 
     private static let appearanceKeys = [PrefKey.appearance, PrefKey.sidebarStyle, PrefKey.rowDensity]
     private static let settingsSyncedAtKey = "settingsSyncedAt"
 
-    /// This Mac's share of `settings.json`: only the groups turned on under Settings › iCloud › Also sync.
+    /// This Mac's share of the synced settings: only the groups turned on under Settings › iCloud › Also sync.
     private func localSettings() -> SyncedSettings {
         let defaults = UserDefaults.standard
         var settings = SyncedSettings()
@@ -1085,7 +1081,7 @@ final class AppStore {
         return settings
     }
 
-    /// Writes local appearance/feature changes to `settings.json`.
+    /// Writes local appearance/feature changes to iCloud key-value storage.
     private func pushSettings() {
         guard sync.usesCloud, !applyingRemoteSettings else { return }
         let local = localSettings()
@@ -1102,7 +1098,7 @@ final class AppStore {
         UserDefaults.standard.set(out.updatedAt.timeIntervalSince1970, forKey: Self.settingsSyncedAtKey)
     }
 
-    /// Applies `settings.json` when another Mac changed it since this one last synced.
+    /// Applies the synced settings when another device changed them since this one last synced.
     private func pullSettings() {
         guard sync.usesCloud else { return }
         guard let remote = sync.readSettings() else {
@@ -1172,5 +1168,12 @@ struct SaveDebounce {
         task?.cancel()
         task = nil
         since = nil
+    }
+}
+
+enum FolderImportError: LocalizedError {
+    case notDataFolder
+    var errorDescription: String? {
+        "That folder doesn\u{2019}t hold MySelf data. Choose the folder you picked under Settings \u{203A} iCloud in the earlier version, such as iCloud Drive \u{203A} MySelf."
     }
 }

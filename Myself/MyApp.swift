@@ -1,6 +1,10 @@
 import SwiftUI
 
 @main struct MyApp: App {
+    #if DEBUG
+    /// `Myself -selfTest` checks the SwiftData layer and quits; declared first so it runs before the store opens.
+    private let selfTest: Void = SelfTest.runIfRequested()
+    #endif
     @State private var store = AppStore()
     @AppStorage(PrefKey.appearance) private var appearance = ""
     @AppStorage(PrefKey.rowDensity) private var density = RowDensity.regular
