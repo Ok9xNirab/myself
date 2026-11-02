@@ -28,10 +28,13 @@ private struct GeneralSettings: View {
     @AppStorage(PrefKey.rowDensity) private var density = RowDensity.regular
     #if os(macOS)
     @AppStorage(PrefKey.menuBarIcon) private var showsMenuBarIcon = true
+    #if DIRECT_DISTRIBUTION
     @AppStorage(PrefKey.checkForUpdates) private var checksForUpdates = true
     @State private var updates = UpdateChecker.shared
     #endif
+    #endif
     @State private var confirmingReset = false
+    @State private var importError: String?
 
     #if os(macOS)
     private var shortcutNote: String {
@@ -41,10 +44,12 @@ private struct GeneralSettings: View {
         return "Opens search from any app. ⌘K still works inside MySelf."
     }
 
+    #if DIRECT_DISTRIBUTION
     private var updateNote: String {
         guard let date = updates.lastChecked else { return "Not checked yet." }
         return "Last checked " + date.formatted(.relative(presentation: .named)) + "."
     }
+    #endif
     #endif
 
     var body: some View {
@@ -78,6 +83,7 @@ private struct GeneralSettings: View {
                 }
             }
 
+            #if DIRECT_DISTRIBUTION
             Section("Updates") {
                 Toggle(isOn: $checksForUpdates) {
                     Text("Check for updates automatically")
@@ -92,8 +98,17 @@ private struct GeneralSettings: View {
                 }
             }
             #endif
+            #endif
 
             Section("Data") {
+                #if os(macOS)
+                LabeledContent {
+                    Button("Import\u{2026}") { importError = store.runLegacyImport() }
+                } label: {
+                    Text("Import from an earlier MySelf")
+                    Text("Brings over todos, notes and settings from MySelf 1.3.1 or earlier on this Mac, keeping what\u{2019}s already here.")
+                }
+                #endif
                 LabeledContent {
                     Button("Reset…") { confirmingReset = true }
                 } label: {
@@ -109,6 +124,11 @@ private struct GeneralSettings: View {
         } message: {
             Text("Your todos, labels, office tasks, notes, classes, boards and workouts will be replaced with the original sample content. Todos, labels, office tasks, notes and University are replaced on every Mac that syncs this folder.")
         }
+        .alert("Couldn\u{2019}t import", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(importError ?? "")
+        }
     }
 }
 
@@ -118,7 +138,7 @@ private struct FeatureSettings: View {
     @Environment(AppStore.self) private var store
 
     var body: some View {
-        let optional = Page.allCases.filter(\.isOptional)
+        let optional = Page.allCases.filter { $0.isOptional && $0.isAvailable }
         Form {
             Section {
                 ForEach(optional) { page in

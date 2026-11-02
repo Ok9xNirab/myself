@@ -17,7 +17,9 @@ import SwiftUI
             #if os(macOS)
             CommandGroup(replacing: .appInfo) {
                 AboutCommand()
+                #if DIRECT_DISTRIBUTION
                 CheckForUpdatesCommand()
+                #endif
             }
             #endif
             SidebarCommands()

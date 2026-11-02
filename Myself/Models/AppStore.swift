@@ -74,6 +74,16 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
     /// Pages that render as a blurred, non-interactive preview behind a "Coming soon" card.
     var isComingSoon: Bool { self == .workout }
 
+    /// False for pages left out of this build. Unfinished ("Coming soon") pages only ship in the DMG, because App
+    /// Review rejects placeholder features; App Store builds hide them everywhere, including Settings › Features.
+    var isAvailable: Bool {
+        #if DIRECT_DISTRIBUTION
+        true
+        #else
+        !isComingSoon
+        #endif
+    }
+
     /// Icon tile colour in Settings › Features.
     var featureColor: Color {
         switch self {
@@ -281,7 +291,7 @@ final class AppStore {
 
     // MARK: Features
 
-    func isEnabled(_ page: Page) -> Bool { !disabledPages.contains(page) }
+    func isEnabled(_ page: Page) -> Bool { page.isAvailable && !disabledPages.contains(page) }
 
     var enabledPages: [Page] { Page.allCases.filter(isEnabled) }
 
@@ -984,6 +994,53 @@ final class AppStore {
     func useICloudFolder(_ url: URL) throws {
         try carryData { try sync.useCloudFolder(url) }
     }
+
+    #if os(macOS)
+    /// True on what looks like a fresh install that hasn't been asked yet about importing from the old bundle ID.
+    var shouldOfferLegacyImport: Bool {
+        !UserDefaults.standard.bool(forKey: PrefKey.legacyImportOffered)
+            && sync.cloudFolder == nil && sync.lostFolder == nil
+            && todos.isEmpty && office.isEmpty && notes.isEmpty && jobStudy.isEmpty && products.isEmpty
+            && university.classes.isEmpty && university.assignments.isEmpty
+    }
+
+    func declineLegacyImport() {
+        UserDefaults.standard.set(true, forKey: PrefKey.legacyImportOffered)
+    }
+
+    /// Asks for the old app's container and imports from it. Returns an error message, or nil when it worked or was
+    /// cancelled. Opens Settings › iCloud afterwards if the old sync folder has to be chosen again.
+    func runLegacyImport() -> String? {
+        guard let picked = LegacyImport.choose() else { return nil }
+        do {
+            try importLegacyData(from: picked)
+        } catch {
+            return error.localizedDescription
+        }
+        if sync.lostFolder != nil { openSettings(.iCloud) }
+        return nil
+    }
+
+    /// Brings over records and settings from MySelf 1.3.1 and earlier (bundle ID `com.ok9xnirab.myself`), keeping
+    /// any file this install already has.
+    func importLegacyData(from picked: URL) throws {
+        let scoped = picked.startAccessingSecurityScopedResource()
+        defer { if scoped { picked.stopAccessingSecurityScopedResource() } }
+        let source = LegacyImport.locate(in: picked)
+        guard source.data != nil || source.preferences != nil else { throw LegacyImport.Failure.notFound }
+        saveUnsavedNotes()
+        saveUniversityNotes()
+        if let data = source.data { sync.importLocalFiles(from: data) }
+        if let preferences = source.preferences {
+            LegacyImport.apply(preferences, keepingSyncFolder: sync.cloudFolder != nil)
+        }
+        UserDefaults.standard.set(true, forKey: PrefKey.legacyImportOffered)
+        disabledPages = Set((UserDefaults.standard.stringArray(forKey: "disabledFeatures") ?? []).compactMap(Page.init(rawValue:)))
+        sync.reloadConfiguration()
+        syncedSettings = nil
+        reloadSynced()
+    }
+    #endif
 
     /// Switches the sync folder and copies over what's in memory, without overwriting newer files already there.
     private func carryData(_ change: () throws -> Void) rethrows {

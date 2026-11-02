@@ -49,7 +49,7 @@ final class SyncEngine {
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
     @ObservationIgnored private var pollTask: Task<Void, Never>?
 
-    private static let bookmarkKey = "syncFolderBookmark"
+    static let bookmarkKey = "syncFolderBookmark"
     /// Named after the bundle ID: in unsandboxed builds Application Support is shared with every other app.
     static let localFolder = URL.applicationSupportDirectory.appending(path: Bundle.main.bundleIdentifier ?? "MySelf", directoryHint: .isDirectory)
 
@@ -168,6 +168,35 @@ final class SyncEngine {
             UserDefaults.standard.set(fresh, forKey: Self.bookmarkKey)
         }
         return url
+    }
+
+    /// Re-reads the sync settings from UserDefaults after they were replaced (`AppStore.importLegacyData`).
+    func reloadConfiguration() {
+        accessing?.stopAccessingSecurityScopedResource()
+        accessing = nil
+        lostFolder = nil
+        let defaults = UserDefaults.standard
+        isCloudEnabled = defaults.object(forKey: PrefKey.iCloudSync) as? Bool ?? true
+        let last = defaults.double(forKey: PrefKey.lastSynced)
+        lastSynced = last > 0 ? Date(timeIntervalSince1970: last) : nil
+        cloudFolder = resolveBookmark()
+        activate()
+    }
+
+    /// Copies another local folder's files (records, images, `settings.json`) into `localFolder`, keeping files
+    /// already there. Used to bring over data from the app's old bundle ID.
+    func importLocalFiles(from source: URL) {
+        let fm = FileManager.default
+        let base = source.standardizedFileURL.pathComponents.count
+        guard let files = fm.enumerator(at: source, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles]) else { return }
+        for case let url as URL in files {
+            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
+            let relative = url.standardizedFileURL.pathComponents.dropFirst(base)
+            let destination = relative.reduce(Self.localFolder) { $0.appending(path: $1) }
+            guard !fm.fileExists(atPath: destination.path) else { continue }
+            try? fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? fm.copyItem(at: url, to: destination)
+        }
     }
 
     /// Points the watcher at the current root and makes sure its subfolders exist.

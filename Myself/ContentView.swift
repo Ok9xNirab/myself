@@ -11,6 +11,9 @@ struct ContentView: View {
     /// Shown once per launch when the saved sync folder no longer opens; the sidebar status stays red until it's fixed.
     @State private var showsLostFolder = false
     @State private var warnedLostFolder = false
+    /// Asked once on a fresh install: import from MySelf 1.3.1 and earlier, which used another bundle ID.
+    @State private var showsLegacyImport = false
+    @State private var legacyImportError: String?
 
     var body: some View {
         @Bindable var store = store
@@ -30,14 +33,35 @@ struct ContentView: View {
             SearchShortcut.shared.openMainWindow = { openWindow(id: "main") }
             SearchShortcut.shared.openNoteWindow = { openWindow(id: NoteWindow.id, value: $0) }
             SearchShortcut.shared.start(store: store)
+            #if DIRECT_DISTRIBUTION
             UpdateChecker.shared.checkAutomatically()
+            #endif
         }
         #endif
         .task {
+            #if os(macOS)
+            if store.shouldOfferLegacyImport { showsLegacyImport = true }
+            #endif
             guard store.sync.lostFolder != nil, !warnedLostFolder else { return }
             warnedLostFolder = true
             showsLostFolder = true
         }
+        #if os(macOS)
+        .alert("Used MySelf before?", isPresented: $showsLegacyImport) {
+            Button("Import\u{2026}") {
+                store.declineLegacyImport()
+                legacyImportError = store.runLegacyImport()
+            }
+            Button("Not Now", role: .cancel) { store.declineLegacyImport() }
+        } message: {
+            Text("If you used MySelf 1.3.1 or earlier on this Mac, you can bring over its todos, notes and settings. You can also do this later in Settings \u{203A} General.")
+        }
+        .alert("Couldn\u{2019}t import", isPresented: Binding(get: { legacyImportError != nil }, set: { if !$0 { legacyImportError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(legacyImportError ?? "")
+        }
+        #endif
         .alert("Choose your sync folder again", isPresented: $showsLostFolder) {
             Button("Choose Folder\u{2026}") { store.openSettings(.iCloud) }
             Button("Later", role: .cancel) {}

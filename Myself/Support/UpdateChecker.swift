@@ -1,4 +1,4 @@
-#if os(macOS)
+#if os(macOS) && DIRECT_DISTRIBUTION
 import SwiftUI
 
 /// Looks for a newer GitHub release than the running build. MySelf has no auto-updater (it's ad-hoc signed, outside the

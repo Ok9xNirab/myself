@@ -13,6 +13,7 @@ enum PrefKey {
     static let checkForUpdates = "checkForUpdates"
     static let lastUpdateCheck = "lastUpdateCheck" // TimeInterval since 1970
     static let skippedVersion = "skippedVersion"  // a release version the automatic check won't offer again
+    static let legacyImportOffered = "legacyImportOffered" // asked once whether to import from com.ok9xnirab.myself
 }
 
 enum SidebarStyle: String, CaseIterable, Identifiable {
