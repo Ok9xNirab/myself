@@ -229,7 +229,7 @@
 <div class="wrap">
 <div class="sec-head"><div class="eyebrow">Privacy</div><h2 class="h2">It's about you. So it stays with you.</h2><p class="lede">Your tasks, classes and late-night notes are some of the most personal data you have. MySelf keeps all of it in files you own.</p></div>
 <div class="priv">
-<div class="pv-card"><span class="tile" data-i="lock" data-s="22"></span><h3>Files you own</h3><p>Every item is a small JSON file on your Mac, or in an iCloud Drive folder you pick to sync between your Macs. There's no MySelf server.</p></div>
+<div class="pv-card"><span class="tile" data-i="lock" data-s="22"></span><h3>Your data, your iCloud</h3><p>Everything lives in a database on your Mac and syncs through your private iCloud database between your Macs. There's no MySelf server.</p></div>
 <div class="pv-card"><span class="tile" data-i="eye" data-s="22"></span><h3>No account, no tracking</h3><p>Open the app and start. No sign-up, no analytics, no ads. The only request it makes is a daily update check on GitHub, which you can turn off.</p></div>
 <div class="pv-card"><span class="tile" data-i="wifi" data-s="22"></span><h3>Works offline</h3><p>On a plane, in a lecture hall with bad Wi-Fi — MySelf doesn't notice.</p></div>
 <div class="pv-card"><span class="tile" data-i="bolt" data-s="22"></span><h3>Instant, always</h3><p>No loading spinners. Your data is already on your Mac, so pages open without waiting on a server.</p></div>
@@ -246,7 +246,7 @@
 <div class="spec"><span class="k">Languages</span><span class="v">English · বাংলা notes</span></div>
 <div class="spec"><span class="k">Price</span><span class="v">Free and open source (MIT)</span></div>
 </div>
-<div class="dl"><a class="btn pri" href="https://github.com/Ok9xNirab/myself/releases/latest"><span data-i="download" data-s="18"></span>Download the DMG</a><p>MySelf isn't notarized by Apple, so the first time you open it macOS blocks it. Open <b>System Settings › Privacy &amp; Security</b> and click <b>Open Anyway</b>, or run <code>xattr -dr com.apple.quarantine /Applications/Myself.app</code>. <a href="https://github.com/Ok9xNirab/myself#opening-myself-for-the-first-time">More help</a></p></div>
+<div class="dl"><a class="btn pri" href="https://github.com/Ok9xNirab/myself/releases/latest"><span data-i="download" data-s="18"></span>Download the DMG</a><p>Signed and notarized by Apple, so it opens without a warning.</p></div>
 </div>
 </section>
 
@@ -255,11 +255,11 @@
 <div class="sec-head c"><div class="eyebrow">FAQ</div><h2 class="h2">Questions, answered.</h2></div>
 <div class="faq">
 <details open=""><summary>Do I need an account?<span data-i="plus" data-s="20"></span></summary><p>No. Download, open, and start using it. MySelf starts empty; to look around first, load the sample data from Settings.</p></details>
-<details><summary>Where is my data stored?<span data-i="plus" data-s="20"></span></summary><p>In files on your Mac. To sync between Macs, choose a folder in your iCloud Drive in Settings › iCloud; each item is saved there as its own small file. MySelf never sends your data anywhere else.</p></details>
+<details><summary>Where is my data stored?<span data-i="plus" data-s="20"></span></summary><p>In a database on your Mac, synced through your private iCloud database to your other Macs on the same Apple Account, with nothing to set up. You can turn sync off in Settings › iCloud. MySelf never sends your data anywhere else.</p></details>
 <details><summary>Can I hide modules I don't use?<span data-i="plus" data-s="20"></span></summary><p>Yes. Not at university? Turn University off in Settings › Features and it disappears from the sidebar, the Dashboard, Quick Open and the Go menu.</p></details>
 <details><summary>Does it support Bengali?<span data-i="plus" data-s="20"></span></summary><p>Notes are designed for বাংলা from the ground up, set in the system's SF Bangla with comfortable line spacing, alongside LaTeX and code blocks.</p></details>
 <details><summary>Is there an iPhone or Windows version?<span data-i="plus" data-s="20"></span></summary><p>MySelf is built for the Mac. There's no iPhone, iPad or Windows release, and sync works between Macs only.</p></details>
-<details><summary>Why does macOS say it can't verify MySelf?<span data-i="plus" data-s="20"></span></summary><p>MySelf is free and isn't notarized by Apple, which needs a paid developer account. The app isn't damaged, and you can read every line of its <a href="https://github.com/Ok9xNirab/myself">source</a>. Allow it once in System Settings › Privacy &amp; Security › Open Anyway, or run <code>xattr -dr com.apple.quarantine /Applications/Myself.app</code>.</p></details>
+<details><summary>Why does macOS say it can't verify MySelf?<span data-i="plus" data-s="20"></span></summary><p>Versions up to 1.3.1 weren't notarized by Apple, so macOS blocks them. Download the latest version, which is signed and notarized and opens without a warning.</p></details>
 <details><summary>Is Workout available?<span data-i="plus" data-s="20"></span></summary><p>Not yet. Workout is coming soon; its page is in the sidebar but doesn't save anything yet.</p></details>
 </div>
 </div>

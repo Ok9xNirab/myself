@@ -62,35 +62,11 @@ The project also builds for iPadOS, iOS and visionOS, but macOS is the main plat
 
 1. Download **`MySelf-<version>.dmg`** from the [latest release](https://github.com/Ok9xNirab/myself/releases/latest).
 2. Open the DMG and drag **Myself** onto the **Applications** folder.
-3. Open MySelf from Applications. The first time, macOS will block it. Follow [Opening MySelf for the first time](#opening-myself-for-the-first-time).
-
-### Opening MySelf for the first time
-
-MySelf is free and open source, and it isn't notarized by Apple (that needs a paid developer account). So the first time you open it, macOS shows:
-
-> "Myself" Not Opened. Apple could not verify "Myself" is free of malware that may harm your Mac or compromise your privacy.
-
-The app isn't damaged, and you can read every line of its source here. Allow it once:
-
-1. Click **Done** on the warning (not *Move to Trash*).
-2. Open **System Settings › Privacy & Security**.
-3. Scroll down to **Security**, find *"Myself" was blocked…* and click **Open Anyway**.
-4. Confirm with your password or Touch ID, then click **Open Anyway** again.
-
-> [!TIP]
-> On macOS 15 and later, Control-clicking the app and choosing **Open** no longer gets past this warning. Use **Open Anyway** in System Settings.
-
-**Prefer Terminal?** Remove the download quarantine flag instead:
-
-```sh
-xattr -dr com.apple.quarantine /Applications/Myself.app
-```
-
-The same command fixes the *"Myself is damaged and can't be opened"* message.
+3. Open MySelf from Applications. The DMG is signed and notarized by Apple, so it opens without a warning.
 
 ### Updating and uninstalling
 
-- **Update**: MySelf checks GitHub for a new release once a day (Settings › General › Updates, or **MySelf › Check for Updates…**) and links the DMG. Quit MySelf, drag the new version from the DMG into Applications and replace the old one. You may need to allow it once more.
+- **Update**: MySelf checks GitHub for a new release once a day (Settings › General › Updates, or **MySelf › Check for Updates…**) and links the DMG. Quit MySelf, drag the new version from the DMG into Applications and replace the old one.
 - **Uninstall**: move `Myself.app` to the Trash. To also delete its local data, run `rm -rf ~/Library/Containers/com.quorrelapps.myself` (and `com.ok9xnirab.myself` if you used version 1.3.1 or earlier). Synced data stays in your iCloud account until you delete it in System Settings › Apple Account › iCloud › Manage storage.
 
 ## iCloud sync
@@ -120,7 +96,7 @@ In Xcode, choose the **Myself** scheme and **My Mac**, then press <kbd>⌘R</kbd
 ./scripts/make-dmg.sh
 ```
 
-The script builds a universal Release app, ad-hoc signs it with hardened runtime and writes `dist/MySelf-<version>.dmg`, with the version read from `MARKETING_VERSION`. Upload that file to a [new GitHub release](https://github.com/Ok9xNirab/myself/releases/new).
+The script archives a universal Release app, signs it with a Developer ID certificate, writes `dist/MySelf-<version>.dmg` (the version comes from `MARKETING_VERSION`), then notarizes and staples it. It needs a Developer ID Application certificate and a `myself-notary` notary profile; the setup is at the top of the script. Upload that file to a [new GitHub release](https://github.com/Ok9xNirab/myself/releases/new).
 
 If `xcodebuild` says it needs Xcode while only the Command Line Tools are selected, run `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`, or set `DEVELOPER_DIR` to that path.
 
@@ -147,8 +123,8 @@ scripts/make-dmg.sh      Builds the release DMG
 - [x] Images, reader mode and block selection in Notes
 - [x] Update check against GitHub releases
 - [x] Tables in Notes
+- [x] Developer ID signing and notarization
 - [ ] Workout programs, saved and synced
-- [ ] Developer ID signing and notarization
 
 ## Contributing
 
