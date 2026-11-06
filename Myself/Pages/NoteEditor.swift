@@ -37,9 +37,18 @@ struct NoteEditor: View {
     /// Each block's frame on the page, for drag selection. Kept out of SwiftUI state: a block growing a line moves
     /// every block below it, and redrawing the editor for each of those would be wasted.
     @State private var blockFrames = BlockFrames()
+    /// The "[[" note picker, open on a block.
+    @State private var linkPicker: NoteLinkPicker?
+    /// The note link under the pointer, once it has rested there (`NoteLinkPreview`).
+    @State private var hoveredLink: NoteLinkHover?
+    @State private var linkHoverTask: Task<Void, Never>?
+    /// The reader view's position in the editor, for placing previews of its links.
+    @State private var readerOrigin = NoteLinkOrigin()
     /// The drag-selection box while dragging.
     @State private var band: CGRect?
     private static let paperSpace = "paper"
+    /// The scroll area, where link previews are drawn so the page can't clip them.
+    static let linkSpace = "noteLinks"
     #if os(macOS)
     /// Catches Delete, Esc, ⌘A and clicks while blocks are selected. SwiftUI focus set from code doesn't reliably
     /// reach the page on macOS, so the keys are taken from the event stream instead.
@@ -97,6 +106,11 @@ struct NoteEditor: View {
                     .frame(maxWidth: .infinity)
             }
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { paperWidth = $0 }
+            .onScrollPhaseChange { _, phase in if phase.isScrolling { hoverLink(nil, rect: .zero) } }
+            .coordinateSpace(.named(Self.linkSpace))
+            .overlay(alignment: .topLeading) {
+                if let hoveredLink { NoteLinkPreviewPlacement(hover: hoveredLink) }
+            }
             Divider()
             statusBar
         }
@@ -122,6 +136,9 @@ struct NoteEditor: View {
 
     private var paper: some View {
         let category = store.noteCategory(note.categoryID)
+        let book = note.bookID.flatMap(store.book)
+        // Links whose note is gone show as broken; the note list is only read if this note has links.
+        let known = note.blocks.contains { $0.text.contains("[[") } ? Set(store.noteSummaries.map(\.id)) : []
         // Numbers for numbered items, worked out up front: a lazy stack builds its rows out of order.
         var number = 0
         let numbers = note.blocks.map { block in
@@ -131,8 +148,8 @@ struct NoteEditor: View {
         // Lazy, so blocks off screen aren't built or laid out on every change.
         return LazyVStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
-                ColorDot(color: category?.color ?? Palette.ink3, size: 8)
-                Text(category?.name ?? "Uncategorized")
+                ColorDot(color: book?.color ?? category?.color ?? Palette.ink3, size: 8)
+                Text(book?.displayTitle ?? category?.name ?? "Uncategorized").lineLimit(1)
                 Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
                 Text(note.displayTitle).lineLimit(1)
             }
@@ -141,8 +158,12 @@ struct NoteEditor: View {
             .padding(.bottom, 12)
 
             if reading {
-                NoteReaderView(note: current, imageURL: imageURL, onOpenImage: openImage)
-                Color.clear.frame(height: 160)
+                NoteReaderView(note: current, imageURL: imageURL, onOpenImage: openImage, isKnownNote: { known.contains($0) },
+                               onOpenNote: followLink, onHoverNote: { id, rect in hoverLink(id, rect: rect.offsetBy(dx: readerOrigin.point.x, dy: readerOrigin.point.y)) })
+                    .onGeometryChange(for: CGPoint.self) { $0.frame(in: .named(Self.linkSpace)).origin } action: { readerOrigin.point = $0 }
+                Color.clear.frame(height: 40)
+                NoteLinksSection(noteID: note.id, onOpen: followLink)
+                Color.clear.frame(height: 120)
             } else {
             NoteTextView(text: Binding(get: { current.title }, set: { title in store.editNote(note.id) { $0.title = title.replacingOccurrences(of: "\n", with: "") } }),
                          font: NoteTypeface.platformFont(size: size * 2, weight: .bold),
@@ -153,8 +174,15 @@ struct NoteEditor: View {
                          onFocusChange: { focusChanged(Self.titleID, $0) })
                 .padding(.bottom, 6)
 
-            TimelineView(.periodic(from: .now, by: 30)) { context in
-                Text("Edited \(NoteDates.ago(note.editedAt, now: context.date)) · \(note.wordCount) words")
+            HStack(spacing: 10) {
+                if note.bookID != nil {
+                    NoteLocationField(text: Binding(get: { current.location ?? "" }, set: { value in
+                        store.editNote(note.id) { $0.location = value.isEmpty ? nil : value }
+                    }))
+                }
+                TimelineView(.periodic(from: .now, by: 30)) { context in
+                    Text("Edited \(NoteDates.ago(note.editedAt, now: context.date)) · \(note.wordCount) words")
+                }
             }
             .font(.system(size: 12))
             .foregroundStyle(Palette.ink3)
@@ -162,7 +190,10 @@ struct NoteEditor: View {
 
             ForEach(Array(zip(note.blocks, numbers)), id: \.0.id) { block, number in
                 NoteBlockRow(block: block, number: number, selected: selectedBlocks.contains(block.id), editing: isEditing(block.id),
-                             focus: request(for: block.id), slash: slash?.id == block.id ? slash : nil, editor: self)
+                             focus: request(for: block.id), slash: slash?.id == block.id ? slash : nil,
+                             picker: linkPicker?.blockID == block.id ? linkPicker : nil,
+                             missingLinks: block.text.contains("[[") ? Set(NoteMarkdown.linkIDs(block.text)).subtracting(known) : [],
+                             editor: self)
                     .equatable()
                     .zIndex(slash?.id == block.id ? 1 : 0)
                     .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.paperSpace)) } action: { blockFrames.frames[block.id] = $0 }
@@ -172,6 +203,9 @@ struct NoteEditor: View {
                 .frame(height: 160)
                 .contentShape(Rectangle())
                 .onTapGesture(perform: tailClick)
+
+            NoteLinksSection(noteID: note.id, onOpen: followLink)
+                .padding(.bottom, 48)
             }
         }
         .coordinateSpace(.named(Self.paperSpace))
@@ -216,6 +250,67 @@ struct NoteEditor: View {
         #else
         viewingImage = name
         #endif
+    }
+
+    // MARK: Note links
+
+    /// Opens the "[[" picker on a block. `start..<end` (UTF-16) is what the link will replace: the "[[" just typed,
+    /// or the selection, which becomes the link's label.
+    fileprivate func openLinkPicker(_ id: ID, range: NSRange) {
+        guard !reading, let block = current.blocks.first(where: { $0.id == id }), block.kind.isText else { return }
+        let selected = (block.text as NSString).substring(with: range)
+        slash = nil
+        hoverLink(nil, rect: .zero)
+        linkPicker = NoteLinkPicker(blockID: id, range: range, label: selected == "[[" ? "" : NoteLinkPicker.cleanLabel(selected))
+    }
+
+    /// Replaces the picker's range with a link to `target` and puts the caret after it.
+    fileprivate func insertLink(to target: ID, title: String) {
+        guard let picker = linkPicker else { return }
+        linkPicker = nil
+        let label = picker.label.isEmpty ? NoteLinkPicker.cleanLabel(title.isEmpty ? "Untitled" : title) : picker.label
+        let link = "[[\(label)|\(target)]]"
+        update(picker.blockID) { $0.text = ($0.text as NSString).replacingCharacters(in: picker.range, with: link) }
+        focus(picker.blockID, caret: picker.range.location + (link as NSString).length)
+    }
+
+    /// Creates the note a picked "Create" row names, in the category `store.linkHomeCategory` chooses, and links to it.
+    fileprivate func insertLinkToNewNote(title: String) {
+        guard let home = store.linkHomeCategory(for: current) else { return }
+        insertLink(to: store.addNote(in: home.id, title: title).id, title: title)
+    }
+
+    /// The picker was dismissed: the text stays as it was and typing carries on.
+    fileprivate func closeLinkPicker() {
+        guard let picker = linkPicker else { return }
+        linkPicker = nil
+        focus(picker.blockID, caret: NSMaxRange(picker.range))
+    }
+
+    /// Opens a linked note beside this one: in its own window on macOS.
+    fileprivate func followLink(_ id: ID) {
+        hoverLink(nil, rect: .zero)
+        guard store.notes.contains(where: { $0.id == id }) else { return }
+        #if os(macOS)
+        openWindow(id: NoteWindow.id, value: id)
+        #else
+        store.openNote(id)
+        #endif
+    }
+
+    /// The pointer moved onto a note link (in the scroll area's coordinates), or off one. The preview waits a moment,
+    /// so it doesn't flash while the pointer passes over.
+    fileprivate func hoverLink(_ id: ID?, rect: CGRect) {
+        linkHoverTask?.cancel()
+        guard let id, linkPicker == nil else {
+            if hoveredLink != nil { hoveredLink = nil }
+            return
+        }
+        linkHoverTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(320))
+            guard !Task.isCancelled else { return }
+            hoveredLink = NoteLinkHover(id: id, rect: rect)
+        }
     }
 
     // MARK: Focus
@@ -389,6 +484,15 @@ struct NoteEditor: View {
 
     /// Text typed into a block. In a plain paragraph, markdown prefixes turn it into another kind and "/" opens the block menu.
     fileprivate func change(_ block: NoteBlock, to text: String) {
+        // Typing the second "[" opens the note picker.
+        if text.utf16.count == block.text.utf16.count + 1, block.kind.isText, !reading {
+            let caret = textFocus.selectionStart ?? text.utf16.count
+            if caret >= 2, (text as NSString).substring(with: NSRange(location: caret - 2, length: 2)) == "[[" {
+                update(block.id) { $0.text = text }
+                openLinkPicker(block.id, range: NSRange(location: caret - 2, length: 2))
+                return
+            }
+        }
         if block.kind == .p {
             for (prefix, kind) in Self.shortcuts where text.hasPrefix(prefix) {
                 update(block.id) { $0.kind = kind; $0.text = String(text.dropFirst(prefix.count)); if kind == .todo { $0.done = false } }
@@ -904,6 +1008,16 @@ struct NoteEditor: View {
                             Text("x²").font(.system(size: 15, design: .serif).italic()).frame(minWidth: 28, minHeight: 28)
                         }
                         .help("Inline math (⇧⌘M)")
+                        Button {
+                            if let id = editingID, let selection = textFocus.selection { openLinkPicker(id, range: selection) }
+                        } label: {
+                            Text("[[ ]]")
+                                .font(.system(size: 10.5, weight: .bold, design: .monospaced))
+                                .kerning(-0.4)
+                                .frame(minWidth: 28, minHeight: 28)
+                        }
+                        .help("Link to a note (⇧⌘L), or type [[")
+                        .accessibilityLabel("Link to a note")
                     }
                     .disabled(!textActive)
                     separator
@@ -963,12 +1077,15 @@ struct NoteEditor: View {
 
     private var pageMenu: some View {
         Menu {
-            Picker("Move to", selection: Binding(get: { note.categoryID }, set: { store.moveNotes([note.id], to: $0) })) {
-                ForEach(store.noteCategories) { Text($0.name).tag($0.id) }
+            // A reading note belongs to its book: it has no category and isn't in a list that could pin it.
+            if note.bookID == nil {
+                Picker("Move to", selection: Binding(get: { note.categoryID }, set: { store.moveNotes([note.id], to: $0) })) {
+                    ForEach(store.noteCategories) { Text($0.name).tag($0.id) }
+                }
+                .pickerStyle(.inline)
+                Divider()
+                Button(note.pinned ? "Unpin Note" : "Pin Note", systemImage: note.pinned ? "pin.slash" : "pin") { store.setPinned([note.id], !note.pinned) }
             }
-            .pickerStyle(.inline)
-            Divider()
-            Button(note.pinned ? "Unpin Note" : "Pin Note", systemImage: note.pinned ? "pin.slash" : "pin") { store.setPinned([note.id], !note.pinned) }
             Button(reading ? "Turn Off Reader Mode" : "Reader Mode", systemImage: "book", action: toggleReader)
             Button("Duplicate Page", systemImage: "plus.square.on.square", action: onDuplicate)
             Button("Delete Page", systemImage: "trash", role: .destructive, action: onDelete)
@@ -1028,14 +1145,20 @@ private struct NoteBlockRow: View, Equatable {
     var editing: Bool
     var focus: NoteFocusRequest?
     var slash: NoteEditor.SlashMenu?
+    /// The "[[" note picker, when it's open on this block.
+    var picker: NoteLinkPicker?
+    /// The notes this block links to that no longer exist.
+    var missingLinks: Set<ID>
     var editor: NoteEditor
     @State private var hovering = false
+    /// Where this block's note links were drawn; a class so updating it doesn't redraw the row.
+    @State private var linkRects = NoteLinkRects()
 
     /// Compares what the row shows and leaves out `editor`, which SwiftUI can't compare; otherwise typing in one
     /// block redraws every block. `editor` is only used in actions, and its state lives outside the copy.
     static func == (a: Self, b: Self) -> Bool {
         a.block == b.block && a.number == b.number && a.selected == b.selected && a.editing == b.editing && a.focus == b.focus
-            && a.slash == b.slash
+            && a.slash == b.slash && a.picker == b.picker && a.missingLinks == b.missingLinks
     }
 
     private var size: CGFloat { NoteTypeface.bodySize }
@@ -1062,6 +1185,14 @@ private struct NoteBlockRow: View, Equatable {
                 if let menu = slash, !menu.items.isEmpty {
                     SlashMenuView(menu: menu) { editor.turnInto(block, $0, clear: true) }
                         .alignmentGuide(.bottom) { $0[.top] - 4 }
+                }
+            }
+            .popover(isPresented: Binding(get: { picker != nil }, set: { if !$0 { editor.closeLinkPicker() } }), arrowEdge: .bottom) {
+                if let picker {
+                    NoteLinkPickerView(picker: picker, noteID: editor.note.id, home: editor.linkHome,
+                                       onPick: { editor.insertLink(to: $0, title: $1) },
+                                       onCreate: { editor.insertLinkToNewNote(title: $0) },
+                                       onCancel: editor.closeLinkPicker)
                 }
             }
     }
@@ -1153,22 +1284,30 @@ private struct NoteBlockRow: View, Equatable {
                                  focusTracker: editor.textFocusTracker,
                                  onPasteImage: { editor.pasteImage($0, ext: $1, in: block.id) },
                                  onPasteText: { editor.pasteText($0, in: block.id, replacing: $1) },
+                                 onLinkNote: { editor.openLinkPicker(block.id, range: $0) },
                                  onKey: { editor.textKey(block.id, $0, $1) },
                                  onFocusChange: { editor.focusChanged(block.id, $0) },
                                  onDragOut: { editor.dragOut(of: block.id, $0) },
                                  onDragOutEnd: editor.endDragOut)
                 } else {
-                    NoteMarkdown.text(block.text.isEmpty ? " " : block.text, size: textSize, weight: textWeight)
+                    NoteMarkdown.text(block.text.isEmpty ? " " : block.text, size: textSize, weight: textWeight, missing: missingLinks)
                         .lineSpacing(lineSpacing)
                         .strikethrough(done, color: Palette.ink3.opacity(0.6))
                         .foregroundStyle(done ? Palette.ink3 : block.kind == .quote ? Palette.ink2 : .primary)
                         .fixedSize(horizontal: false, vertical: true)
+                        .modifier(NoteLinkTracking(active: block.text.contains("[["), rects: linkRects) { editor.hoverLink($0, rect: $1) })
                         .padding(.vertical, 3)
                         .padding(.horizontal, 2)
                         .textSelection(.disabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
-                        .onTapGesture { editor.tap(block.id) { editor.focus(block.id, caret: nil) } }
+                        .onTapGesture(coordinateSpace: .named(NoteEditor.linkSpace)) { point in
+                            if let link = linkRects.link(at: point), !missingLinks.contains(link) {
+                                editor.followLink(link)
+                            } else {
+                                editor.tap(block.id) { editor.focus(block.id, caret: nil) }
+                            }
+                        }
                 }
             }
             .padding(.leading, block.kind == .quote ? 11 : 0)
@@ -1672,6 +1811,8 @@ struct NoteTableGrid: View {
 
 extension NoteEditor {
     fileprivate var textFocusTracker: NoteTextFocus { textFocus }
+    /// Where a note created from the link picker goes.
+    fileprivate var linkHome: NoteCategory? { store.linkHomeCategory(for: note) }
 }
 
 extension PlatformColor {

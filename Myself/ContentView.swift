@@ -133,6 +133,7 @@ private struct PageView: View {
         case .products: ProductsView()
         case .workout: WorkoutView()
         case .notes: NotesView()
+        case .books: BooksView()
         }
     }
 }

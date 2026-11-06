@@ -568,6 +568,7 @@ private struct NotePicker: View {
     var body: some View {
         let q = query.trimmingCharacters(in: .whitespaces)
         let results = store.notes
+            .filter { $0.bookID == nil || store.isEnabled(.books) }
             .filter { q.isEmpty || $0.displayTitle.localizedCaseInsensitiveContains(q) }
             .sorted { a, b in
                 let (la, lb) = (linked.contains(a.id), linked.contains(b.id))

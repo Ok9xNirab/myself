@@ -102,6 +102,7 @@ final class CloudStore {
                                                    cloudKitDatabase: cloud ? .private(Self.containerID) : .none)
             return try ModelContainer(for: cloudSchema, configurations: configuration)
         }
+        var opened = true
         do {
             container = try make(cloud)
             usesCloud = cloud
@@ -109,9 +110,14 @@ final class CloudStore {
             syncError = error.localizedDescription
             usesCloud = false
             // Keep the app usable: the local store, or memory as a last resort.
-            container = (try? make(false))
-                ?? (try? ModelContainer(for: cloudSchema, configurations: ModelConfiguration(isStoredInMemoryOnly: true)))
+            if let local = try? make(false) {
+                container = local
+            } else {
+                opened = false
+                container = try? ModelContainer(for: cloudSchema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+            }
         }
+        if opened, url == Self.storeURL, SharedStore.markStoreOpened() { WidgetRefresh.schedule() }
         if isCloudEnabled, !cloud, syncError == nil {
             syncError = "This copy of MySelf isn\u{2019}t signed for iCloud, so changes stay on this device."
         }

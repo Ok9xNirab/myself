@@ -71,18 +71,52 @@ extension Note: CloudBacked {
             Self.blockCache[m.recordID] = (m.updatedAt, blocks)
         }
         self.init(id: m.recordID, categoryID: m.category?.recordID ?? "", title: m.title, pinned: m.pinned, readerMode: m.readerMode,
-                  blocks: blocks, createdAt: m.createdAt, editedAt: m.editedAt, updatedAt: m.updatedAt)
+                  bookID: m.bookID, location: m.location, blocks: blocks, createdAt: m.createdAt, editedAt: m.editedAt, updatedAt: m.updatedAt)
     }
 
     func apply(to m: NoteModel, in store: CloudStore) {
         m.title = title
         m.pinned = pinned
         m.readerMode = readerMode
+        m.bookID = bookID
+        m.location = location
         m.blocksData = (try? JSONEncoder().encode(blocks)) ?? Data()
         m.createdAt = createdAt
         m.editedAt = editedAt
         if m.category?.recordID != categoryID { m.category = store.model(NoteCategoryModel.self, id: categoryID) }
         Self.blockCache[id] = (updatedAt, blocks)
+    }
+}
+
+extension BookCategory: CloudBacked {
+    init(_ m: BookCategoryModel) {
+        self.init(id: m.recordID, name: m.name, hex: UInt32(stored: m.hex), sortOrder: m.sortOrder, updatedAt: m.updatedAt)
+    }
+
+    func apply(to m: BookCategoryModel, in store: CloudStore) {
+        m.name = name
+        m.hex = Int(hex)
+        m.sortOrder = sortOrder
+    }
+}
+
+extension Book: CloudBacked {
+    init(_ m: BookModel) {
+        self.init(id: m.recordID, title: m.title, author: m.author, hex: UInt32(stored: m.hex), status: BookStatus(rawValue: m.status) ?? .want,
+                  categoryID: m.categoryID, totalPages: m.totalPages, currentPage: m.currentPage, cover: m.cover,
+                  createdAt: m.createdAt, updatedAt: m.updatedAt)
+    }
+
+    func apply(to m: BookModel, in store: CloudStore) {
+        m.title = title
+        m.author = author
+        m.hex = Int(hex)
+        m.status = status.rawValue
+        m.categoryID = categoryID
+        m.totalPages = totalPages
+        m.currentPage = currentPage
+        m.cover = cover
+        m.createdAt = createdAt
     }
 }
 

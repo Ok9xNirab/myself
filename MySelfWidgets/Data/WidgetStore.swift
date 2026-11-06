@@ -10,10 +10,11 @@ enum WidgetStore {
 
     private static let opened = OSAllocatedUnfairLock<ModelContainer?>(initialState: nil)
 
-    /// The store, opened once per extension process. It's never created here: before the app's first launch (or in
-    /// unsigned builds) there's nothing to show, so this stays nil and is tried again next time.
+    /// The store, opened once per extension process. It's never created or migrated here: until the app has opened it
+    /// with this schema (or in unsigned builds) there's nothing to show, so this stays nil and is tried again next time.
     private static var container: ModelContainer? {
         opened.withLock { opened in
+            guard SharedStore.isStoreCurrent else { return nil }
             if let opened { return opened }
             guard SharedStore.hasGroupContainer, FileManager.default.fileExists(atPath: SharedStore.url.path) else { return nil }
             let configuration = ModelConfiguration("MySelf", schema: cloudSchema, url: SharedStore.url, cloudKitDatabase: .none)

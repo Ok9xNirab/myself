@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Page: String, CaseIterable, Identifiable, Hashable {
-    case dashboard, todos, university, office, jobStudy, products, workout, notes
+    case dashboard, todos, university, office, jobStudy, products, workout, notes, books
 
     var id: Self { self }
 
@@ -15,6 +15,7 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
         case .products: "Product Dev"
         case .workout: "Workout"
         case .notes: "Notes"
+        case .books: "Book Notes"
         }
     }
 
@@ -28,6 +29,7 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
         case .products: "Your solo company, on Kanban boards"
         case .workout: "Programs, streaks & progress"
         case .notes: "Pages by category"
+        case .books: "Reading notes, linked to everything you know"
         }
     }
 
@@ -41,6 +43,7 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
         case .products: "shippingbox"
         case .workout: "dumbbell"
         case .notes: "note.text"
+        case .books: "book.pages"
         }
     }
 
@@ -49,7 +52,7 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
         case .dashboard: "Overview"
         case .todos, .university, .office, .jobStudy: "Plan & Track"
         case .products: "Build"
-        case .notes: "Capture"
+        case .notes, .books: "Capture"
         case .workout: "Health"
         }
     }
@@ -68,6 +71,7 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
         case .products: "Kanban boards for your products"
         case .workout: "Programs, streaks and progress"
         case .notes: "Pages by category with LaTeX, code and Bengali"
+        case .books: "Reading notes per book, linked to your other notes"
         }
     }
 
@@ -93,6 +97,7 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
         case .jobStudy, .notes: Palette.amber
         case .products: Palette.cyan
         case .workout: Palette.red
+        case .books: Color(hex: 0xA2845E)
         }
     }
 
@@ -127,7 +132,7 @@ enum UniversityEditor: Identifiable {
     }
 }
 
-/// App state. TODOs, labels, office tasks, notes, University and Job Study are persisted and synced through `CloudStore`; the other features are still
+/// App state. TODOs, labels, office tasks, notes, books, University and Job Study are persisted and synced through `CloudStore`; the other features are still
 /// in-memory sample content. Feature visibility is stored in UserDefaults.
 @Observable
 final class AppStore {
@@ -152,6 +157,8 @@ final class AppStore {
     }
     /// The notes list's view of `notes`; read it instead of `notes` where only these fields are shown.
     private(set) var noteSummaries: [NoteSummary] = []
+    private(set) var bookCategories: [BookCategory] = []
+    private(set) var books: [Book] = []
 
     // Navigation history (⌘[ / ⌘])
     private(set) var history: [Page] = [.dashboard]
@@ -163,6 +170,8 @@ final class AppStore {
     var editingTodo: Todo?
     /// Asks the Notes page to open or create a note (Quick Open, File › New Note); the page clears it.
     var noteRequest: NoteRequest?
+    /// Asks the Book Notes page to open a reading note; the page clears it.
+    var bookNoteRequest: ID?
     var editingUniversity: UniversityEditor?
     /// The office task open in the editor sheet; one that isn't in `office` yet is a new one.
     var editingOffice: OfficeTask?
@@ -178,6 +187,9 @@ final class AppStore {
     /// Notes edited in memory but not written yet; typing is saved in one write once it pauses.
     @ObservationIgnored private var unsavedNotes: Set<ID> = []
     @ObservationIgnored private var noteSave = SaveDebounce()
+    /// Books edited in memory but not written yet, like `unsavedNotes`: their fields save once typing pauses.
+    @ObservationIgnored private var unsavedBooks: Set<ID> = []
+    @ObservationIgnored private var bookSave = SaveDebounce()
     @ObservationIgnored private var universityNotesUnsaved = false
     @ObservationIgnored private var universityNotesSave = SaveDebounce()
     @ObservationIgnored private var terminateObserver: NSObjectProtocol?
@@ -246,10 +258,20 @@ final class AppStore {
         unsavedNotes = []
         for note in notes { sync.delete(Note.self, id: note.id) }
         for category in noteCategories { sync.delete(NoteCategory.self, id: category.id) }
-        noteCategories = SampleData.noteCategories
+        noteCategories = SampleData.noteCategories + [SampleData.philosophyCategory]
         notes = SampleData.notes()
         for category in noteCategories { sync.save(category) }
         for note in notes { sync.save(note) }
+        unsavedBooks = []
+        for book in books {
+            if let cover = book.cover { sync.deleteImage(cover) }
+            sync.delete(Book.self, id: book.id)
+        }
+        for category in bookCategories { sync.delete(BookCategory.self, id: category.id) }
+        bookCategories = SampleData.bookCategories
+        books = SampleData.books()
+        for category in bookCategories { sync.save(category) }
+        for book in books { sync.save(book) }
         loadSampleUniversity()
         for subject in jobStudy { sync.delete(StudySubject.self, id: subject.id) }
         jobStudy = SampleData.jobStudy()
@@ -352,6 +374,7 @@ final class AppStore {
     func count(for page: Page) -> Int {
         switch page {
         case .dashboard, .notes: 0
+        case .books: books.filter { $0.status == .reading }.count
         case .todos: todos.filter { !$0.done }.count
         case .office: office.filter { !$0.done }.count
         case .university: university.assignments.filter { !$0.done }.count
@@ -423,7 +446,12 @@ final class AppStore {
         }
     }
 
+    // Debug builds have their own store (`SharedStore`) but share these defaults with the installed app.
+    #if DEBUG
+    private static let seededProductLabels = "seededProductLabels-debug"
+    #else
     private static let seededProductLabels = "seededProductLabels"
+    #endif
 
     /// Cards used to share the TODO labels. Each TODO label a card still points at gets a Product Dev copy, with an
     /// ID derived from the original so two Macs migrating at once make the same copy, and the card moves to it.
@@ -478,15 +506,20 @@ final class AppStore {
         noteRequest = .new
     }
 
-    /// Opens a note from outside the Notes page.
+    /// Opens a note from outside its page: Notes, or Book Notes for a reading note.
     func openNote(_ id: ID) {
-        go(.notes)
-        noteRequest = .open(id)
+        if notes.first(where: { $0.id == id })?.bookID != nil {
+            go(.books)
+            bookNoteRequest = id
+        } else {
+            go(.notes)
+            noteRequest = .open(id)
+        }
     }
 
     @discardableResult
-    func addNote(in categoryID: ID) -> Note {
-        let note = Note(categoryID: categoryID)
+    func addNote(in categoryID: ID, title: String = "") -> Note {
+        let note = Note(categoryID: categoryID, title: title)
         notes.append(note)
         sync.save(note)
         return note
@@ -783,6 +816,7 @@ final class AppStore {
     /// Writes typing that's still waiting for its debounced save: when the app leaves the foreground or quits.
     func saveTypedText() {
         saveUnsavedNotes()
+        saveUnsavedBooks()
         saveUniversityNotes()
     }
 
@@ -973,9 +1007,132 @@ final class AppStore {
 
     nonisolated private static func cardOrder(_ a: KanbanCard, _ b: KanbanCard) -> Bool { (a.order, a.createdAt) < (b.order, b.createdAt) }
 
+    // MARK: Book Notes
+
+    func book(_ id: ID) -> Book? { books.first { $0.id == id } }
+
+    func bookCategory(_ id: ID) -> BookCategory? { bookCategories.first { $0.id == id } }
+
+    /// Adds an untitled book for the user to fill in.
+    func addBook(status: BookStatus, categoryID: ID?) -> Book {
+        let book = Book(hex: Book.palette[books.count % Book.palette.count], status: status, categoryID: categoryID)
+        books.append(book)
+        sync.save(book)
+        return book
+    }
+
+    /// Edits a book. Memory updates straight away; the store saves once typing pauses.
+    func editBook(_ id: ID, _ edit: (inout Book) -> Void) {
+        guard let i = books.firstIndex(where: { $0.id == id }) else { return }
+        var book = books[i]
+        edit(&book)
+        guard book != books[i] else { return }
+        book.updatedAt = .now
+        books[i] = book
+        unsavedBooks.insert(id)
+        bookSave.schedule { [weak self] in self?.saveUnsavedBooks() }
+    }
+
+    func saveUnsavedBooks() {
+        bookSave.cancel()
+        for id in unsavedBooks {
+            if let book = book(id) { sync.save(book) }
+        }
+        unsavedBooks = []
+    }
+
+    /// Stores an uploaded cover and deletes the one it replaces.
+    func setBookCover(_ id: ID, data: Data) {
+        guard let cover = NoteImages.bookCover(from: data), let name = sync.saveImage(cover, ext: "jpg") else { return }
+        let old = book(id)?.cover
+        editBook(id) { $0.cover = name }
+        if let old { sync.deleteImage(old) }
+    }
+
+    func removeBookCover(_ id: ID) {
+        guard let cover = book(id)?.cover else { return }
+        editBook(id) { $0.cover = nil }
+        sync.deleteImage(cover)
+    }
+
+    /// Deletes a book together with its reading notes and cover.
+    func deleteBook(_ id: ID, undoManager: UndoManager? = nil) {
+        guard let book = book(id) else { return }
+        let removed = notes.filter { $0.bookID == id }
+        let cover = book.cover.flatMap { name in sync.imageData(name).map { (name, $0) } }
+        unsavedBooks.remove(id)
+        books.removeAll { $0.id == id }
+        sync.delete(Book.self, id: id)
+        if let name = book.cover { sync.deleteImage(name) }
+        let images = deleteNotes(removed.map(\.id))
+        undoManager?.registerUndo(withTarget: self) { store in
+            if let cover { store.sync.saveImage(cover.1, name: cover.0) }
+            store.put(book, in: \.books, undoManager: nil, action: "")
+            store.books.sort { $0.createdAt < $1.createdAt }
+            store.restore(notes: removed, categories: [], images: images, undoManager: nil)
+            undoManager?.registerUndo(withTarget: store) { $0.deleteBook(id, undoManager: undoManager) }
+        }
+        undoManager?.setActionName("Delete Book")
+    }
+
+    @discardableResult
+    func addBookNote(to bookID: ID) -> Note {
+        let page = book(bookID)?.currentPage ?? 0
+        let note = Note(categoryID: "", bookID: bookID, location: page > 0 ? "p. \(page)" : nil)
+        notes.append(note)
+        sync.save(note)
+        return note
+    }
+
+    @discardableResult
+    func addBookCategory(name: String) -> BookCategory? {
+        let name = name.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return nil }
+        let category = BookCategory(id: newID(), name: name, hex: NoteCategory.palette[bookCategories.count % NoteCategory.palette.count],
+                                    sortOrder: (bookCategories.map(\.sortOrder).max() ?? -1) + 1)
+        bookCategories.append(category)
+        sync.save(category)
+        return category
+    }
+
+    func renameBookCategory(_ id: ID, to name: String) {
+        let name = name.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty, let i = bookCategories.firstIndex(where: { $0.id == id }), bookCategories[i].name != name else { return }
+        bookCategories[i].name = name
+        bookCategories[i].updatedAt = .now
+        sync.save(bookCategories[i])
+    }
+
+    /// Deletes a shelf; its books stay, uncategorized.
+    func deleteBookCategory(_ id: ID) {
+        bookCategories.removeAll { $0.id == id }
+        sync.delete(BookCategory.self, id: id)
+        for book in books where book.categoryID == id { editBook(book.id) { $0.categoryID = nil } }
+    }
+
+    // MARK: Note links
+
+    /// Whether a note's page is turned on. Links and pickers leave out notes from a hidden feature.
+    func isNoteVisible(_ note: NoteSummary) -> Bool { isEnabled(note.bookID == nil ? .notes : .books) }
+
+    /// What a note belongs to, shown beside it in the link picker, previews and "Mentioned in": its book or category.
+    func noteOrigin(of note: NoteSummary) -> (name: String, color: Color) {
+        if let bookID = note.bookID {
+            let book = book(bookID)
+            return (book?.displayTitle ?? "Book", book?.color ?? Palette.ink3)
+        }
+        let category = noteCategory(note.categoryID)
+        return (category?.name ?? "Uncategorized", category?.color ?? Palette.ink3)
+    }
+
+    /// The category a note created from a link in `note` goes in: the same one, or the first for a reading note.
+    func linkHomeCategory(for note: Note) -> NoteCategory? {
+        noteCategory(note.categoryID) ?? noteCategories.first
+    }
+
     // MARK: Sync
 
-    /// Re-reads todos, labels, office tasks, notes, University, Job Study and Product Dev from the store and pulls shared settings.
+    /// Re-reads todos, labels, office tasks, notes, books, University, Job Study and Product Dev from the store and pulls shared settings.
     func reloadSynced() {
         sync.scan {
             let todos = sync.load(Todo.self, keeping: todos).sorted { $0.createdAt < $1.createdAt }
@@ -994,6 +1151,14 @@ final class AppStore {
                 notes = notes.map { typed[$0.id] ?? $0 }
             }
             if notes != self.notes { self.notes = notes }
+            let bookCategories = sync.load(BookCategory.self, keeping: bookCategories).sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
+            if bookCategories != self.bookCategories { self.bookCategories = bookCategories }
+            var books = sync.load(Book.self, keeping: books).sorted { $0.createdAt < $1.createdAt }
+            if !unsavedBooks.isEmpty {
+                let typed = Dictionary(self.books.filter { unsavedBooks.contains($0.id) }.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+                books = books.map { typed[$0.id] ?? $0 }
+            }
+            if books != self.books { self.books = books }
 
             var u = University()
             u.classes = sync.load(UniClass.self, keeping: university.classes).sorted { $0.createdAt < $1.createdAt }

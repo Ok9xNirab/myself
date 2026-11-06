@@ -279,6 +279,95 @@ extension SampleData {
                 B(.todo, "Designing Data-Intensive Applications — ch. 5–6", done: false),
                 B(.todo, "The Pragmatic Programmer", done: true),
             ]),
+        ] + bookSampleNotes()
+    }
+}
+
+// MARK: Book Notes
+
+extension SampleData {
+    /// The sample philosophy notes the reading notes link to. Only Settings › Reset adds it; a new install keeps the
+    /// four default categories.
+    static let philosophyCategory = NoteCategory(id: "nc5", name: "Philosophy", hex: 0xA2845E, sortOrder: 4)
+
+    static let bookCategories: [BookCategory] = [
+        BookCategory(id: "bc1", name: "Politics", hex: 0x2F5D8E, sortOrder: 0, updatedAt: .distantPast),
+        BookCategory(id: "bc2", name: "Philosophy", hex: 0xA2845E, sortOrder: 1, updatedAt: .distantPast),
+        BookCategory(id: "bc3", name: "History", hex: 0x3D7A4F, sortOrder: 2, updatedAt: .distantPast),
+    ]
+
+    static func books() -> [Book] {
+        let added = { (days: Double) in Date.now.addingTimeInterval(-days * 86400) }
+        return [
+            Book(id: "bk1", title: "On Democracy", author: "Robert A. Dahl", hex: 0x2F5D8E, status: .reading, categoryID: "bc1", totalPages: 224, currentPage: 86, createdAt: added(30)),
+            Book(id: "bk4", title: "Sapiens", author: "Yuval Noah Harari", hex: 0x7A5A2F, status: .reading, categoryID: "bc3", totalPages: 443, currentPage: 212, createdAt: added(40)),
+            Book(id: "bk3", title: "Leviathan", author: "Thomas Hobbes", hex: 0x4A4A4A, status: .want, categoryID: "bc1", totalPages: 688, currentPage: 0, createdAt: added(50)),
+            Book(id: "bk2", title: "The Republic", author: "Plato", hex: 0x8E3B2F, status: .done, categoryID: "bc2", totalPages: 416, currentPage: 416, createdAt: added(60)),
+        ]
+    }
+
+    private static func bookSampleNotes() -> [Note] {
+        typealias B = NoteBlock
+        let hours = 3600.0, days = 86400.0
+        func page(_ id: ID, category: ID = "", book: ID? = nil, at location: String? = nil, _ title: String, ago: Double, _ blocks: [NoteBlock]) -> Note {
+            let edited = Date.now.addingTimeInterval(-ago)
+            return Note(id: id, categoryID: category, title: title, bookID: book, location: location, blocks: blocks,
+                        createdAt: edited.addingTimeInterval(-20 * days), editedAt: edited, updatedAt: edited)
+        }
+        return [
+            page("np_ar", category: "nc5", "Aristotle", ago: 6 * days, [
+                B(.p, "Greek philosopher, 384–322 BC. Studied under [[Plato|np_pl]] at the Academy for twenty years, later tutored Alexander."),
+                B(.h2, "Politics"),
+                B(.bullet, "Humans are *political animals* — we only flourish inside a community, the *polis*"),
+                B(.bullet, "Classified constitutions by **who rules** and **in whose interest**"),
+                B(.num, "Rule of one — monarchy / ==tyranny=="),
+                B(.num, "Rule of few — aristocracy / ==oligarchy=="),
+                B(.num, "Rule of many — polity / ==democracy=="),
+                B(.quote, "The second form in each pair is the corrupt one: rulers govern for themselves, not the common good."),
+                B(.p, "His preferred regime is a **polity** — a mix of oligarchy and democracy anchored by a large middle class."),
+            ]),
+            page("np_pl", category: "nc5", "Plato", ago: 8 * days, [
+                B(.p, "Athenian philosopher, 428–348 BC. Student of Socrates, teacher of [[Aristotle|np_ar]]."),
+                B(.bullet, "*Republic* — the just city is ruled by philosopher-kings"),
+                B(.bullet, "Ship of state: steering needs expertise, not a popular vote"),
+                B(.bullet, "Saw democracy as unstable — excess freedom slides into tyranny"),
+            ]),
+            page("np_sc", category: "nc5", "Social contract", ago: 11 * days, [
+                B(.p, "Political authority is legitimate only when it rests on the consent of the governed."),
+                B(.bullet, "Hobbes — without a sovereign, life is a war of all against all"),
+                B(.bullet, "Locke — government exists to protect life, liberty and property"),
+                B(.bullet, "Rousseau — the *general will*"),
+            ]),
+            page("bn1", book: "bk1", at: "pp. 1–6", "Ch. 1 — Do we really need a guide?", ago: 9 * days, [
+                B(.p, "Opening question: if almost every regime today calls itself a democracy, does the word still mean anything?"),
+                B(.bullet, "Dahl wants a *standard* to measure real governments against — not a definition by popularity"),
+                B(.todo, "Write my own one-line definition before reading ch. 4", done: true),
+            ]),
+            page("bn2", book: "bk1", at: "pp. 7–25", "Ch. 2 — Where and how did democracy develop?", ago: 3 * days, [
+                B(.p, "Democracy wasn\u{2019}t invented once and spread — it appeared independently wherever the conditions were right. Athens is the classic starting point: *demokratia*, rule by the *demos*."),
+                B(.p, "Not everyone in Greece was a fan. [[Aristotle|np_ar]] listed democracy among the corrupt constitutions, and [[Plato|np_pl]] thought it ends in tyranny."),
+                B(.h3, "Other early cases"),
+                B(.bullet, "Rome — *res publica*, but citizenship stayed narrow"),
+                B(.bullet, "Medieval Italian city-republics — Venice, Florence"),
+                B(.bullet, "Viking assemblies — the *Thing*"),
+                B(.quote, "Recurring pattern: assemblies appear when people see themselves as roughly equal and nobody can dominate."),
+                B(.todo, "Compare Athenian lottery (sortition) with modern elections", done: false),
+            ]),
+            page("bn3", book: "bk1", at: "pp. 35–43", "Ch. 4 — What is democracy?", ago: 5 * hours, [
+                B(.p, "Dahl\u{2019}s five criteria for an ideal democratic process:"),
+                B(.num, "Effective participation"), B(.num, "Voting equality"), B(.num, "Enlightened understanding"),
+                B(.num, "Control of the agenda"), B(.num, "Inclusion of adults"),
+                B(.p, "Ties back to the [[social contract|np_sc]] — legitimacy comes from people who can actually take part."),
+                B(.todo, "Re-read p. 38 on *enlightened understanding*", done: false),
+            ]),
+            page("bn5", book: "bk4", at: "pp. 3–74", "Part 1 — The Cognitive Revolution", ago: 12 * days, [
+                B(.p, "Shared myths let large groups of strangers cooperate — nations, money, laws."),
+                B(.p, "Political legitimacy is one such shared story → [[social contract|np_sc]]."),
+            ]),
+            page("bn4", book: "bk2", at: "543a–569c", "Book VIII — How regimes decay", ago: 40 * days, [
+                B(.p, "Cycle: aristocracy → timocracy → oligarchy → democracy → tyranny."),
+                B(.p, "Compare with [[Aristotle|np_ar]]\u{2019}s six forms — same worry, different classification."),
+            ]),
         ]
     }
 }

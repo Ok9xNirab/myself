@@ -23,6 +23,10 @@ struct NoteSummary: Identifiable, Equatable {
     var title: String
     var snippet: String
     var pinned: Bool
+    var bookID: ID?
+    var location: String?
+    /// The notes this one links to with `[[label|id]]`, for link counts and "Mentioned in".
+    var linkIDs: [ID]
     var createdAt: Date
     var editedAt: Date
 
@@ -34,6 +38,9 @@ struct NoteSummary: Identifiable, Equatable {
         title = note.title
         snippet = note.snippet
         pinned = note.pinned
+        bookID = note.bookID
+        location = note.location
+        linkIDs = note.linkIDs
         createdAt = note.createdAt
         editedAt = Date(timeIntervalSinceReferenceDate: (note.editedAt.timeIntervalSinceReferenceDate / 60).rounded(.down) * 60)
     }
@@ -50,6 +57,10 @@ struct Note: Identifiable, Equatable, Codable, SyncRecord {
     /// Reader mode: the note is shown rendered and can't be edited until it's turned off. Optional so notes saved
     /// before it existed still decode.
     var readerMode: Bool?
+    /// The book a reading note belongs to. Reading notes have no category and show only on the Book Notes page.
+    var bookID: ID?
+    /// Where in the book a reading note is ("pp. 35–43").
+    var location: String?
     var blocks: [NoteBlock] = [NoteBlock()]
     var createdAt = Date.now
     /// Last change to the title or blocks; shown and sorted as "Date edited".
@@ -62,7 +73,21 @@ struct Note: Identifiable, Equatable, Codable, SyncRecord {
     var isReading: Bool { readerMode == true }
 
     /// Title and block text, lowercased, for search.
-    var searchText: String { (title + " " + blocks.map(\.text).joined(separator: " ")).lowercased() }
+    var searchText: String { (title + " " + blocks.map { NoteText.withoutLinkTargets($0.text) }.joined(separator: " ")).lowercased() }
+
+    /// The notes this one links to, in order of first mention, worked out once per version of the note (the store
+    /// reads this for every note on every edit). Code and math blocks don't hold links.
+    var linkIDs: [ID] {
+        if let hit = Self.linkCache[id], hit.updatedAt == updatedAt { return hit.ids }
+        var ids: [ID] = []
+        for block in blocks where block.kind.isText || block.kind == .table {
+            for link in NoteMarkdown.linkIDs(block.text) where !ids.contains(link) { ids.append(link) }
+        }
+        Self.linkCache[id] = (updatedAt, ids)
+        return ids
+    }
+
+    private static var linkCache: [ID: (updatedAt: Date, ids: [ID])] = [:]
 
     /// Second line of a list row: the first non-empty line of text, or what kind of content the page has.
     var snippet: String {
@@ -83,9 +108,9 @@ struct Note: Identifiable, Equatable, Codable, SyncRecord {
     /// on every keystroke).
     private var stats: (words: Int, characters: Int) {
         if let hit = Self.statsCache[id], hit.updatedAt == updatedAt { return (hit.words, hit.characters) }
-        let text = title + " " + blocks.map { $0.kind == .table ? NoteTable($0.text).cells.joined(separator: " ") : $0.text }.joined(separator: " ")
+        let text = title + " " + blocks.map { NoteText.withoutLinkTargets($0.kind == .table ? NoteTable($0.text).cells.joined(separator: " ") : $0.text) }.joined(separator: " ")
         let words = text.split { $0.isWhitespace || "$`*#=~\\{}()".contains($0) }.count
-        let characters = (title + " " + blocks.map(\.text).joined(separator: " ")).count
+        let characters = (title + " " + blocks.map { NoteText.withoutLinkTargets($0.text) }.joined(separator: " ")).count
         Self.statsCache[id] = (updatedAt, words, characters)
         return (words, characters)
     }
@@ -341,6 +366,8 @@ struct NoteTable: Equatable {
         var cell = ""
         var code = false
         var escaped = false
+        /// Inside a `[[label|id]]` note link, whose pipe doesn't split the cell.
+        var link = false
         for ch in line {
             if escaped {
                 cell.append("\\")
@@ -351,11 +378,12 @@ struct NoteTable: Equatable {
             } else if ch == "`" {
                 code.toggle()
                 cell.append(ch)
-            } else if ch == "|", !code {
+            } else if ch == "|", !code, !link {
                 cells.append(cell.trimmingCharacters(in: .whitespaces))
                 cell = ""
             } else {
                 cell.append(ch)
+                if cell.hasSuffix("[[") { link = true } else if cell.hasSuffix("]]") { link = false }
             }
         }
         if escaped { cell.append("\\") }
@@ -414,9 +442,16 @@ enum NoteText {
         s.unicodeScalars.contains { (0x0980...0x09FF).contains($0.value) }
     }
 
+    /// Turns `[[label|id]]` note links into their labels, so the IDs don't count as words or match searches.
+    static func withoutLinkTargets(_ s: String) -> String {
+        guard s.contains("[[") else { return s }
+        return s.replacing(/\[\[([^\]|\n]+)\|[\w-]+\]\]/) { String($0.1) }
+    }
+
     /// Strips inline markdown and LaTeX commands, for list snippets and search excerpts.
     static func plain(_ s: String) -> String {
-        s.replacing(/\[([^\]]+)\]\([^)]+\)/) { String($0.1) }
+        withoutLinkTargets(s)
+            .replacing(/\[([^\]]+)\]\([^)]+\)/) { String($0.1) }
             .replacing(/\\[a-zA-Z]+/, with: " ")
             .replacing(/[*~=`$#>{}\\_^]/, with: "")
             .replacing(/\s+/, with: " ")

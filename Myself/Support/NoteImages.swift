@@ -40,6 +40,21 @@ enum NoteImages {
         return (data, url.pathExtension)
     }
 
+    /// An uploaded book cover scaled down to at most 600 pixels on its longest side, as a JPEG.
+    static func bookCover(from data: Data) -> Data? {
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: 600,
+        ]
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        let out = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(out, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.84] as CFDictionary)
+        return CGImageDestinationFinalize(destination) ? out as Data : nil
+    }
+
     #if os(macOS)
     /// An image on the pasteboard (a copied image file, or image data such as a screenshot) as file data.
     /// Returns nil when the pasteboard holds text, so pasting text is left to the text view.

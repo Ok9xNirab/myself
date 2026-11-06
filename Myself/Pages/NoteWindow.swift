@@ -19,7 +19,7 @@ struct NoteWindow: View {
                 NoteEditor(note: note, isFresh: false,
                            onDuplicate: duplicate, onDelete: delete)
                     .navigationTitle(note.displayTitle)
-                    .navigationSubtitle(store.noteCategory(note.categoryID)?.name ?? "")
+                    .navigationSubtitle(note.bookID.flatMap { store.book($0)?.displayTitle } ?? store.noteCategory(note.categoryID)?.name ?? "")
             } else {
                 EmptyStateView(systemImage: "note.text", title: "Note not found", subtitle: "It may have been deleted on another Mac.")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -30,8 +30,9 @@ struct NoteWindow: View {
         .background(Palette.surface)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("Show in Notes", systemImage: "arrow.up.forward.app", action: showInNotes)
-                    .help("Show this note on the Notes page")
+                let page: Page = store.notes.first { $0.id == noteID }?.bookID == nil ? .notes : .books
+                Button("Show in \(page.title)", systemImage: "arrow.up.forward.app", action: showInNotes)
+                    .help("Show this note on the \(page.title) page")
             }
         }
         .onDisappear { store.saveUnsavedNotes() }

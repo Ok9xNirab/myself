@@ -42,6 +42,7 @@ let cloudSchema = Schema([
     UniversityNotesModel.self,
     ProductModel.self, KanbanCardModel.self,
     StudySubjectModel.self, StudyTopicModel.self,
+    BookCategoryModel.self, BookModel.self,
 ])
 
 // MARK: Labels, todos, office
@@ -117,6 +118,11 @@ let cloudSchema = Schema([
     var title: String = ""
     var pinned: Bool = false
     var readerMode: Bool?
+    /// The book a reading note belongs to, by record ID. A plain field rather than a relationship: CloudKit can deliver
+    /// a note before its book, and without this it would briefly show up among the ordinary notes.
+    var bookID: String?
+    /// Where in the book a reading note is ("pp. 35–43").
+    var location: String?
     /// The note's `[NoteBlock]` as JSON, so the block format can grow without schema changes. Large notes are kept
     /// outside the database (and sync as a CloudKit asset).
     @Attribute(.externalStorage) var blocksData: Data = Data()
@@ -268,6 +274,37 @@ let cloudSchema = Schema([
     var order: Double = 0
     var parent: StudySubjectModel?
     @Relationship(inverse: \NoteModel.topics) var notes: [NoteModel]? = []
+    init() {}
+}
+
+// MARK: Book Notes
+
+@Model final class BookCategoryModel: CloudRecord {
+    var recordID: String = ""
+    var copyID: String = ""
+    var name: String = ""
+    var hex: Int = 0
+    var sortOrder: Int = 0
+    var updatedAt: Date = Date.now
+    init() {}
+}
+
+@Model final class BookModel: CloudRecord {
+    var recordID: String = ""
+    var copyID: String = ""
+    var title: String = ""
+    var author: String = ""
+    var hex: Int = 0
+    /// A `BookStatus` raw value.
+    var status: String = "reading"
+    /// A book category's record ID; nil for uncategorized.
+    var categoryID: String?
+    var totalPages: Int = 0
+    var currentPage: Int = 0
+    /// File name of the uploaded cover in `NoteImageModel`.
+    var cover: String?
+    var createdAt: Date = Date.now
+    var updatedAt: Date = Date.now
     init() {}
 }
 

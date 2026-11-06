@@ -50,7 +50,12 @@ struct QuickOpenView: View {
             results += store.jobStudy.flatMap { s in s.topics.map { Result(group: "Job Study", title: $0.name, subtitle: s.subject, systemImage: Page.jobStudy.systemImage, page: .jobStudy) } }
         }
         if on(.notes) {
-            results += store.notes.map { Result(group: "Notes", title: $0.displayTitle, subtitle: store.noteCategory($0.categoryID)?.name ?? "", systemImage: Page.notes.systemImage, target: .note($0.id)) }
+            results += store.notes.filter { $0.bookID == nil }.map { Result(group: "Notes", title: $0.displayTitle, subtitle: store.noteCategory($0.categoryID)?.name ?? "", systemImage: Page.notes.systemImage, target: .note($0.id)) }
+        }
+        if on(.books) {
+            results += store.notes.compactMap { note in
+                note.bookID.map { Result(group: "Book Notes", title: note.displayTitle, subtitle: store.book($0)?.displayTitle ?? "", systemImage: Page.books.systemImage, target: .note(note.id)) }
+            }
         }
         return results
     }

@@ -16,6 +16,14 @@ enum SharedStore {
     static let appGroup = "group.com.quorrelapps.myself"
     #endif
 
+    /// Debug builds keep their own file. They sync to CloudKit's Development environment and may have a newer schema
+    /// than the installed app, whose widgets would otherwise migrate the store back over them.
+    #if DEBUG
+    private static let storeName = "MySelf-Debug.store"
+    #else
+    private static let storeName = "MySelf.store"
+    #endif
+
     /// The store file: in the App Group container, so the widget extension opens the same one. Builds not signed for
     /// the group (unsigned development builds) can't write there and use the app's own Application Support instead.
     static let url: URL = {
@@ -23,11 +31,11 @@ enum SharedStore {
         if let group = fm.containerURL(forSecurityApplicationGroupIdentifier: appGroup)?
             .appending(path: "Library/Application Support", directoryHint: .isDirectory),
            (try? fm.createDirectory(at: group, withIntermediateDirectories: true)) != nil {
-            return group.appending(path: "MySelf.store")
+            return group.appending(path: storeName)
         }
         let local = URL.applicationSupportDirectory.appending(path: Bundle.main.bundleIdentifier ?? "MySelf", directoryHint: .isDirectory)
         try? fm.createDirectory(at: local, withIntermediateDirectories: true)
-        return local.appending(path: "MySelf.store")
+        return local.appending(path: storeName)
     }()
 
     /// Whether the App Group container exists for this process (it doesn't in unsigned builds).
@@ -43,6 +51,30 @@ enum SharedStore {
 
     static var disabledFeatures: Set<String> {
         Set(defaults.stringArray(forKey: disabledFeaturesKey) ?? [])
+    }
+
+    /// Describes `cloudSchema`, so a process can tell whether the store was last opened with the schema it has.
+    private static var schemaFingerprint: String {
+        cloudSchema.entities.map { entity in
+            let attributes = entity.attributes.map { "\($0.name)=\($0.valueType)" }
+            let relationships = entity.relationships.map { "\($0.name)>\($0.destination)" }
+            return "\(entity.name):\((attributes + relationships).sorted().joined(separator: ","))"
+        }.sorted().joined(separator: ";")
+    }
+
+    private static var openedSchemaKey: String { "openedSchema.\(url.lastPathComponent)" }
+
+    /// Whether the app has opened the store with this process's schema. Opening a store with any other schema migrates
+    /// it, so widgets check this first: only the app may migrate, or an old widget could undo the app's upgrade.
+    static var isStoreCurrent: Bool {
+        defaults.string(forKey: openedSchemaKey) == schemaFingerprint
+    }
+
+    /// Called by the app once it has opened the store. True if widgets couldn't read it until now.
+    @discardableResult static func markStoreOpened() -> Bool {
+        guard !isStoreCurrent else { return false }
+        defaults.set(schemaFingerprint, forKey: openedSchemaKey)
+        return true
     }
 
     /// Posted (as a Darwin notification, so it crosses processes) when a widget has written to the store; the app

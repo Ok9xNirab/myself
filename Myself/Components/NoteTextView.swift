@@ -34,9 +34,12 @@ final class NoteTextFocus {
         #endif
     }
 
-    var selectionStart: Int? {
+    var selectionStart: Int? { selection?.location }
+
+    /// The selection (UTF-16) of the view being edited.
+    var selection: NSRange? {
         #if os(macOS)
-        textView?.selectedRange().location
+        textView?.selectedRange()
         #else
         nil
         #endif
@@ -64,6 +67,8 @@ struct NoteTextView: NSViewRepresentable {
     /// Called with pasted text that spans several lines and the selection it replaces; return true to take it over
     /// (the editor splits it into blocks) instead of inserting it into this view.
     var onPasteText: ((String, NSRange) -> Bool)?
+    /// ⇧⌘L: link the selection to a note.
+    var onLinkNote: ((NSRange) -> Void)?
     var onKey: (NoteKey, NoteKeyContext) -> Bool = { _, _ in false }
     var onFocusChange: (Bool) -> Void = { _ in }
     /// A text selection dragged above or below the view: called with how far past its top (negative) or bottom
@@ -274,6 +279,10 @@ final class NoteNSTextView: NSTextView {
         guard formatting, window?.firstResponder === self, event.modifierFlags.contains(.command),
               let key = event.charactersIgnoringModifiers?.lowercased() else { return super.performKeyEquivalent(with: event) }
         let shift = event.modifierFlags.contains(.shift)
+        if shift, key == "l", let onLinkNote = parent?.onLinkNote {
+            onLinkNote(selectedRange())
+            return true
+        }
         let markers: (String, String, String)? = switch (shift, key) {
         case (false, "b"): ("**", "**", "text")
         case (false, "i"): ("*", "*", "text")
@@ -353,6 +362,8 @@ struct NoteTextView: View {
     /// Called with pasted text that spans several lines and the selection it replaces; return true to take it over
     /// (the editor splits it into blocks) instead of inserting it into this view.
     var onPasteText: ((String, NSRange) -> Bool)?
+    /// macOS only: ⇧⌘L.
+    var onLinkNote: ((NSRange) -> Void)?
     var onKey: (NoteKey, NoteKeyContext) -> Bool = { _, _ in false }
     var onFocusChange: (Bool) -> Void = { _ in }
     /// macOS only: a selection dragged out of the view.

@@ -47,7 +47,7 @@ struct NotesView: View {
         let scope = validScope
         let list = filtered(scope)
         // The list reads `noteSummaries`, not `notes`, so typing in the open note doesn't redraw it.
-        let open = (store.noteSummaries.first { $0.id == openID } ?? list.first)?.id
+        let open = (store.noteSummaries.first { $0.id == openID && $0.bookID == nil } ?? list.first)?.id
 
         GeometryReader { geo in
             let railShown = showsBrowser && geo.size.width >= 940
@@ -108,7 +108,7 @@ struct NotesView: View {
                 if let category = pendingCategoryDelete { deleteCategory(category, confirmed: true) }
             }
         } message: {
-            let n = store.noteSummaries.filter { $0.categoryID == pendingCategoryDelete?.id }.count
+            let n = count(pendingCategoryDelete?.id ?? "")
             Text("\(n) \(n == 1 ? "note" : "notes") will be deleted. You can undo this with ⌘Z.")
         }
     }
@@ -136,7 +136,8 @@ struct NotesView: View {
         // Searching needs the notes' text; only then does the list follow every edit.
         let matches = q.isEmpty ? nil : Set(store.notes.filter { index.text(for: $0).contains(q) }.map(\.id))
         var list = store.noteSummaries.filter { note in
-            guard everywhere || (scope == "pinned" ? note.pinned : note.categoryID == scope) else { return false }
+            // Reading notes live on the Book Notes page.
+            guard note.bookID == nil, everywhere || (scope == "pinned" ? note.pinned : note.categoryID == scope) else { return false }
             return matches?.contains(note.id) ?? true
         }
         switch sort {
@@ -173,9 +174,9 @@ struct NotesView: View {
 
     private func count(_ scope: String) -> Int {
         switch scope {
-        case "all": store.noteSummaries.count
-        case "pinned": store.noteSummaries.filter(\.pinned).count
-        default: store.noteSummaries.filter { $0.categoryID == scope }.count
+        case "all": store.noteSummaries.count(where: { $0.bookID == nil })
+        case "pinned": store.noteSummaries.count(where: { $0.pinned && $0.bookID == nil })
+        default: store.noteSummaries.count(where: { $0.categoryID == scope && $0.bookID == nil })
         }
     }
 
@@ -514,7 +515,7 @@ struct NotesView: View {
 // MARK: - Pieces
 
 /// The editor for the open note. It reads the note itself, so its edits redraw only the editor, not the list.
-private struct OpenNoteEditor: View {
+struct OpenNoteEditor: View {
     var id: ID
     var isFresh: Bool
     var showsBrowser: Binding<Bool>

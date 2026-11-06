@@ -24,7 +24,9 @@ enum SelfTest {
         let store = CloudStore(testStoreAt: storeURL)
 
         let labels = SampleData.labels + SampleData.productLabels
-        let categories = SampleData.noteCategories
+        let categories = SampleData.noteCategories + [SampleData.philosophyCategory]
+        let bookCategories = SampleData.bookCategories
+        let books = SampleData.books()
         let notes = SampleData.notes()
         var todos = SampleData.todos()
         let office = SampleData.office()
@@ -37,6 +39,8 @@ enum SelfTest {
         store.batch {
             labels.forEach { store.save($0) }
             categories.forEach { store.save($0) }
+            bookCategories.forEach { store.save($0) }
+            books.forEach { store.save($0) }
             products.forEach { store.save($0) }
             notes.forEach { store.save($0) }
             todos.forEach { store.save($0) }
@@ -69,6 +73,8 @@ enum SelfTest {
         roundTrip(categories, "note categories")
         roundTrip(products, "products")
         roundTrip(notes, "notes")
+        roundTrip(bookCategories, "book categories")
+        roundTrip(books, "books")
         roundTrip(todos, "todos", sortLabels)
         roundTrip(office, "office tasks")
         roundTrip(university.classes, "classes")
@@ -78,6 +84,35 @@ enum SelfTest {
         roundTrip([uniNotes], "university notes")
         roundTrip(cards, "cards", sortCardLabels)
         roundTrip(study, "job study", sortTopicNotes)
+
+        // Note links and reading notes.
+        check(NoteMarkdown.parse("a [[Plato|np_pl]] b") == [.text("a ", [], link: nil, note: nil), .text("Plato", [], link: nil, note: "np_pl"), .text(" b", [], link: nil, note: nil)],
+              "links: parse gave \(NoteMarkdown.parse("a [[Plato|np_pl]] b"))")
+        check(NoteMarkdown.parse("[[**Bold**|x1]]") == [.text("Bold", [.bold], link: nil, note: "x1")], "links: markdown in a label")
+        for text in ["[[", "[[no id]]", "[[|x]]", "[[a|]]", "[[a|b]", "[x](https://a.b)"] {
+            check(NoteMarkdown.linkIDs(text).isEmpty, "links: \(text) isn't a link")
+        }
+        check(NoteMarkdown.linkIDs("`[[a|b]]` [[c|d]]") == ["d"], "links: one in inline code counted")
+        check(NoteText.plain("see [[Plato|np_pl]]") == "see Plato", "links: plain text kept the ID")
+        check(NoteTable.cells("| [[a|b]] | c |") == ["[[a|b]]", "c"], "links: the pipe split a table cell")
+        check(notes.first { $0.id == "bn2" }?.linkIDs == ["np_ar", "np_pl"], "links: wrong IDs for bn2")
+        let withLinks = Note(categoryID: "nc1", blocks: [NoteBlock(.p, "[[A|one]] [[A again|one]]"), NoteBlock(.code, "[[B|two]]")])
+        check(withLinks.linkIDs == ["one"], "links: got \(withLinks.linkIDs)")
+        check(!withLinks.searchText.contains("one") && withLinks.searchText.contains("a again"), "links: search text is \(withLinks.searchText)")
+        check(notes.first { $0.id == "bn1" }.map { $0.bookID == "bk1" && $0.categoryID.isEmpty && $0.location == "pp. 1–6" } == true, "books: reading note fields")
+        if var book = books.first {
+            book.title = "Renamed"
+            book.status = .done
+            book.categoryID = nil
+            book.cover = "cover.jpg"
+            book.updatedAt = .now
+            store.save(book)
+            roundTrip([book] + books.dropFirst(), "books after edit")
+            store.save(books[0])
+        }
+        let cover = NoteImages.bookCover(from: Self.tinyPNG)
+        check(cover?.starts(with: [0xFF, 0xD8]) == true, "books: cover isn't a JPEG")
+        check(NoteImages.bookCover(from: Data([1, 2, 3])) == nil, "books: a non-image made a cover")
 
         // Edits and deletes.
         if todos.count > 1 {
@@ -164,5 +199,8 @@ enum SelfTest {
 
         return failures
     }
+
+    /// A 1×1 PNG.
+    private static let tinyPNG = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIApD5fRAAAAABJRU5ErkJggg==")!
 }
 #endif

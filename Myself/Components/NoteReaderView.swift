@@ -6,9 +6,25 @@ enum NoteReaderText {
     /// Marks an image's attachment character with its file name, so a click can open it.
     static let imageKey = NSAttributedString.Key("MySelfNoteImage")
 
-    /// Builds the note for a text view `width` points wide. `imageURL` returns a downloaded image's file.
-    static func build(_ note: Note, width: CGFloat, imageURL: (String) -> URL?) -> NSAttributedString {
+    /// A `[[label|id]]` link becomes a link to `myself-note:<id>`, so a click reaches the text view's delegate.
+    private static let noteLinkScheme = "myself-note"
+
+    static func noteLink(_ id: ID) -> URL? { URL(string: "\(noteLinkScheme):\(id)") }
+
+    /// The note a link attribute points at.
+    static func noteID(from link: Any?) -> ID? {
+        guard let url = link as? URL, url.scheme == noteLinkScheme else { return nil }
+        return url.absoluteString.replacingOccurrences(of: "\(noteLinkScheme):", with: "")
+    }
+
+    /// Builds the note for a text view `width` points wide. `imageURL` returns a downloaded image's file, and
+    /// `isKnownNote` tells a note link from a broken one. Text blocks can't see the store from here.
+    static func build(_ note: Note, width: CGFloat, imageURL: (String) -> URL?, isKnownNote: (ID) -> Bool) -> NSAttributedString {
         let size = NoteTypeface.bodySize
+        /// `inline`, with this note's link check.
+        func inline(_ source: String, size: CGFloat, weight: PlatformFont.Weight, color: PlatformColor) -> NSMutableAttributedString {
+            Self.inline(source, size: size, weight: weight, color: color, isKnownNote: isKnownNote)
+        }
         let out = NSMutableAttributedString()
 
         func paragraph(_ text: NSAttributedString, _ style: NSParagraphStyle) {
@@ -29,7 +45,8 @@ enum NoteReaderText {
             .font: NoteTypeface.platformFont(size: size * 2, weight: .bold), .foregroundColor: PlatformColor.labelCompat,
         ])
         paragraph(title, style(lineSpacing: NoteText.hasBengali(note.title) ? size * 0.4 : size * 0.1, after: 6))
-        let meta = NSAttributedString(string: "Edited \(NoteDates.ago(note.editedAt, now: .now)) · \(note.wordCount) words", attributes: [
+        let place = note.location.map { "\($0) · " } ?? ""
+        let meta = NSAttributedString(string: "\(place)Edited \(NoteDates.ago(note.editedAt, now: .now)) · \(note.wordCount) words", attributes: [
             .font: PlatformFont.systemFont(ofSize: 12), .foregroundColor: PlatformColor.tertiaryLabelCompat,
         ])
         paragraph(meta, style(lineSpacing: 0, after: 20))
@@ -191,11 +208,11 @@ enum NoteReaderText {
     }
 
     /// Inline markdown as attributed text, matching `NoteMarkdown.text`.
-    private static func inline(_ source: String, size: CGFloat, weight: PlatformFont.Weight, color: PlatformColor) -> NSMutableAttributedString {
+    private static func inline(_ source: String, size: CGFloat, weight: PlatformFont.Weight, color: PlatformColor, isKnownNote: (ID) -> Bool) -> NSMutableAttributedString {
         let out = NSMutableAttributedString()
         for run in NoteMarkdown.parse(source) {
             switch run {
-            case let .text(string, style, link):
+            case let .text(string, style, link, note):
                 let bold = style.contains(.bold) ? NoteTypeface.boldWeight(over: weight) : weight
                 var attributes: [NSAttributedString.Key: Any] = [.foregroundColor: color]
                 if style.contains(.code) {
@@ -207,6 +224,15 @@ enum NoteReaderText {
                 if style.contains(.strike) { attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
                 if style.contains(.highlight) { attributes[.backgroundColor] = PlatformColor.systemOrange.withAlphaComponent(0.28) }
                 if let link { attributes[.link] = link }
+                if let note {
+                    if isKnownNote(note) {
+                        attributes[.link] = noteLink(note)
+                        attributes[.backgroundColor] = PlatformColor.controlAccentCompat.withAlphaComponent(0.09)
+                    } else {
+                        attributes[.foregroundColor] = PlatformColor.tertiaryLabelCompat
+                        attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+                    }
+                }
                 out.append(NSAttributedString(string: string, attributes: attributes))
             case let .math(latex):
                 if let rendered = MathRenderer.render(latex, fontSize: size * 1.08, display: false) {
@@ -403,6 +429,10 @@ struct NoteReaderView: NSViewRepresentable {
     var note: Note
     var imageURL: (String) -> URL?
     var onOpenImage: (String) -> Void
+    var isKnownNote: (ID) -> Bool
+    var onOpenNote: (ID) -> Void
+    /// The note link under the pointer and its rect in the view, or nil when the pointer leaves it.
+    var onHoverNote: (ID?, CGRect) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -447,6 +477,47 @@ struct NoteReaderView: NSViewRepresentable {
             coordinator.width = newSize.width
             coordinator.rebuild(self)
         }
+
+        private var hoveredRange: NSRange?
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            trackingAreas.filter { $0.owner === self && $0.options.contains(.mouseMoved) }.forEach(removeTrackingArea)
+            addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+        }
+
+        override func mouseMoved(with event: NSEvent) {
+            super.mouseMoved(with: event)
+            report(convert(event.locationInWindow, from: nil))
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            super.mouseExited(with: event)
+            report(nil)
+        }
+
+        /// Tells the editor when the pointer moves onto or off a note link.
+        private func report(_ point: NSPoint?) {
+            guard let layout = layoutManager, let container = textContainer, let storage = textStorage else { return }
+            var range = NSRange()
+            var target: ID?
+            if let point, storage.length > 0 {
+                let inner = NSPoint(x: point.x - textContainerOrigin.x, y: point.y - textContainerOrigin.y)
+                let glyph = layout.glyphIndex(for: inner, in: container)
+                if layout.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: container).contains(inner) {
+                    let index = layout.characterIndexForGlyph(at: glyph)
+                    target = NoteReaderText.noteID(from: storage.attribute(.link, at: index, effectiveRange: &range))
+                }
+            }
+            guard target != nil || hoveredRange != nil, range != hoveredRange ?? NSRange() else { return }
+            hoveredRange = target == nil ? nil : range
+            guard let target else {
+                coordinator?.parent?.onHoverNote(nil, .zero)
+                return
+            }
+            let rect = layout.boundingRect(forGlyphRange: layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil), in: container)
+            coordinator?.parent?.onHoverNote(target, rect.offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y))
+        }
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate, NSLayoutManagerDelegate {
@@ -483,7 +554,7 @@ struct NoteReaderView: NSViewRepresentable {
         private func string(_ note: Note, width: CGFloat) -> NSAttributedString {
             use(note)
             if let hit = strings[key(width)] { return hit }
-            let built = NoteReaderText.build(note, width: width, imageURL: parent?.imageURL ?? { _ in nil })
+            let built = NoteReaderText.build(note, width: width, imageURL: parent?.imageURL ?? { _ in nil }, isKnownNote: parent?.isKnownNote ?? { _ in true })
             if strings.count >= 4 { strings = [:] }
             strings[key(width)] = built
             return built
@@ -530,6 +601,12 @@ struct NoteReaderView: NSViewRepresentable {
             guard let name = textView.textStorage?.attribute(NoteReaderText.imageKey, at: charIndex, effectiveRange: nil) as? String else { return }
             parent?.onOpenImage(name)
         }
+
+        func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+            guard let id = NoteReaderText.noteID(from: link) else { return false }
+            parent?.onOpenNote(id)
+            return true
+        }
     }
 }
 
@@ -539,6 +616,10 @@ struct NoteReaderView: UIViewRepresentable {
     var note: Note
     var imageURL: (String) -> URL?
     var onOpenImage: (String) -> Void
+    var isKnownNote: (ID) -> Bool
+    var onOpenNote: (ID) -> Void
+    /// macOS only: touch has no hover.
+    var onHoverNote: (ID?, CGRect) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -576,10 +657,13 @@ struct NoteReaderView: UIViewRepresentable {
         func rebuild(_ view: UITextView) {
             guard let parent else { return }
             built = parent.note
-            view.attributedText = NoteReaderText.build(parent.note, width: width, imageURL: parent.imageURL)
+            view.attributedText = NoteReaderText.build(parent.note, width: width, imageURL: parent.imageURL, isKnownNote: parent.isKnownNote)
         }
 
         func textView(_ textView: UITextView, primaryActionFor textItem: UITextItem, defaultAction: UIAction) -> UIAction? {
+            if case .link(let url) = textItem.content, let id = NoteReaderText.noteID(from: url) {
+                return UIAction { [weak self] _ in self?.parent?.onOpenNote(id) }
+            }
             guard case .textAttachment = textItem.content,
                   let name = textView.attributedText.attribute(NoteReaderText.imageKey, at: textItem.range.location, effectiveRange: nil) as? String
             else { return defaultAction }
