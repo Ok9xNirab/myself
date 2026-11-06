@@ -4,7 +4,7 @@
 
 # MySelf: a personal productivity app for macOS
 
-**One native Mac app for your to-dos, notes, university classes, office tasks, interview prep and product boards. Built with SwiftUI and SwiftData, synced through iCloud.**
+**One native Mac app for your to-dos, notes, university classes, office tasks, interview prep, product boards and book notes, with desktop widgets. Built with SwiftUI and SwiftData, synced through iCloud.**
 
 [![macOS 26+](https://img.shields.io/badge/macOS-26%2B-000000?logo=apple&logoColor=white)](#requirements)
 [![Swift](https://img.shields.io/badge/Swift-5-F05138?logo=swift&logoColor=white)](https://www.swift.org)
@@ -40,7 +40,9 @@ Most people track their life across five apps: a todo list, a notes app, a Kanba
 | 📖 **Job Study** | Interview-prep subjects with a revision checklist. A topic is due again 7 days after you last revised it, and topics can link to notes. |
 | 📝 **Notes** | A block editor with headings, lists, checklists, quotes, syntax-highlighted code, **LaTeX math**, **tables**, **images** (paste, drop or pick one; click to zoom) and Bengali set in the system's SF Bangla. Paste markdown and it becomes blocks. Select blocks like in Notion (<kbd>Esc</kbd>, <kbd>⌘A</kbd> twice, drag or Shift-click) and delete them with undo. **Reader mode** (<kbd>⇧⌘R</kbd>) locks a note and shows it as one page you can select and copy across. Notes are sorted into categories, and any note can open in its own window. |
 | 🗂️ **Product Dev** | Kanban boards per project with Backlog, In Progress, Review and Done columns. Drag cards between columns, and tag them with Product Dev's own labels, kept separate from your TODO labels. |
+| 📚 **Book Notes** | A library of books on shelves, with status, page progress and covers. Each book has its own reading notes, with a page or chapter on each. |
 | 🏋️ **Workout** | Week-by-week training programs. *Coming soon.* |
+| 🧩 **Widgets** | Ten desktop and Notification Center widgets, in small, medium and large, for your focus list, classes, exams, syllabus and revisions. Tick a task or log a revision right from the widget. |
 
 ### Built for speed
 
@@ -78,7 +80,7 @@ There's nothing to set up: no folder to pick. If the same item was changed on tw
 **Coming from an earlier version?** Versions up to 1.3.1 synced through a folder in iCloud Drive. Open **Settings › iCloud › Import a sync folder** and choose that folder (for example *iCloud Drive › MySelf*) to bring its data in. Data that stayed on the Mac is imported automatically, and **Settings › General › Import from an earlier MySelf** reads data from the old `com.ok9xnirab.myself` app. The old files are never changed.
 
 > [!NOTE]
-> MySelf is in active development. TODOs, Office Tasks, Notes, University, Job Study and Product Dev are saved and synced. Workout still uses sample data and doesn't save yet.
+> MySelf is in active development. TODOs, Office Tasks, Notes, Book Notes, University, Job Study and Product Dev are saved and synced. Workout still uses sample data and doesn't save yet.
 
 ## Build from source
 
@@ -124,6 +126,8 @@ scripts/make-dmg.sh      Builds the release DMG
 - [x] Update check against GitHub releases
 - [x] Tables in Notes
 - [x] Developer ID signing and notarization
+- [x] Desktop widgets
+- [x] Book Notes and links between notes
 - [ ] Workout programs, saved and synced
 
 ## Contributing
