@@ -138,6 +138,24 @@ private struct PageView: View {
     }
 }
 
+/// A sidebar row. Not a `Label`: the sidebar sizes a label's icon itself (large next to 13 pt text) and ignores
+/// its font, so the icon is drawn here at a fixed size, centred in a fixed width so the titles line up.
+private struct SidebarRow: View {
+    var page: Page
+    /// `.increased` on the selected row, whose background is the accent colour.
+    @Environment(\.backgroundProminence) private var prominence
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: page.systemImage)
+                .font(.system(size: 13))
+                .foregroundStyle(prominence == .increased ? AnyShapeStyle(.white) : AnyShapeStyle(Color.accentColor))
+                .frame(width: 18)
+            Text(page.title)
+        }
+    }
+}
+
 private struct Sidebar: View {
     @Environment(AppStore.self) private var store
     @Environment(\.rowDensity) private var density
@@ -148,7 +166,7 @@ private struct Sidebar: View {
             ForEach(Page.groups(store.enabledPages), id: \.name) { group in
                 Section(group.name) {
                     ForEach(group.pages) { page in
-                        Label(page.title, systemImage: page.systemImage)
+                        SidebarRow(page: page)
                             .badge(badge(for: page))
                             .tag(page)
                     }
