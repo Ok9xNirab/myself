@@ -256,6 +256,8 @@ struct NotesView: View {
             #if os(macOS)
             Button("Export as PDF…", systemImage: "arrow.down.document") { exportCategory(category) }
                 .disabled(count(category.id) == 0)
+            Button("Export as Separate PDFs…", systemImage: "doc.on.doc") { exportCategory(category, separately: true) }
+                .disabled(count(category.id) == 0)
             #endif
             Divider()
             Button("Delete Category", systemImage: "trash", role: .destructive) { deleteCategory(category) }
@@ -449,8 +451,8 @@ struct NotesView: View {
         NoteExport.savePDF(notes, name: name, store: store)
     }
 
-    /// Exports every note in a category, pinned first, then in the list's sort order.
-    private func exportCategory(_ category: NoteCategory) {
+    /// Exports every note in a category, pinned first, then in the list's sort order: as one PDF, or one per note.
+    private func exportCategory(_ category: NoteCategory, separately: Bool = false) {
         var notes = store.notes.filter { $0.categoryID == category.id && $0.bookID == nil }
         switch sort {
         case .edited: notes.sort { $0.editedAt > $1.editedAt }
@@ -458,7 +460,11 @@ struct NotesView: View {
         case .title: notes.sort { $0.displayTitle.localizedStandardCompare($1.displayTitle) == .orderedAscending }
         }
         notes = notes.filter(\.pinned) + notes.filter { !$0.pinned }
-        NoteExport.savePDF(notes, name: category.name, store: store)
+        if separately {
+            NoteExport.savePDFs(notes, name: category.name, store: store)
+        } else {
+            NoteExport.savePDF(notes, name: category.name, store: store)
+        }
     }
     #endif
 

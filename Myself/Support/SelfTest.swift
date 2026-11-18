@@ -110,6 +110,23 @@ enum SelfTest {
         } else {
             failures.append("pdf export: no PDF")
         }
+        // Separate PDFs match the single one: the same pages, split where its outline says each note starts.
+        let separate = (0..<45).map { notes[$0 % notes.count] }
+        if let files = NoteExport.pdfs(separate, imageURL: { _ in nil }, isKnownNote: { _ in true }),
+           let whole = NoteExport.pdf(separate, imageURL: { _ in nil }, isKnownNote: { _ in true }).flatMap(PDFDocument.init(data:)),
+           let outline = whole.outlineRoot {
+            let docs = files.compactMap(PDFDocument.init(data:))
+            check(docs.count == separate.count, "separate pdfs: \(docs.count) files for \(separate.count) notes")
+            check(docs.reduce(0) { $0 + $1.pageCount } == whole.pageCount, "separate pdfs: page counts don't add up to \(whole.pageCount)")
+            for (i, doc) in docs.enumerated() where i < outline.numberOfChildren {
+                guard let page = outline.child(at: i)?.destination?.page else { continue }
+                // PDFKit reads Bengali back differently per file (it depends on the embedded font subsets), so compare the ASCII text.
+                let latin = { (text: String?) in text?.unicodeScalars.filter { $0.isASCII && !CharacterSet.whitespacesAndNewlines.contains($0) }.map(String.init).joined() }
+                check(latin(doc.page(at: 0)?.string) == latin(page.string), "separate pdfs: \(separate[i].displayTitle) starts on the wrong page")
+            }
+        } else {
+            failures.append("separate pdfs: no files")
+        }
         #endif
         check(notes.first { $0.id == "bn1" }.map { $0.bookID == "bk1" && $0.categoryID.isEmpty && $0.location == "pp. 1–6" } == true, "books: reading note fields")
         if var book = books.first {

@@ -65,6 +65,96 @@ enum NoteExport {
         if !saved { fail(window) }
     }
 
+    /// Asks for a folder, then writes one PDF per note into a new folder named `name` inside it.
+    static func savePDFs(_ notes: [Note], name: String, store: AppStore) {
+        guard !notes.isEmpty else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Export"
+        panel.title = "Export \(notes.count) Notes as Separate PDFs"
+        panel.message = "A folder named “\(folderName(name))” with one PDF per note will be created here."
+        let window = NSApp.keyWindow
+        let finish: (NSApplication.ModalResponse) -> Void = { response in
+            guard response == .OK, let parent = panel.url else { return }
+            Task { await exportSeparately(notes, name: name, in: parent, store: store, window: window) }
+        }
+        if let window { panel.beginSheetModal(for: window, completionHandler: finish) } else { finish(panel.runModal()) }
+    }
+
+    /// Prints the notes in batches and splits each batch into one file per note, named after its title.
+    private static func exportSeparately(_ notes: [Note], name: String, in parent: URL, store: AppStore, window: NSWindow?) async {
+        let files = FileManager.default
+        let access = parent.startAccessingSecurityScopedResource()
+        defer { if access { parent.stopAccessingSecurityScopedResource() } }
+        let folder = unique(folderName(name), in: parent, isDirectory: true)
+        do { try files.createDirectory(at: folder, withIntermediateDirectories: false) } catch { return fail(window) }
+
+        let known = Set(store.noteSummaries.map(\.id))
+        let imageURL: (String) -> URL? = { name in
+            if case .ready(let url) = store.sync.imageState(name) { url } else { nil }
+        }
+        let progress = notes.count > batchSize ? ExportProgress(total: notes.count, window: window) : nil
+        defer { progress?.close() }
+
+        var taken = Set<String>()
+        var done = 0
+        for batch in batched(notes) {
+            if progress?.cancelled == true { return }
+            guard let part = autoreleasepool(invoking: { printBatch(batch, imageURL: imageURL, isKnownNote: { known.contains($0) }) }) else {
+                return fail(window)
+            }
+            let targets = batch.map { note in
+                var base = String(fileName(note.displayTitle).dropLast(4)), n = 2
+                let stem = base
+                while taken.contains(base.lowercased()) { base = "\(stem) \(n)"; n += 1 }
+                taken.insert(base.lowercased())
+                return folder.appending(path: "\(base).pdf")
+            }
+            let saved = await Task.detached(priority: .userInitiated) {
+                defer { try? FileManager.default.removeItem(at: part.file) }
+                return split(part, to: targets)
+            }.value
+            guard saved else { return fail(window) }
+            done += batch.count
+            progress?.update(done: done)
+            // Lets the run loop draw the sheet and handle Cancel before the next batch.
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        NSWorkspace.shared.activateFileViewerSelecting([folder])
+    }
+
+    /// Writes each note of a printed batch to its own file, from its first page to the next note's.
+    nonisolated private static func split(_ part: Part, to targets: [URL]) -> Bool {
+        guard let source = PDFDocument(url: part.file) else { return false }
+        for (i, target) in targets.enumerated() where i < part.firstPages.count {
+            let end = i + 1 < part.firstPages.count ? part.firstPages[i + 1] : source.pageCount
+            let document = PDFDocument()
+            for index in part.firstPages[i]..<max(end, part.firstPages[i] + 1) {
+                if let page = source.page(at: index)?.copy() as? PDFPage { document.insert(page, at: document.pageCount) }
+            }
+            guard document.pageCount > 0, document.write(to: target) else { return false }
+        }
+        return true
+    }
+
+    private static func folderName(_ name: String) -> String {
+        String(fileName(name).dropLast(4))
+    }
+
+    /// `name` inside `parent`, numbered (“Notes 2”) if something there already has that name.
+    private static func unique(_ name: String, in parent: URL, isDirectory: Bool) -> URL {
+        var url = parent.appending(path: name, directoryHint: isDirectory ? .isDirectory : .notDirectory)
+        var n = 2
+        while FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) {
+            url = parent.appending(path: "\(name) \(n)", directoryHint: isDirectory ? .isDirectory : .notDirectory)
+            n += 1
+        }
+        return url
+    }
+
     private static func fail(_ window: NSWindow?) {
         let alert = NSAlert()
         alert.alertStyle = .warning
@@ -84,6 +174,22 @@ enum NoteExport {
         defer { try? FileManager.default.removeItem(at: file) }
         guard merge(parts, outline: notes.count > 1, to: file) else { return nil }
         return try? Data(contentsOf: file)
+    }
+
+    /// One PDF per note, as `savePDFs` writes them. The self-test uses it.
+    static func pdfs(_ notes: [Note], imageURL: (String) -> URL?, isKnownNote: (ID) -> Bool) -> [Data]? {
+        var out: [Data] = []
+        for batch in batched(notes) {
+            guard let part = printBatch(batch, imageURL: imageURL, isKnownNote: isKnownNote) else { return nil }
+            let targets = batch.map { _ in temporaryFile() }
+            defer { for url in targets + [part.file] { try? FileManager.default.removeItem(at: url) } }
+            guard split(part, to: targets) else { return nil }
+            for url in targets {
+                guard let data = try? Data(contentsOf: url) else { return nil }
+                out.append(data)
+            }
+        }
+        return out
     }
 
     // MARK: - Batches
