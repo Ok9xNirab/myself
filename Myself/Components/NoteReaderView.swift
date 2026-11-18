@@ -18,8 +18,10 @@ enum NoteReaderText {
     }
 
     /// Builds the note for a text view `width` points wide. `imageURL` returns a downloaded image's file, and
-    /// `isKnownNote` tells a note link from a broken one. Text blocks can't see the store from here.
-    static func build(_ note: Note, width: CGFloat, imageURL: (String) -> URL?, isKnownNote: (ID) -> Bool) -> NSAttributedString {
+    /// `isKnownNote` tells a note link from a broken one. Text blocks can't see the store from here. `absoluteDates`
+    /// shows the edit date as a date rather than "3d ago" (for exports).
+    static func build(_ note: Note, width: CGFloat, imageURL: (String) -> URL?, isKnownNote: (ID) -> Bool,
+                      absoluteDates: Bool = false) -> NSAttributedString {
         let size = NoteTypeface.bodySize
         /// `inline`, with this note's link check.
         func inline(_ source: String, size: CGFloat, weight: PlatformFont.Weight, color: PlatformColor) -> NSMutableAttributedString {
@@ -46,7 +48,7 @@ enum NoteReaderText {
         ])
         paragraph(title, style(lineSpacing: NoteText.hasBengali(note.title) ? size * 0.4 : size * 0.1, after: 6))
         let place = note.location.map { "\($0) · " } ?? ""
-        let meta = NSAttributedString(string: "\(place)Edited \(NoteDates.ago(note.editedAt, now: .now)) · \(note.wordCount) words", attributes: [
+        let meta = NSAttributedString(string: "\(place)Edited \(absoluteDates ? note.editedAt.formatted(date: .abbreviated, time: .shortened) : NoteDates.ago(note.editedAt, now: .now)) · \(note.wordCount) words", attributes: [
             .font: PlatformFont.systemFont(ofSize: 12), .foregroundColor: PlatformColor.tertiaryLabelCompat,
         ])
         paragraph(meta, style(lineSpacing: 0, after: 20))

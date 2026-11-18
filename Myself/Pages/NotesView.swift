@@ -253,6 +253,10 @@ struct NotesView: View {
         .contextMenu {
             Button("New Note in \(category.name)", systemImage: "square.and.pencil") { pick(category.id); addNote(in: category.id) }
             Button("Rename", systemImage: "pencil") { renamingID = category.id }
+            #if os(macOS)
+            Button("Export as PDF…", systemImage: "arrow.down.document") { exportCategory(category) }
+                .disabled(count(category.id) == 0)
+            #endif
             Divider()
             Button("Delete Category", systemImage: "trash", role: .destructive) { deleteCategory(category) }
         }
@@ -393,6 +397,9 @@ struct NotesView: View {
         if ids.count == 1, let id = ids.first {
             Button("Duplicate", systemImage: "plus.square.on.square") { duplicate(id) }
         }
+        #if os(macOS)
+        Button(ids.count == 1 ? "Export as PDF…" : "Export \(ids.count) Notes as PDF…", systemImage: "arrow.down.document") { export(ids) }
+        #endif
         Divider()
         Button(ids.count == 1 ? "Delete" : "Delete \(ids.count) Notes", systemImage: "trash", role: .destructive) { delete(ids) }
     }
@@ -430,6 +437,30 @@ struct NotesView: View {
         .background(Palette.surface)
         .overlay(alignment: .top) { Divider() }
     }
+
+    #if os(macOS)
+    /// Exports notes as one PDF, in the order the list shows them.
+    private func export(_ ids: [ID]) {
+        let order = filtered(validScope).map(\.id)
+        let wanted = Set(ids)
+        let byID = Dictionary(store.notes.filter { wanted.contains($0.id) }.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let notes = (order.filter(wanted.contains) + ids.filter { !order.contains($0) }).compactMap { byID[$0] }
+        let name = notes.count == 1 ? notes[0].displayTitle : "\(scopeName(validScope)) Notes"
+        NoteExport.savePDF(notes, name: name, store: store)
+    }
+
+    /// Exports every note in a category, pinned first, then in the list's sort order.
+    private func exportCategory(_ category: NoteCategory) {
+        var notes = store.notes.filter { $0.categoryID == category.id && $0.bookID == nil }
+        switch sort {
+        case .edited: notes.sort { $0.editedAt > $1.editedAt }
+        case .created: notes.sort { $0.createdAt > $1.createdAt }
+        case .title: notes.sort { $0.displayTitle.localizedStandardCompare($1.displayTitle) == .orderedAscending }
+        }
+        notes = notes.filter(\.pinned) + notes.filter { !$0.pinned }
+        NoteExport.savePDF(notes, name: category.name, store: store)
+    }
+    #endif
 
     /// Dragging a note that's part of a multi-selection drags the whole selection.
     private func dragPayload(for id: ID) -> String {

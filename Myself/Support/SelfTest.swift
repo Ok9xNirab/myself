@@ -1,3 +1,6 @@
+#if os(macOS)
+import PDFKit
+#endif
 #if DEBUG
 import Foundation
 
@@ -99,6 +102,15 @@ enum SelfTest {
         let withLinks = Note(categoryID: "nc1", blocks: [NoteBlock(.p, "[[A|one]] [[A again|one]]"), NoteBlock(.code, "[[B|two]]")])
         check(withLinks.linkIDs == ["one"], "links: got \(withLinks.linkIDs)")
         check(!withLinks.searchText.contains("one") && withLinks.searchText.contains("a again"), "links: search text is \(withLinks.searchText)")
+        #if os(macOS)
+        if let pdf = NoteExport.pdf(notes, imageURL: { _ in nil }, isKnownNote: { _ in true }), let doc = PDFDocument(data: pdf) {
+            check(doc.pageCount >= notes.count, "pdf export: \(doc.pageCount) pages for \(notes.count) notes")
+            check(doc.outlineRoot?.numberOfChildren == notes.count, "pdf export: outline has \(doc.outlineRoot?.numberOfChildren ?? 0) entries")
+            check(doc.string?.contains(notes[0].displayTitle) == true, "pdf export: first note's title missing")
+        } else {
+            failures.append("pdf export: no PDF")
+        }
+        #endif
         check(notes.first { $0.id == "bn1" }.map { $0.bookID == "bk1" && $0.categoryID.isEmpty && $0.location == "pp. 1–6" } == true, "books: reading note fields")
         if var book = books.first {
             book.title = "Renamed"
