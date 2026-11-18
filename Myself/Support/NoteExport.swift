@@ -76,7 +76,7 @@ enum NoteExport {
         }
 
         // TextKit 1, as in reader mode: text blocks and tables need it.
-        let view = NSTextView(usingTextLayoutManager: false)
+        let view = PrintTextView(usingTextLayoutManager: false)
         view.appearance = light
         view.frame = NSRect(x: 0, y: 0, width: width, height: 1)
         view.isEditable = false
@@ -137,6 +137,64 @@ enum NoteExport {
         let out = NSImage(size: size)
         out.addRepresentation(rep)
         return out
+    }
+
+    /// A text view whose page breaks keep a table row on one page when it fits, and otherwise fall in the gap
+    /// between two lines. A break exactly at a line's top, where the default pagination puts it, cuts Bengali
+    /// vowel signs, which rise above the line into the spacing left under the line before.
+    private final class PrintTextView: NSTextView {
+        private struct Line { var rect: NSRect; var glyphBottom: CGFloat; var row: String? }
+
+        override func adjustPageHeightNew(_ newBottom: UnsafeMutablePointer<CGFloat>, top oldTop: CGFloat,
+                                          bottom oldBottom: CGFloat, limit bottomLimit: CGFloat) {
+            super.adjustPageHeightNew(newBottom, top: oldTop, bottom: oldBottom, limit: bottomLimit)
+            guard let layout = layoutManager, let container = textContainer, let storage = textStorage else { return }
+            let origin = textContainerOrigin
+            let pageRect = NSRect(x: 0, y: oldTop - origin.y, width: container.size.width, height: oldBottom - oldTop)
+            let glyphs = layout.glyphRange(forBoundingRect: pageRect, in: container)
+            var bottom = newBottom.pointee
+
+            var lines: [Line] = []
+            var rows: [String: (top: CGFloat, bottom: CGFloat)] = [:]
+            layout.enumerateLineFragments(forGlyphRange: glyphs) { rect, _, _, range, _ in
+                let rect = rect.offsetBy(dx: origin.x, dy: origin.y)
+                var line = Line(rect: rect, glyphBottom: rect.maxY, row: nil)
+                let char = layout.characterIndexForGlyph(at: range.location)
+                guard char < storage.length,
+                      let style = storage.attribute(.paragraphStyle, at: char, effectiveRange: nil) as? NSParagraphStyle else {
+                    lines.append(line)
+                    return
+                }
+                // The line's own height comes first; its spacing and the paragraph's are the gap below it.
+                if style.maximumLineHeight > 0 { line.glyphBottom = min(rect.maxY, rect.minY + style.maximumLineHeight) }
+                if let cell = style.textBlocks.last as? NSTextTableBlock {
+                    let key = "\(ObjectIdentifier(cell.table).hashValue)-\(cell.startingRow)"
+                    let cellGlyphs = layout.glyphRange(forCharacterRange: storage.range(of: cell, at: char), actualCharacterRange: nil)
+                    let bounds = layout.boundsRect(for: cell, glyphRange: cellGlyphs).offsetBy(dx: origin.x, dy: origin.y)
+                    if bounds.height > 0 {
+                        let row = rows[key] ?? (bounds.minY, bounds.maxY)
+                        rows[key] = (min(row.top, bounds.minY), max(row.bottom, bounds.maxY))
+                    }
+                    line.row = key
+                }
+                lines.append(line)
+            }
+
+            // A table row the break falls inside moves to the next page whole, if it fits on one.
+            if let row = rows.values.first(where: { $0.top < bottom - 0.5 && $0.bottom > bottom + 0.5 }), row.top > oldTop + 1 {
+                newBottom.pointee = row.top
+                return
+            }
+            // Otherwise the break goes above any line it crosses or that starts on it, into the gap under the line before.
+            for line in lines.reversed() where line.row == nil && line.rect.minY < bottom + 0.5 && line.rect.maxY > bottom + 0.5 {
+                bottom = line.rect.minY
+                if let above = lines.last(where: { $0.row == nil && abs($0.rect.maxY - line.rect.minY) < 0.5 }) {
+                    bottom = above.glyphBottom + (above.rect.maxY - above.glyphBottom) * 0.35
+                }
+                break
+            }
+            if bottom > oldTop + 1 { newBottom.pointee = bottom }
+        }
     }
 
     /// A title made safe for a file name.
