@@ -36,7 +36,9 @@ p{text-wrap:pretty}
 .hero-icon{width:132px;height:132px;filter:drop-shadow(0 18px 30px rgba(20,30,90,.35));margin:-14px}
 .hero h1{font-size:clamp(44px,7.4vw,88px);font-weight:700;letter-spacing:-.045em;line-height:.98;color:#fff;text-shadow:0 2px 30px rgba(20,30,90,.25);max-width:13ch}
 .hero .lede{color:rgba(255,255,255,.92);max-width:52ch;text-align:center}
-.hero-cta{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:6px}
+.hero-cta{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;align-items:center;margin-top:6px}
+.store{display:inline-flex;flex:none;line-height:0;transition:transform .12s}.store:active{transform:scale(.97)}
+.store img,.cta .store img{display:block;width:auto;height:44px;margin:0;filter:none}
 .hero-meta{font-size:13px;color:rgba(255,255,255,.82)}
 .hero-stage{margin-top:48px;padding:0 0 70px;display:flex;justify-content:center}
 .hero-shot{display:block;width:min(1180px,100%);height:auto}

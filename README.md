@@ -13,6 +13,8 @@
 [![License: MIT](https://img.shields.io/github/license/Ok9xNirab/myself?color=34C759)](LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/Ok9xNirab/myself)](https://github.com/Ok9xNirab/myself/commits/main)
 
+<a href="https://apps.apple.com/app/id6829809152"><img src="docs/mac-app-store-badge.svg" alt="Download on the Mac App Store" height="44"></a>
+
 [**⬇ Download the DMG**](https://github.com/Ok9xNirab/myself/releases/latest) · [Features](#features) · [Install](#installation) · [Build from source](#build-from-source) · [iCloud sync](#icloud-sync)
 
 <img src="screenshot.png" alt="MySelf dashboard on macOS showing open todos, office tasks, assignments and Job Study topics due, today's focus, classes today, a deadline countdown, product activity and syllabus progress" width="860">
@@ -62,13 +64,19 @@ The project also builds for iPadOS, iOS and visionOS, but macOS is the main plat
 
 ## Installation
 
+### Mac App Store
+
+Get MySelf from the [Mac App Store](https://apps.apple.com/app/id6829809152). It updates itself through the App Store.
+
+### DMG from GitHub
+
 1. Download **`MySelf-<version>.dmg`** from the [latest release](https://github.com/Ok9xNirab/myself/releases/latest).
 2. Open the DMG and drag **Myself** onto the **Applications** folder.
 3. Open MySelf from Applications. The DMG is signed and notarized by Apple, so it opens without a warning.
 
 ### Updating and uninstalling
 
-- **Update**: MySelf checks GitHub for a new release once a day (Settings › General › Updates, or **MySelf › Check for Updates…**) and links the DMG. Quit MySelf, drag the new version from the DMG into Applications and replace the old one.
+- **Update**: the DMG version checks GitHub for a new release once a day (Settings › General › Updates, or **MySelf › Check for Updates…**) and links the DMG. Quit MySelf, drag the new version from the DMG into Applications and replace the old one.
 - **Uninstall**: move `Myself.app` to the Trash. To also delete its local data, run `rm -rf ~/Library/Containers/com.quorrelapps.myself` (and `com.ok9xnirab.myself` if you used version 1.3.1 or earlier). Synced data stays in your iCloud account until you delete it in System Settings › Apple Account › iCloud › Manage storage.
 
 ## iCloud sync
@@ -140,3 +148,5 @@ If MySelf is useful to you, a ⭐ on GitHub helps other people find it.
 ## License
 
 MySelf is released under the [MIT License](LICENSE).
+
+Apple, the Apple logo and Mac are trademarks of Apple Inc., registered in the U.S. and other countries. App Store is a service mark of Apple Inc., registered in the U.S. and other countries.
