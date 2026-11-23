@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import SwiftData
 
 /// A record type the store keeps. `folder` is where the pre-CloudKit versions kept its JSON files (see `FolderImport`).
@@ -16,13 +17,34 @@ enum SharedStore {
     static let appGroup = "group.com.quorrelapps.myself"
     #endif
 
-    /// Debug builds keep their own file. They sync to CloudKit's Development environment and may have a newer schema
-    /// than the installed app, whose widgets would otherwise migrate the store back over them.
-    #if DEBUG
-    private static let storeName = "MySelf-Debug.store"
-    #else
-    private static let storeName = "MySelf.store"
-    #endif
+    /// Whether this copy syncs with CloudKit's Production environment: true only for App Store and Developer ID (DMG)
+    /// builds. Anything Xcode signs, Debug or Release, syncs with Development, whose records are test data, so it must
+    /// never open the real store or write the settings the installed app reads. Read from the containing app's
+    /// signature, so the widget extension (which has no iCloud entitlement) gets the same answer as its app.
+    nonisolated static let isProduction: Bool = {
+        #if os(macOS)
+        var app = Bundle.main.bundleURL
+        while app.pathExtension != "app", app.pathComponents.count > 1 { app.deleteLastPathComponent() }
+        var code: SecStaticCode?
+        var info: CFDictionary?
+        guard SecStaticCodeCreateWithPath(app as CFURL, [], &code) == errSecSuccess, let code,
+              SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
+              let entitlements = (info as? [String: Any])?[kSecCodeInfoEntitlementsDict as String] as? [String: Any]
+        else { return false }
+        return entitlements["com.apple.developer.icloud-container-environment"] as? String == "Production"
+        #elseif DEBUG
+        return false
+        #else
+        return true
+        #endif
+    }()
+
+    /// Non-production builds keep their own file, so their Development data can't mix with the real data. They may
+    /// also have a newer schema than the installed app, whose widgets would otherwise migrate the store back over them.
+    private static let storeName = isProduction ? "MySelf.store" : "MySelf-Debug.store"
+
+    /// Appended to keys in storage that production and test builds share (App Group defaults, iCloud key-value store).
+    nonisolated static func scoped(_ key: String) -> String { isProduction ? key : "\(key).development" }
 
     /// The store file: in the App Group container, so the widget extension opens the same one. Builds not signed for
     /// the group (unsigned development builds) can't write there and use the app's own Application Support instead.
@@ -47,7 +69,7 @@ enum SharedStore {
     static var defaults: UserDefaults { UserDefaults(suiteName: appGroup) ?? .standard }
 
     /// The App Group copy of Settings › Features: `Page` raw values that are turned off.
-    static let disabledFeaturesKey = "disabledFeatures"
+    static let disabledFeaturesKey = scoped("disabledFeatures")
 
     static var disabledFeatures: Set<String> {
         Set(defaults.stringArray(forKey: disabledFeaturesKey) ?? [])

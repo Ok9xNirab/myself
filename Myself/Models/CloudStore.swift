@@ -49,7 +49,8 @@ final class CloudStore {
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
 
-    private static let settingsKey = "settings"
+    /// The key-value store has no Development environment, so test builds keep their settings under their own key.
+    private static let settingsKey = SharedStore.scoped("settings")
     private var keyValueStore: NSUbiquitousKeyValueStore { .default }
 
     /// Where the store file lives; `storeURL` except in tests.
