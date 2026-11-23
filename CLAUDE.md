@@ -14,7 +14,7 @@ Current state: **TODOs, labels, office tasks, notes, books, University, Job Stud
 
 ## Website
 
-The landing page is the static `docs/` folder (`index.html`, `privacy.html` (the privacy policy the App Store listing links to; keep it true to what the app does), `landing.css`, `landing.js`, icon PNGs, `mac-app-store-badge.svg` (Apple's official black badge, unmodified; it links to the listing `apps.apple.com/app/id6829809152` from the site and the README), and `screenshot.png`, the hero: a macOS window capture with a transparent background), served by Netlify per `netlify.toml` with no build step; it only redeploys when `docs/` or `netlify.toml` change. Its design comes from `MySelf Landing.html` in the prototype zip. Keep its claims in line with the app (macOS 26, features, Workout "Coming soon"), and re-export the icon variants with `ictool` (see below) when the icon changes.
+The landing page is the static `docs/` folder (`index.html`, `privacy.html` (the privacy policy the App Store listing links to; keep it true to what the app does), `landing.css`, `landing.js`, icon PNGs, `mac-app-store-badge.svg` (Apple's official black badge, unmodified; it links to the listing `apps.apple.com/us/app/myself-todos-notes-study/id6829809152` from the site and the README), and `screenshot.png`, the hero: a macOS window capture with a transparent background), served by Netlify per `netlify.toml` with no build step; it only redeploys when `docs/` or `netlify.toml` change. Its design comes from `MySelf Landing.html` in the prototype zip. Keep its claims in line with the app (macOS 26, features, Workout "Coming soon"), and re-export the icon variants with `ictool` (see below) when the icon changes.
 
 ## Build & run
 

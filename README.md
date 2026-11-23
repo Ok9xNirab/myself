@@ -13,7 +13,7 @@
 [![License: MIT](https://img.shields.io/github/license/Ok9xNirab/myself?color=34C759)](LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/Ok9xNirab/myself)](https://github.com/Ok9xNirab/myself/commits/main)
 
-<a href="https://apps.apple.com/app/id6829809152"><img src="docs/mac-app-store-badge.svg" alt="Download on the Mac App Store" height="44"></a>
+<a href="https://apps.apple.com/us/app/myself-todos-notes-study/id6829809152"><img src="docs/mac-app-store-badge.svg" alt="Download on the Mac App Store" height="44"></a>
 
 [**⬇ Download the DMG**](https://github.com/Ok9xNirab/myself/releases/latest) · [Features](#features) · [Install](#installation) · [Build from source](#build-from-source) · [iCloud sync](#icloud-sync)
 
@@ -66,7 +66,7 @@ The project also builds for iPadOS, iOS and visionOS, but macOS is the main plat
 
 ### Mac App Store
 
-Get MySelf from the [Mac App Store](https://apps.apple.com/app/id6829809152). It updates itself through the App Store.
+Get MySelf from the [Mac App Store](https://apps.apple.com/us/app/myself-todos-notes-study/id6829809152). It updates itself through the App Store.
 
 ### DMG from GitHub
 
