@@ -34,6 +34,8 @@ private struct GeneralSettings: View {
     #endif
     #endif
     @State private var confirmingReset = false
+    /// The number of sample records found, while Remove Sample Data's confirmation shows.
+    @State private var sampleCount: Int?
     @State private var importError: String?
 
     #if os(macOS)
@@ -110,6 +112,12 @@ private struct GeneralSettings: View {
                 }
                 #endif
                 LabeledContent {
+                    Button("Remove\u{2026}") { sampleCount = store.sampleMatches().count }
+                } label: {
+                    Text("Remove sample data")
+                    Text("Deletes the sample todos, notes, books, classes, subjects and boards, here and on your other devices, and keeps everything you added.")
+                }
+                LabeledContent {
                     Button("Reset…") { confirmingReset = true }
                 } label: {
                     Text("Reset sample data")
@@ -123,6 +131,18 @@ private struct GeneralSettings: View {
             Button("Reset", role: .destructive, action: store.loadSampleData)
         } message: {
             Text("Your todos, labels, office tasks, notes, classes, boards and workouts will be replaced with the original sample content. Synced data is replaced on all your devices.")
+        }
+        .alert(sampleCount == 0 ? "No sample data" : "Remove \(sampleCount ?? 0) sample items?",
+               isPresented: Binding(get: { sampleCount != nil }, set: { if !$0 { sampleCount = nil } })) {
+            if sampleCount == 0 {
+                Button("OK", role: .cancel) {}
+            } else {
+                Button("Remove", role: .destructive, action: store.removeSampleData)
+                Button("Cancel", role: .cancel) {}
+            }
+        } message: {
+            Text(sampleCount == 0 ? "Nothing here matches the sample content."
+                 : "They\u{2019}re deleted on all your devices. Your own todos, notes and other data stay.")
         }
         .alert("Couldn\u{2019}t import", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) {
             Button("OK", role: .cancel) {}

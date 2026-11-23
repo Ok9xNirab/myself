@@ -284,6 +284,92 @@ final class AppStore {
         loadSampleFeatures()
     }
 
+    /// The records that came from the samples (Settings › Reset, or a test build's data leaking in): the samples' fixed
+    /// IDs, and for records whose sample copies get random IDs, an exact title match. The default labels and note
+    /// categories (`l1`…, `pl1`…, `nc1`…`nc4`) are kept, since every install has them.
+    struct SampleMatches {
+        var todos: [ID] = [], office: [ID] = [], notes: [ID] = [], noteCategories: [ID] = []
+        var books: [Book] = [], bookCategories: [ID] = []
+        var classes: [ID] = [], syllabus: [ID] = [], assignments: [ID] = [], exams: [ID] = []
+        var universityNotes = false
+        var studySubjects: [ID] = [], products: [ID] = [], cards: [ID] = []
+
+        var count: Int {
+            todos.count + office.count + notes.count + noteCategories.count + books.count + bookCategories.count
+                + classes.count + syllabus.count + assignments.count + exams.count + (universityNotes ? 1 : 0)
+                + studySubjects.count + products.count + cards.count
+        }
+    }
+
+    func sampleMatches() -> SampleMatches {
+        var m = SampleMatches()
+        m.todos = todos.filter { Set(SampleData.todos().map(\.title)).contains($0.title) }.map(\.id)
+        m.office = office.filter { Set(SampleData.office().map(\.title)).contains($0.title) }.map(\.id)
+
+        let sampleNotes = Set(SampleData.notes().map(\.id))
+        m.notes = notes.filter { sampleNotes.contains($0.id) }.map(\.id)
+        // The sample-only Philosophy category, unless the user filed their own notes in it.
+        let philosophy = SampleData.philosophyCategory.id
+        if noteCategories.contains(where: { $0.id == philosophy }),
+           !notes.contains(where: { $0.categoryID == philosophy && !sampleNotes.contains($0.id) }) {
+            m.noteCategories = [philosophy]
+        }
+
+        let sampleBooks = Set(SampleData.books().map(\.id))
+        m.books = books.filter { sampleBooks.contains($0.id) }
+        m.bookCategories = SampleData.bookCategories.map(\.id).filter { id in
+            bookCategories.contains { $0.id == id } && !books.contains { $0.categoryID == id && !sampleBooks.contains($0.id) }
+        }
+
+        let u = SampleData.university()
+        m.classes = university.classes.filter { Set(u.classes.map(\.id)).contains($0.id) }.map(\.id)
+        m.syllabus = university.syllabus.filter { Set(u.syllabus.map(\.id)).contains($0.id) }.map(\.id)
+        m.assignments = university.assignments.filter { Set(u.assignments.map(\.title)).contains($0.title) }.map(\.id)
+        m.exams = university.exams.filter { exam in
+            u.exams.contains { $0.subject == exam.subject && $0.kind == exam.kind && $0.prep == exam.prep }
+        }.map(\.id)
+        m.universityNotes = universityNotes.text == SampleData.universityNotes
+
+        m.studySubjects = jobStudy.filter { Set(SampleData.jobStudy().map(\.id)).contains($0.id) }.map(\.id)
+        let sample = SampleData.products()
+        m.products = products.filter { Set(sample.products.map(\.id)).contains($0.id) }.map(\.id)
+        m.cards = cards.filter { card in
+            m.products.contains(card.productID) || sample.cards.contains { $0.title == card.title && $0.productID == card.productID }
+        }.map(\.id)
+        return m
+    }
+
+    /// Settings › Remove Sample Data: deletes `sampleMatches()` here and in iCloud, keeping everything else.
+    func removeSampleData() {
+        saveTypedText()
+        let m = sampleMatches()
+        guard m.count > 0 else { return }
+        sync.batch {
+            for id in m.todos { sync.delete(Todo.self, id: id) }
+            for id in m.office { sync.delete(OfficeTask.self, id: id) }
+            for id in m.notes { sync.delete(Note.self, id: id) }
+            for id in m.noteCategories { sync.delete(NoteCategory.self, id: id) }
+            for book in m.books {
+                if let cover = book.cover { sync.deleteImage(cover) }
+                sync.delete(Book.self, id: book.id)
+            }
+            for id in m.bookCategories { sync.delete(BookCategory.self, id: id) }
+            for id in m.classes { sync.delete(UniClass.self, id: id) }
+            for id in m.syllabus { sync.delete(SyllabusSubject.self, id: id) }
+            for id in m.assignments { sync.delete(Assignment.self, id: id) }
+            for id in m.exams { sync.delete(Exam.self, id: id) }
+            if m.universityNotes {
+                universityNotesUnsaved = false
+                universityNotes = UniversityNotes(text: "", updatedAt: .now)
+                sync.save(universityNotes)
+            }
+            for id in m.studySubjects { sync.delete(StudySubject.self, id: id) }
+            for id in m.cards { sync.delete(KanbanCard.self, id: id) }
+            for id in m.products { sync.delete(Product.self, id: id) }
+        }
+        reloadSynced()
+    }
+
     private func loadSampleFeatures() {
         workout = SampleData.workout()
     }
