@@ -373,7 +373,19 @@ final class CloudStore {
     }
 
     private static func message(for error: Error) -> String {
-        switch (error as? CKError)?.code {
+        // "Failed to modify some records" hides the reason: show the first record's own error.
+        let ns = error as NSError
+        if ns.domain == CKError.errorDomain, ns.code == CKError.partialFailure.rawValue,
+           let partial = ns.userInfo[CKPartialErrorsByItemIDKey] as? [AnyHashable: Error] {
+            let reasons = partial.values.filter { ($0 as? CKError)?.code != .batchRequestFailed }
+            if let first = reasons.first ?? partial.values.first {
+                let inner = first as NSError
+                let server = inner.userInfo["ServerErrorDescription"] as? String
+                NSLog("MySelf sync: partial failure, \(partial.count) records: \(partial)")
+                return message(for: first) + (server.map { " (\($0))" } ?? "")
+            }
+        }
+        return switch (error as? CKError)?.code {
         case .quotaExceeded: "Your iCloud storage is full, so changes aren\u{2019}t uploading. Free up space in System Settings \u{203A} Apple Account \u{203A} iCloud."
         case .networkUnavailable, .networkFailure: "Waiting for an internet connection. Changes are saved on this device and upload when you\u{2019}re back online."
         case .notAuthenticated: "Sign in to iCloud in System Settings to sync."
