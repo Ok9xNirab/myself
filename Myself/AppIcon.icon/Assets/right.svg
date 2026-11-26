@@ -1,1 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><circle cx="626" cy="512" r="262" fill="#ffffff"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><defs><radialGradient id="cb" cx=".7" cy=".75" r=".75"><stop offset="0" stop-color="#fff" stop-opacity=".48"/><stop offset="1" stop-color="#fff" stop-opacity=".18"/></radialGradient></defs><circle cx="626" cy="512" r="262" fill="url(#cb)"/></svg>

@@ -42,7 +42,18 @@ enum AppIconChoice: String, CaseIterable, Identifiable {
     /// Shows the saved icon in the Dock; called at launch and when the setting changes. The default is set too,
     /// so a Dock tile cached from an older build is replaced.
     static func applySaved() {
-        NSApp.applicationIconImage = NSImage(named: saved.assetName ?? "AppIcon")
+        NSApp.applicationIconImage = saved.dockImage
+    }
+
+    /// The catalog image fills its whole canvas, but a Dock icon sits inside the macOS icon grid: an 824 pt tile
+    /// centred on a 1024 pt canvas. Without that margin it shows larger than every other icon.
+    private var dockImage: NSImage? {
+        guard let icon = NSImage(named: assetName ?? "AppIcon") else { return nil }
+        let canvas = NSSize(width: 1024, height: 1024)
+        return NSImage(size: canvas, flipped: false) { rect in
+            icon.draw(in: rect.insetBy(dx: 100, dy: 100))
+            return true
+        }
     }
     #elseif canImport(UIKit)
     static func applySaved() {
@@ -55,13 +66,15 @@ enum AppIconChoice: String, CaseIterable, Identifiable {
 
 /// Settings › Appearance › App icon: one tile per icon, the selected one ringed in the accent colour.
 struct AppIconPicker: View {
-    @AppStorage(PrefKey.appIcon) private var selection = AppIconChoice.standard
+    /// Plain state written through to UserDefaults on a click: `@AppStorage` here sometimes kept the earlier
+    /// selection ringed after a few changes.
+    @State private var selection = AppIconChoice.saved
 
     var body: some View {
         HStack(alignment: .top, spacing: 18) {
             ForEach(AppIconChoice.allCases) { icon in
                 let on = icon == selection
-                Button { selection = icon } label: {
+                Button { choose(icon) } label: {
                     VStack(spacing: 4) {
                         preview(icon)
                             .frame(width: 64, height: 64)
@@ -81,7 +94,12 @@ struct AppIconPicker: View {
                 .accessibilityAddTraits(on ? .isSelected : [])
             }
         }
-        .onChange(of: selection) { AppIconChoice.applySaved() }
+    }
+
+    private func choose(_ icon: AppIconChoice) {
+        selection = icon
+        UserDefaults.standard.set(icon.rawValue, forKey: PrefKey.appIcon)
+        AppIconChoice.applySaved()
     }
 
     @ViewBuilder
