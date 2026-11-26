@@ -8,6 +8,7 @@ enum PrefKey {
     static let spaceTheme = "spaceTheme"          // SpaceTheme raw value
     static let themeAppearance = "themeAppearance" // ThemeAppearance raw value: match the system, or let the theme decide
     static let paperWidth = "paperWidth"          // PaperWidth raw value
+    static let appIcon = "appIcon"                // AppIconChoice raw value, per device
     static let iCloudSync = "iCloudSync"
     static let syncFeatures = "syncFeatureVisibility"
     static let syncAppearance = "syncAppearance"

@@ -59,6 +59,11 @@ private struct GeneralSettings: View {
 
     var body: some View {
         Form {
+            Section("App icon") {
+                AppIconPicker()
+                    .padding(.vertical, 4)
+            }
+
             Section("Theme") {
                 VStack(alignment: .leading, spacing: 10) {
                     VStack(alignment: .leading, spacing: 2) {
