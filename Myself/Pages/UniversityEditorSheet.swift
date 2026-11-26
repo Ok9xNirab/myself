@@ -16,39 +16,6 @@ struct UniversityEditorSheet: View {
     }
 }
 
-/// Shared sheet chrome: grouped form, title, Cancel and Add/Save. Also used by the Job Study subject sheet.
-struct EditorForm<Content: View>: View {
-    @Environment(\.dismiss) private var dismiss
-    var title: String
-    var isNew: Bool
-    var canSave: Bool
-    var onSave: () -> Void
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        NavigationStack {
-            Form { content }
-                .formStyle(.grouped)
-                .navigationTitle(title)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { dismiss() }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button(isNew ? "Add" : "Save") {
-                            onSave()
-                            dismiss()
-                        }
-                        .disabled(!canSave)
-                    }
-                }
-        }
-        #if os(macOS)
-        .frame(width: 460)
-        #endif
-    }
-}
-
 func trimmed(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNewlines) }
 
 struct SwatchPicker: View {
