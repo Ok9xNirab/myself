@@ -157,6 +157,18 @@ struct Card<Accessory: View, Content: View>: View {
     }
 }
 
+/// An outline symbol over a faint fill of itself: the design's stroke icons with `fill-opacity: .16`.
+struct TintedSymbol: View {
+    var name: String
+
+    var body: some View {
+        ZStack {
+            Image(systemName: name).symbolVariant(.fill).opacity(0.16)
+            Image(systemName: name).symbolVariant(.none)
+        }
+    }
+}
+
 /// The small tinted icon tile at the start of a card header.
 struct CardIcon: View {
     var systemImage: String
@@ -164,8 +176,8 @@ struct CardIcon: View {
     var size: CGFloat = 24
 
     var body: some View {
-        Image(systemName: systemImage)
-            .font(.system(size: size * 0.5, weight: .semibold))
+        TintedSymbol(name: systemImage)
+            .font(.system(size: size * 0.55, weight: .medium))
             .foregroundStyle(tint)
             .frame(width: size, height: size)
             .background(tint.opacity(0.13), in: RoundedRectangle(cornerRadius: size * 0.3, style: .continuous))
@@ -220,7 +232,8 @@ struct StatTile: View {
     var color: Color
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        // Centred, as in the design's `.d-tile`.
+        VStack(alignment: .center, spacing: 10) {
             HStack(spacing: 9) {
                 CardIcon(systemImage: systemImage, tint: color, size: 28)
                 Text(label).font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink2).lineLimit(1)
@@ -232,13 +245,13 @@ struct StatTile: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .center)
         .padding(.horizontal, 16)
         .padding(.top, 14)
         .padding(.bottom, 15)
         .background {
             // A wash of the tile's colour from the top right corner.
-            EllipticalGradient(colors: [color.opacity(0.11), color.opacity(0)], center: .topTrailing, startRadiusFraction: 0, endRadiusFraction: 0.55)
+            EllipticalGradient(colors: [color.opacity(0.13), color.opacity(0)], center: .topTrailing, startRadiusFraction: 0, endRadiusFraction: 0.75)
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
         .cardBackground(radius: 18)
@@ -433,6 +446,43 @@ extension Donut where Content == Text {
         self.init(value: Double(percent), size: size, lineWidth: lineWidth, color: color) {
             Text("\(percent)%").font(.system(size: size < 50 ? 11 : 12, weight: .semibold)).monospacedDigit()
         }
+    }
+}
+
+/// The design's segmented tabs (`.seg`): a soft track with the chosen option on a raised white pill.
+struct SegmentedTabs<Option: Hashable>: View {
+    var options: [Option]
+    var title: (Option) -> String
+    @Binding var selection: Option
+    @Namespace private var pill
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(options, id: \.self) { option in
+                let on = option == selection
+                Button { withAnimation(.snappy(duration: 0.2)) { selection = option } } label: {
+                    Text(title(option))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(on ? Color.primary : Palette.ink2)
+                        .padding(.horizontal, 12)
+                        .frame(height: 26)
+                        .background {
+                            if on {
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .fill(Palette.surface)
+                                    .shadow(color: .black.opacity(0.1), radius: 1.5, y: 1)
+                                    .matchedGeometryEffect(id: "pill", in: pill)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .fixedSize()
     }
 }
 

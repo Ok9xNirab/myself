@@ -471,6 +471,7 @@ final class AppStore {
     struct ClassSession {
         var uniClass: UniClass
         var dayOffset: Int
+        var id: String { "\(uniClass.id)-\(dayOffset)" }
 
         var dayLabel: String {
             switch dayOffset {

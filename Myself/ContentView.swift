@@ -107,12 +107,7 @@ struct ContentView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .navigation) {
-            Button("Back", systemImage: "chevron.left", action: store.back)
-                .disabled(!store.canGoBack)
-            Button("Forward", systemImage: "chevron.right", action: store.forward)
-                .disabled(!store.canGoForward)
-        }
+        // No Back / Forward buttons (the v2 design has none); Go › Back / Forward (⌘[ / ⌘]) still navigate.
         ToolbarItem(placement: .primaryAction) {
             Button("Search", systemImage: "magnifyingglass") { store.isQuickOpenPresented = true }
                 .help("Search MySelf (⌘K)")
@@ -262,10 +257,7 @@ private struct SidebarRow: View {
         Button(action: action) {
             HStack(spacing: 10) {
                 // An outline over a faint fill of the same symbol: the design's stroke icons with `fill-opacity: .16`.
-                ZStack {
-                    Image(systemName: page.systemImage).symbolVariant(.fill).opacity(0.16)
-                    Image(systemName: page.systemImage).symbolVariant(.none)
-                }
+                TintedSymbol(name: page.systemImage)
                 .font(.system(size: 15, weight: .regular))
                 .foregroundStyle(page.tint)
                 .frame(width: 20)
