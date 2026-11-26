@@ -1,7 +1,7 @@
 #if os(macOS)
 import SwiftUI
 
-/// The menu bar icon's menu (Settings › General › Show in menu bar): quick ways to add things, search, or jump to a page
+/// The menu bar icon's menu (Settings › System › Show in menu bar): quick ways to add things, search, or jump to a page
 /// without switching to MySelf first. Every action brings the main window forward, reopening it if it was closed.
 struct MenuBarMenu: View {
     @Environment(AppStore.self) private var store

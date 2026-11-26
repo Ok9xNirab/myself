@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The app icon picked in Settings › General › App icon, saved per device (`PrefKey.appIcon`).
+/// The app icon picked in Settings › Appearance › App icon, saved per device (`PrefKey.appIcon`).
 ///
 /// The alternates are Icon Composer bundles next to `AppIcon.icon` (`AppIconOctopus.icon`, `AppIconSpaces.icon`),
 /// listed in `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES`. The default tile draws the bundle's own icon, so it
@@ -52,7 +52,7 @@ enum AppIconChoice: String, CaseIterable, Identifiable {
     #endif
 }
 
-/// Settings › General › App icon: one tile per icon, the selected one ringed in the accent colour.
+/// Settings › Appearance › App icon: one tile per icon, the selected one ringed in the accent colour.
 struct AppIconPicker: View {
     @AppStorage(PrefKey.appIcon) private var selection = AppIconChoice.standard
 

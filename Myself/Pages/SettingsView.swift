@@ -1,16 +1,20 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Settings window (⌘,): General, Features and iCloud tabs.
+/// Settings window (⌘,): Appearance, Features, System (macOS), iCloud and Data tabs.
 struct SettingsView: View {
     @Environment(AppStore.self) private var store
 
     var body: some View {
         @Bindable var store = store
         TabView(selection: $store.settingsTab) {
-            Tab("General", systemImage: "gearshape", value: .general) { GeneralSettings() }
+            Tab("Appearance", systemImage: "paintbrush", value: .appearance) { AppearanceSettings() }
             Tab("Features", systemImage: "square.grid.2x2", value: .features) { FeatureSettings() }
+            #if os(macOS)
+            Tab("System", systemImage: "gearshape", value: .system) { SystemSettings() }
+            #endif
             Tab("iCloud", systemImage: "icloud", value: .iCloud) { ICloudSettings() }
+            Tab("Data", systemImage: "externaldrive", value: .data) { DataSettings() }
         }
         #if os(macOS)
         .frame(width: 520)
@@ -19,43 +23,16 @@ struct SettingsView: View {
     }
 }
 
-// MARK: General
+// MARK: Appearance
 
-private struct GeneralSettings: View {
-    @Environment(AppStore.self) private var store
+/// The app icon, theme, light or dark, sidebar style and row density.
+private struct AppearanceSettings: View {
     @AppStorage(PrefKey.appearance) private var appearance = ""
     @AppStorage(PrefKey.sidebarStyle) private var sidebarStyle = SidebarStyle.floating
     @AppStorage(PrefKey.rowDensity) private var density = RowDensity.regular
     @AppStorage(PrefKey.spaceTheme) private var theme = SpaceTheme.default
     @AppStorage(PrefKey.themeAppearance) private var themeAppearance = ThemeAppearance.system
     @AppStorage(PrefKey.paperWidth) private var paperWidth = PaperWidth.comfortable
-    #if os(macOS)
-    @AppStorage(PrefKey.menuBarIcon) private var showsMenuBarIcon = true
-    #if DIRECT_DISTRIBUTION
-    @AppStorage(PrefKey.checkForUpdates) private var checksForUpdates = true
-    @State private var updates = UpdateChecker.shared
-    #endif
-    #endif
-    @State private var confirmingReset = false
-    /// The number of sample records found, while Remove Sample Data's confirmation shows.
-    @State private var sampleCount: Int?
-    @State private var importError: String?
-
-    #if os(macOS)
-    private var shortcutNote: String {
-        let shortcut = SearchShortcut.shared
-        if shortcut.hotKey == nil { return "Off. Click to set a shortcut that opens search from any app." }
-        if !shortcut.isRegistered { return "Another app is using this shortcut. Choose a different one." }
-        return "Opens search from any app. ⌘K still works inside MySelf."
-    }
-
-    #if DIRECT_DISTRIBUTION
-    private var updateNote: String {
-        guard let date = updates.lastChecked else { return "Not checked yet." }
-        return "Last checked " + date.formatted(.relative(presentation: .named)) + "."
-    }
-    #endif
-    #endif
 
     var body: some View {
         Form {
@@ -89,7 +66,7 @@ private struct GeneralSettings: View {
             }
             .pickerStyle(.segmented)
 
-            Section("Appearance") {
+            Section("Layout") {
                 Picker("Appearance", selection: $appearance) {
                     Text("Auto").tag("")
                     Text("Light").tag("light")
@@ -104,9 +81,40 @@ private struct GeneralSettings: View {
                 }
             }
             .pickerStyle(.segmented)
+        }
+        .formStyle(.grouped)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
 
-            #if os(macOS)
-            Section {
+#if os(macOS)
+// MARK: System
+
+/// How MySelf fits into the Mac: the search shortcut, the menu bar icon and, in the DMG, updates.
+private struct SystemSettings: View {
+    @AppStorage(PrefKey.menuBarIcon) private var showsMenuBarIcon = true
+    #if DIRECT_DISTRIBUTION
+    @AppStorage(PrefKey.checkForUpdates) private var checksForUpdates = true
+    @State private var updates = UpdateChecker.shared
+    #endif
+
+    private var shortcutNote: String {
+        let shortcut = SearchShortcut.shared
+        if shortcut.hotKey == nil { return "Off. Click to set a shortcut that opens search from any app." }
+        if !shortcut.isRegistered { return "Another app is using this shortcut. Choose a different one." }
+        return "Opens search from any app. ⌘K still works inside MySelf."
+    }
+
+    #if DIRECT_DISTRIBUTION
+    private var updateNote: String {
+        guard let date = updates.lastChecked else { return "Not checked yet." }
+        return "Last checked " + date.formatted(.relative(presentation: .named)) + "."
+    }
+    #endif
+
+    var body: some View {
+        Form {
+            Section("Shortcuts") {
                 LabeledContent {
                     ShortcutRecorder()
                 } label: {
@@ -134,17 +142,37 @@ private struct GeneralSettings: View {
                 }
             }
             #endif
-            #endif
+        }
+        .formStyle(.grouped)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+#endif
 
-            Section("Data") {
-                #if os(macOS)
+// MARK: Data
+
+/// Importing from an earlier MySelf, and removing or resetting the sample content.
+private struct DataSettings: View {
+    @Environment(AppStore.self) private var store
+    @State private var confirmingReset = false
+    /// The number of sample records found, while Remove Sample Data's confirmation shows.
+    @State private var sampleCount: Int?
+    @State private var importError: String?
+
+    var body: some View {
+        Form {
+            #if os(macOS)
+            Section("Import") {
                 LabeledContent {
                     Button("Import\u{2026}") { importError = store.runLegacyImport() }
                 } label: {
                     Text("Import from an earlier MySelf")
                     Text("Brings over todos, notes and settings from MySelf 1.3.1 or earlier on this Mac, keeping what\u{2019}s already here.")
                 }
-                #endif
+            }
+            #endif
+
+            Section("Sample data") {
                 LabeledContent {
                     Button("Remove\u{2026}") { sampleCount = store.sampleMatches().count }
                 } label: {

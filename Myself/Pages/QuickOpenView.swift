@@ -78,7 +78,7 @@ struct QuickOpenView: View {
             #else
             store.openNote(id)
             #endif
-        case .settings: store.openSettings(.general)
+        case .settings: store.openSettings(.appearance)
         }
     }
 

@@ -67,7 +67,7 @@ struct HotKey: Equatable, RawRepresentable {
     }()
 }
 
-/// The system-wide "Search MySelf" shortcut (Settings › General). It's a Carbon hot key, so it works from any app
+/// The system-wide "Search MySelf" shortcut (Settings › System). It's a Carbon hot key, so it works from any app
 /// without Accessibility permission. Pressing it shows Quick Open in a floating panel over whatever app is in front,
 /// like Spotlight; MySelf only comes forward once a result is picked.
 @Observable
@@ -159,7 +159,7 @@ final class SearchShortcut {
             DispatchQueue.main.async { [weak self] in self?.bringForward(windowPrefix: NoteWindow.id) }
         case .settings:
             showMainWindow()
-            store.openSettings(.general)
+            store.openSettings(.appearance)
         }
     }
 

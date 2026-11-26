@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Settings › General › Theme: the colours of the soft mesh behind the top of every page ("space background" in
+/// Settings › Appearance › Theme: the colours of the soft mesh behind the top of every page ("space background" in
 /// the v2 design). Ink is the one dark theme.
 enum SpaceTheme: String, CaseIterable, Identifiable {
     case dawn, dusk, ember, lagoon, meadow, orchid, paper, ink
@@ -27,7 +27,7 @@ enum SpaceTheme: String, CaseIterable, Identifiable {
     static let `default` = SpaceTheme.dawn
 }
 
-/// Settings › General › Theme › Match system appearance. On: light or dark follows Appearance (Auto follows the
+/// Settings › Appearance › Theme › Match system appearance. On: light or dark follows Appearance (Auto follows the
 /// Mac). Off: the theme decides, so Ink is dark and the others are light.
 enum ThemeAppearance: String, CaseIterable, Identifiable {
     case system, theme
@@ -36,7 +36,7 @@ enum ThemeAppearance: String, CaseIterable, Identifiable {
     var title: String { self == .system ? "On" : "Off" }
 }
 
-/// Settings › General › Theme › Paper width: how wide pages and notes may grow.
+/// Settings › Appearance › Theme › Paper width: how wide pages and notes may grow.
 enum PaperWidth: String, CaseIterable, Identifiable {
     case comfortable, wide
 
@@ -153,7 +153,7 @@ extension View {
 
 // MARK: Theme picker
 
-/// A row of theme swatches, as in Settings › General.
+/// A row of theme swatches, as in Settings › Appearance.
 struct SpaceThemePicker: View {
     @Binding var selection: SpaceTheme
 

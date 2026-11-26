@@ -124,7 +124,7 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
-enum SettingsTab: Hashable { case general, features, iCloud }
+enum SettingsTab: Hashable { case appearance, features, system, iCloud, data }
 
 enum NoteRequest: Equatable { case open(ID), new }
 
@@ -175,7 +175,7 @@ final class AppStore {
     private(set) var historyIndex = 0
     var isQuickOpenPresented = false
     var isSettingsPresented = false
-    var settingsTab: SettingsTab = .general
+    var settingsTab: SettingsTab = .appearance
     /// The todo open in the editor sheet; a todo that isn't in `todos` yet is a new one.
     var editingTodo: Todo?
     /// Asks the Notes page to open or create a note (Quick Open, File › New Note); the page clears it.

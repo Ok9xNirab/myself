@@ -76,7 +76,7 @@ Get MySelf from the [Mac App Store](https://apps.apple.com/us/app/myself-todos-n
 
 ### Updating and uninstalling
 
-- **Update**: the DMG version checks GitHub for a new release once a day (Settings › General › Updates, or **MySelf › Check for Updates…**) and links the DMG. Quit MySelf, drag the new version from the DMG into Applications and replace the old one.
+- **Update**: the DMG version checks GitHub for a new release once a day (Settings › System › Updates, or **MySelf › Check for Updates…**) and links the DMG. Quit MySelf, drag the new version from the DMG into Applications and replace the old one.
 - **Uninstall**: move `Myself.app` to the Trash. To also delete its local data, run `rm -rf ~/Library/Containers/com.quorrelapps.myself` (and `com.ok9xnirab.myself` if you used version 1.3.1 or earlier). Synced data stays in your iCloud account until you delete it in System Settings › Apple Account › iCloud › Manage storage.
 
 ## iCloud sync
@@ -85,7 +85,7 @@ MySelf keeps its data in a SwiftData store on each device and syncs it through *
 
 There's nothing to set up: no folder to pick. If the same item was changed on two devices, the newer change wins. Your data counts towards your own iCloud storage, and nobody else, including the developer, can read it.
 
-**Coming from an earlier version?** Versions up to 1.3.1 synced through a folder in iCloud Drive. Open **Settings › iCloud › Import a sync folder** and choose that folder (for example *iCloud Drive › MySelf*) to bring its data in. Data that stayed on the Mac is imported automatically, and **Settings › General › Import from an earlier MySelf** reads data from the old `com.ok9xnirab.myself` app. The old files are never changed.
+**Coming from an earlier version?** Versions up to 1.3.1 synced through a folder in iCloud Drive. Open **Settings › iCloud › Import a sync folder** and choose that folder (for example *iCloud Drive › MySelf*) to bring its data in. Data that stayed on the Mac is imported automatically, and **Settings › Data › Import from an earlier MySelf** reads data from the old `com.ok9xnirab.myself` app. The old files are never changed.
 
 > [!NOTE]
 > MySelf is in active development. TODOs, Office Tasks, Notes, Book Notes, University, Job Study and Product Dev are saved and synced. Workout still uses sample data and doesn't save yet.

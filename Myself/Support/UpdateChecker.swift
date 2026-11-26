@@ -4,7 +4,7 @@ import SwiftUI
 /// Looks for a newer GitHub release than the running build. MySelf has no auto-updater (it's ad-hoc signed, outside the
 /// App Store), so this only tells the user and links the DMG; installing is still dragging it into Applications.
 ///
-/// Checks on launch at most once a day while Settings › General › Check for updates is on, and on demand from
+/// Checks on launch at most once a day while Settings › System › Check for updates is on, and on demand from
 /// MySelf › Check for Updates…. A version the user chose to skip only stops the automatic prompt.
 @Observable
 final class UpdateChecker {

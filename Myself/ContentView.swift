@@ -248,7 +248,7 @@ private struct Sidebar: View {
             }
             .buttonStyle(.plain)
             .help("iCloud settings")
-            Button("Settings", systemImage: "gearshape") { store.openSettings(.general) }
+            Button("Settings", systemImage: "gearshape") { store.openSettings(.appearance) }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
                 .foregroundStyle(Palette.ink2)
