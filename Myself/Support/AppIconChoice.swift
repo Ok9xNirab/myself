@@ -39,10 +39,11 @@ enum AppIconChoice: String, CaseIterable, Identifiable {
         NSImage(named: assetName ?? "AppIcon") ?? NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)
     }
 
-    /// Shows the saved icon in the Dock; called at launch and when the setting changes. The default is set too,
-    /// so a Dock tile cached from an older build is replaced.
+    /// Shows the saved icon in the Dock; called at launch and when the setting changes. The default leaves the Dock
+    /// to the system, which draws the bundle's layered icon in the Mac's icon style (default, dark, clear or
+    /// tinted). An alternate is a flat image, so it can't follow that style.
     static func applySaved() {
-        NSApp.applicationIconImage = saved.dockImage
+        NSApp.applicationIconImage = saved.assetName == nil ? nil : saved.dockImage
     }
 
     /// The catalog image fills its whole canvas, but a Dock icon sits inside the macOS icon grid: an 824 pt tile
