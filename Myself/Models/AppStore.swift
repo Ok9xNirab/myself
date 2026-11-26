@@ -1240,10 +1240,10 @@ final class AppStore {
     }
 
     @discardableResult
-    func addBookCategory(name: String) -> BookCategory? {
+    func addBookCategory(name: String, hex: UInt32? = nil) -> BookCategory? {
         let name = name.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return nil }
-        let category = BookCategory(id: newID(), name: name, hex: NoteCategory.palette[bookCategories.count % NoteCategory.palette.count],
+        let category = BookCategory(id: newID(), name: name, hex: hex ?? NoteCategory.palette[bookCategories.count % NoteCategory.palette.count],
                                     sortOrder: (bookCategories.map(\.sortOrder).max() ?? -1) + 1)
         bookCategories.append(category)
         sync.save(category)
@@ -1256,6 +1256,29 @@ final class AppStore {
         bookCategories[i].name = name
         bookCategories[i].updatedAt = .now
         sync.save(bookCategories[i])
+    }
+
+    func setBookCategoryColor(_ id: ID, hex: UInt32) {
+        guard let i = bookCategories.firstIndex(where: { $0.id == id }), bookCategories[i].hex != hex else { return }
+        bookCategories[i].hex = hex
+        bookCategories[i].updatedAt = .now
+        sync.save(bookCategories[i])
+    }
+
+    /// Moves a category in front of `before` (to the end when nil) and renumbers the ones whose place changed.
+    func moveBookCategory(_ id: ID, before: ID?) {
+        guard id != before, let from = bookCategories.firstIndex(where: { $0.id == id }) else { return }
+        var list = bookCategories
+        let moved = list.remove(at: from)
+        list.insert(moved, at: before.flatMap { b in list.firstIndex { $0.id == b } } ?? list.endIndex)
+        sync.batch {
+            for i in list.indices where list[i].sortOrder != i {
+                list[i].sortOrder = i
+                list[i].updatedAt = .now
+                sync.save(list[i])
+            }
+        }
+        bookCategories = list
     }
 
     /// Deletes a shelf; its books stay, uncategorized.

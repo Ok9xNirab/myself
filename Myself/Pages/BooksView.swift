@@ -16,8 +16,11 @@ enum BookSort: String, CaseIterable, Identifiable {
     }
 }
 
-/// Book Notes: the library (shelves, grid or list) and, for an open book, its workspace: the book panel and notes on
-/// the left, the note editor on the right. Fills the detail column instead of using `PageScroll`.
+/// The design's Book Notes brown, for the "Now reading" tag, progress bars and page numbers.
+private var bookTint: Color { Page.books.tint }
+
+/// Book Notes: the library (the v2 design's header, "Now reading" cards and the shelves by category) and, for an
+/// open book, its workspace: the book panel and notes on the left, the note editor on the right.
 struct BooksView: View {
     @Environment(AppStore.self) private var store
 
@@ -27,10 +30,12 @@ struct BooksView: View {
     @State private var freshBook: ID?
 
     var body: some View {
+        let book = store.book(openBookID)
         Group {
-            if let book = store.book(openBookID) {
+            if let book {
                 BookWorkspace(book: book, openNoteID: $openNoteID, focusTitle: freshBook == book.id) { openBookID = "" }
                     .id(book.id)
+                    .overlay(alignment: .top) { Divider() }
             } else {
                 BookLibrary { book, fresh in
                     if fresh { freshBook = book }
@@ -38,12 +43,16 @@ struct BooksView: View {
                 }
             }
         }
-        .overlay(alignment: .top) { Divider() }
-        .onAppear { handle(store.bookNoteRequest) }
+        .onAppear {
+            handle(store.bookNoteRequest)
+            updateCrumb(book)
+        }
         .onChange(of: store.bookNoteRequest) { handle(store.bookNoteRequest) }
+        .onChange(of: book?.displayTitle) { updateCrumb(book) }
         .onDisappear {
             store.saveUnsavedNotes()
             store.saveUnsavedBooks()
+            if store.crumb?.page == .books { store.crumb = nil }
         }
     }
 
@@ -54,6 +63,11 @@ struct BooksView: View {
         openBookID = bookID
         openNoteID = request
     }
+
+    /// "Book Notes / Library", or the open book's title.
+    private func updateCrumb(_ book: Book?) {
+        store.crumb = (page: .books, detail: book?.displayTitle ?? "Library")
+    }
 }
 
 // MARK: - Library
@@ -62,26 +76,23 @@ private struct BookLibrary: View {
     var onOpen: (ID, Bool) -> Void
 
     @Environment(AppStore.self) private var store
-    /// "all", "none" or a category ID.
+    /// "all", "none" or a category ID: "See all" shows one category.
     @AppStorage("books.scope") private var scope = "all"
     /// "all" or a `BookStatus` raw value.
     @AppStorage("books.filter") private var filter = "all"
     @AppStorage("books.sort") private var sort = BookSort.recent
-    @AppStorage("books.layout") private var layout = "grid"
     @State private var query = ""
     @State private var renaming: BookCategory?
     @State private var renameText = ""
     @State private var deleting: BookCategory?
-
-    private static let shelfMax = 12
+    @State private var showsManage = false
 
     private struct Shelf: Identifiable {
         let id: String
         let title: String
-        let subtitle: String
+        let color: Color
         let books: [Book]
         let category: BookCategory?
-        let seeAll: () -> Void
     }
 
     private var validScope: String {
@@ -90,32 +101,32 @@ private struct BookLibrary: View {
 
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespaces).lowercased() }
 
-    private var showsShelves: Bool { validScope == "all" && trimmedQuery.isEmpty && filter == "all" && layout != "list" }
-
     var body: some View {
-        // What each book's rows and sort order need of its notes.
+        // What each book's sort order needs of its notes.
         let notes = Dictionary(grouping: store.noteSummaries.filter { $0.bookID != nil }) { $0.bookID ?? "" }
-        GeometryReader { geo in
-            let side: CGFloat = geo.size.width <= 640 ? 20 : 32
-            VStack(spacing: 0) {
-                bar(width: geo.size.width)
-                    .padding(.horizontal, side)
-                    .padding(.vertical, 10)
-                ScrollView {
-                    Group {
-                        if showsShelves {
-                            shelves(notes, side: side, width: geo.size.width)
-                        } else {
-                            filtered(notes, width: geo.size.width)
-                        }
-                    }
-                    .padding(.horizontal, side)
-                    .padding(.bottom, 40)
+        let scope = validScope
+        PageScroll {
+            SpaceHeader(page: .books, detail: summary(store.books))
+            if store.books.isEmpty {
+                VStack(spacing: 14) {
+                    EmptyStateView(systemImage: "books.vertical", title: "Your library is empty",
+                                   subtitle: "Add a book to keep its reading notes, quotes and progress together.")
+                    Button("Add Book", systemImage: "plus", action: addBook)
+                        .buttonStyle(.borderedProminent)
                 }
-                .scrollContentBackground(.hidden)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 60)
+            } else {
+                if scope == "all" {
+                    let reading = sorted(store.books.filter { $0.status == .reading }, notes, by: .recent)
+                    if !reading.isEmpty { NowReading(books: Array(reading.prefix(4))) { onOpen($0, false) } }
+                }
+                libraryBar(scope)
+                library(notes, scope: scope)
             }
         }
-        .scapeBackground()
+        .toolbar { toolbar }
+        .sheet(isPresented: $showsManage) { BookCategoriesSheet() }
         .alert("Rename Category", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Name", text: $renameText)
             Button("Rename") { if let renaming { store.renameBookCategory(renaming.id, to: renameText) } }
@@ -131,136 +142,174 @@ private struct BookLibrary: View {
         }
     }
 
-    // MARK: Bar
-
-    private func bar(width: CGFloat) -> some View {
-        HStack(spacing: 8) {
-            if validScope != "all" || filter != "all" {
-                Button {
-                    scope = "all"
-                    filter = "all"
-                    query = ""
-                } label: {
-                    Label("All Books", systemImage: "chevron.left").font(.system(size: 13))
-                }
-                .buttonStyle(.borderless)
-                .foregroundStyle(Color.accentColor)
-            } else if width > 760 {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text("Library").font(.system(size: 13, weight: .semibold))
-                    Text(summary(store.books)).font(.system(size: 12.5)).foregroundStyle(Palette.ink3).monospacedDigit()
-                }
-                .lineLimit(1)
-            }
-            Spacer(minLength: 8)
-            NoteSearchField(placeholder: "Search books", text: $query)
-                .frame(width: width <= 900 ? 150 : 200)
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
             Menu {
                 Picker("Sort by", selection: $sort) {
                     ForEach(BookSort.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.inline)
+                Divider()
+                Button("Manage Categories\u{2026}", systemImage: "slider.horizontal.3") { showsManage = true }
             } label: {
-                Image(systemName: "arrow.up.arrow.down")
+                Label("Sort and Categories", systemImage: "arrow.up.arrow.down")
             }
-            .menuStyle(.button)
-            .buttonStyle(.borderless)
             .menuIndicator(.hidden)
-            .fixedSize()
-            .foregroundStyle(Palette.ink2)
-            .help("Sort")
-            Picker("Layout", selection: $layout) {
-                Image(systemName: "square.grid.2x2").tag("grid").help("Covers")
-                Image(systemName: "list.bullet").tag("list").help("List")
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
+            .help("Sort books, manage categories")
+        }
+        ToolbarItem(placement: .primaryAction) {
             Button(action: addBook) {
-                Label("Add Book", systemImage: "plus")
-                    .labelStyle(AddBookLabelStyle(compact: width <= 640))
+                Label("Add book", systemImage: "plus")
+                    .labelStyle(.titleAndIcon)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Palette.surface)
+                    .padding(.horizontal, 12)
+                    .frame(height: 28)
+                    .background(Color.primary, in: Capsule())
+                    .contentShape(Capsule())
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.plain)
             .help("Add a book")
         }
     }
 
-    private struct AddBookLabelStyle: LabelStyle {
-        var compact: Bool
+    // MARK: Bar
 
-        func makeBody(configuration: Configuration) -> some View {
-            if compact {
-                configuration.icon
-            } else {
-                HStack(spacing: 5) {
-                    configuration.icon
-                    configuration.title
+    /// "Library" (or the category "See all" opened, with a way back), the status filter and the search field.
+    private func libraryBar(_ scope: String) -> some View {
+        let category = store.bookCategory(scope)
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                title(scope, category)
+                Spacer(minLength: 8)
+                statusTabs
+                search
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                title(scope, category)
+                HStack(spacing: 12) {
+                    statusTabs
+                    search
                 }
             }
         }
+        .padding(.top, 8)
+    }
+
+    private func title(_ scope: String, _ category: BookCategory?) -> some View {
+        HStack(spacing: 8) {
+            if scope != "all" {
+                Button { self.scope = "all" } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(Palette.ink2)
+                        .frame(width: 26, height: 26)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Back to the library")
+                if let category { ColorDot(color: category.color, size: 9) }
+            }
+            Text(scope == "all" ? "Library" : scope == "none" ? "Uncategorized" : category?.name ?? "Library")
+                .font(.system(size: 22, weight: .bold, design: .serif))
+                .lineLimit(1)
+                .contextMenu { if let category { categoryMenu(category) } }
+        }
+        .fixedSize()
+    }
+
+    private var statusTabs: some View {
+        SegmentedTabs(options: ["all"] + BookStatus.allCases.map(\.rawValue),
+                      title: { BookStatus(rawValue: $0)?.title ?? "All" },
+                      selection: Binding(get: { BookStatus(rawValue: filter) == nil ? "all" : filter }, set: { filter = $0 }))
+    }
+
+    private var search: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.ink3)
+            TextField("Search", text: $query)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12.5))
+                .onEscape { query = "" }
+            if !query.isEmpty {
+                Button("Clear", systemImage: "xmark.circle.fill") { query = "" }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(Palette.ink3)
+            }
+        }
+        .padding(.horizontal, 10)
+        .frame(width: 170, height: 28)
+        .background(Palette.surface, in: Capsule())
+        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5))
     }
 
     // MARK: Shelves
 
-    private func shelves(_ notes: [ID: [NoteSummary]], side: CGFloat, width: CGFloat) -> some View {
-        let shelves = shelfList(notes)
-        let height: CGFloat = width <= 640 ? 156 : width <= 900 ? 176 : 200
-        return LazyVStack(alignment: .leading, spacing: 0) {
-            if shelves.isEmpty {
-                libraryEmpty("Your library is empty", action: "Add a book")
-            }
-            ForEach(Array(shelves.enumerated()), id: \.element.id) { i, shelf in
-                VStack(alignment: .leading, spacing: 0) {
-                    if i > 0 { Divider() }
-                    HStack(spacing: 16) {
-                        Button(action: shelf.seeAll) {
-                            HStack(spacing: 2) {
-                                Text(shelf.title).font(.system(size: 24, weight: .bold, design: .serif))
-                                Image(systemName: "chevron.right").font(.system(size: 15, weight: .bold)).foregroundStyle(Palette.ink3)
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu { if let category = shelf.category { categoryMenu(category) } }
-                        Spacer()
-                        if shelf.books.count > Self.shelfMax {
-                            Button("See All \(shelf.books.count)", action: shelf.seeAll)
-                                .buttonStyle(.borderless)
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(Color.accentColor)
-                        }
+    @ViewBuilder
+    private func library(_ notes: [ID: [NoteSummary]], scope: String) -> some View {
+        let shelves = shelfList(notes, scope: scope)
+        if shelves.isEmpty {
+            Text(trimmedQuery.isEmpty ? "No books here yet." : "No books match \u{201C}\(query.trimmingCharacters(in: .whitespaces))\u{201D}.")
+                .font(.system(size: 13.5))
+                .foregroundStyle(Palette.ink2)
+                .padding(.horizontal, 2)
+                .padding(.vertical, 24)
+        } else if scope != "all", let shelf = shelves.first {
+            BookGrid(books: shelf.books) { onOpen($0, false) }
+                .padding(.top, 6)
+        } else {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(shelves) { shelf in
+                    VStack(alignment: .leading, spacing: 16) {
+                        Divider()
+                        shelfHeader(shelf)
+                        BookGrid(books: shelf.books) { onOpen($0, false) }
                     }
-                    .padding(.top, 26)
-                    Text(shelf.subtitle).font(.system(size: 13.5)).foregroundStyle(Palette.ink3).padding(.top, 3)
-                    ScrollView(.horizontal) {
-                        LazyHStack(alignment: .bottom, spacing: width <= 640 ? 22 : 30) {
-                            ForEach(shelf.books.prefix(Self.shelfMax)) { book in
-                                BookItem(book: book, notes: notes[book.id]?.count ?? 0, coverHeight: height) { onOpen(book.id, false) }
-                            }
-                        }
-                        .padding(.horizontal, side)
-                        .padding(.vertical, 22)
-                    }
-                    .scrollIndicators(.never)
-                    .padding(.horizontal, -side)
+                    .padding(.bottom, 22)
                 }
             }
         }
     }
 
-    private func shelfList(_ notes: [ID: [NoteSummary]]) -> [Shelf] {
-        let books = store.books
-        let recent = books.sorted { activity($0, notes) > activity($1, notes) }
-        var out = [
-            Shelf(id: "reading", title: "Continue Reading", subtitle: "Pick up where you left off.", books: recent.filter { $0.status == .reading }, category: nil) { filter = BookStatus.reading.rawValue },
-            Shelf(id: "want", title: "Want to Read", subtitle: "Up next on your list.", books: recent.filter { $0.status == .want }, category: nil) { filter = BookStatus.want.rawValue },
-        ]
-        for category in store.bookCategories {
-            let shelf = sorted(books.filter { $0.categoryID == category.id }, notes)
-            out.append(Shelf(id: category.id, title: category.name, subtitle: summary(shelf), books: shelf, category: category) { pick(category.id) })
+    private func shelfHeader(_ shelf: Shelf) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 9) {
+            ColorDot(color: shelf.color, size: 8)
+                .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
+            Text(shelf.title).font(.system(size: 19, weight: .bold, design: .serif)).lineLimit(1)
+            Text(plural(shelf.books.count, "book")).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(Palette.ink2)
+            Spacer(minLength: 8)
+            Button { scope = shelf.id } label: {
+                HStack(spacing: 2) {
+                    Text("See all")
+                    Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold))
+                }
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(Palette.ink2)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
-        let loose = sorted(books.filter { book in book.categoryID.flatMap(store.bookCategory) == nil }, notes)
-        out.append(Shelf(id: "none", title: "Uncategorized", subtitle: summary(loose), books: loose, category: nil) { pick("none") })
+        .padding(.horizontal, 2)
+        .padding(.top, 14)
+        .contextMenu { if let category = shelf.category { categoryMenu(category) } }
+    }
+
+    /// One shelf per category, then Uncategorized, each holding the books that pass the filter and search. In one
+    /// category's view, just that shelf.
+    private func shelfList(_ notes: [ID: [NoteSummary]], scope: String) -> [Shelf] {
+        let q = trimmedQuery
+        let books = store.books.filter { book in
+            (filter == "all" || book.status.rawValue == filter) && (q.isEmpty || "\(book.title) \(book.author)".lowercased().contains(q))
+        }
+        var out = store.bookCategories.map { category in
+            Shelf(id: category.id, title: category.name, color: category.color,
+                  books: sorted(books.filter { $0.categoryID == category.id }, notes, by: sort), category: category)
+        }
+        let loose = books.filter { book in book.categoryID.flatMap(store.bookCategory) == nil }
+        out.append(Shelf(id: "none", title: "Uncategorized", color: Palette.ink3, books: sorted(loose, notes, by: sort), category: nil))
+        if scope != "all" { out = out.filter { $0.id == scope } }
         return out.filter { !$0.books.isEmpty }
     }
 
@@ -277,88 +326,11 @@ private struct BookLibrary: View {
                 store.deleteBookCategory(category.id)
             }
         }
-    }
-
-    // MARK: Filtered
-
-    private func filtered(_ notes: [ID: [NoteSummary]], width: CGFloat) -> some View {
-        let q = trimmedQuery
-        let category = store.bookCategory(validScope)
-        let scoped = store.books.filter { book in
-            switch validScope {
-            case "all": true
-            case "none": book.categoryID.flatMap(store.bookCategory) == nil
-            default: book.categoryID == validScope
-            }
-        }
-        let list = sorted(scoped.filter { book in
-            (filter == "all" || book.status.rawValue == filter) && (q.isEmpty || "\(book.title) \(book.author)".lowercased().contains(q))
-        }, notes)
-        let title = if !q.isEmpty {
-            "Results"
-        } else if filter != "all", validScope == "all" {
-            BookStatus(rawValue: filter)?.title ?? "All Books"
-        } else {
-            validScope == "all" ? "All Books" : validScope == "none" ? "Uncategorized" : category?.name ?? "All Books"
-        }
-        return VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.system(size: 30, weight: .bold, design: .serif))
-                    .contextMenu { if let category { categoryMenu(category) } }
-                Text(q.isEmpty ? plural(list.count, "book") : "\(plural(list.count, "book")) matching \u{201C}\(query.trimmingCharacters(in: .whitespaces))\u{201D}")
-                    .font(.system(size: 13.5))
-                    .foregroundStyle(Palette.ink3)
-                Picker("Status", selection: Binding(get: { filter }, set: { filter = $0 })) {
-                    Text("All \(scoped.count)").tag("all")
-                    ForEach(BookStatus.allCases) { status in
-                        Text("\(status.title) \(scoped.count(where: { $0.status == status }))").tag(status.rawValue)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                .padding(.top, 13)
-            }
-            .padding(.top, 24)
-            .padding(.bottom, 18)
-
-            if list.isEmpty {
-                if q.isEmpty {
-                    libraryEmpty("Nothing here yet", action: "Add a book")
-                } else {
-                    libraryEmpty("No books match \u{201C}\(query)\u{201D}", action: nil)
-                }
-            } else if layout == "list" {
-                BookList(books: list, notes: notes, width: width) { onOpen($0, false) }
-            } else {
-                let compact = width <= 640
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: compact ? 104 : 136), spacing: compact ? 20 : 30, alignment: .bottom)], spacing: compact ? 30 : 40) {
-                    ForEach(list) { book in
-                        BookItem(book: book, notes: notes[book.id]?.count ?? 0, coverHeight: nil) { onOpen(book.id, false) }
-                    }
-                }
-                .padding(.top, 8)
-            }
-        }
-    }
-
-    private func libraryEmpty(_ title: String, action: String?) -> some View {
-        VStack(spacing: 8) {
-            Text(title)
-            if let action { Button(action, action: addBook).buttonStyle(.borderless) }
-        }
-        .font(.system(size: 12.5))
-        .foregroundStyle(Palette.ink3)
-        .frame(maxWidth: .infinity)
-        .padding(.top, 60)
+        Divider()
+        Button("Manage Categories\u{2026}", systemImage: "slider.horizontal.3") { showsManage = true }
     }
 
     // MARK: Helpers
-
-    private func pick(_ newScope: String) {
-        scope = newScope
-        filter = "all"
-    }
 
     private func addBook() {
         let status = BookStatus(rawValue: filter) ?? .reading
@@ -371,7 +343,7 @@ private struct BookLibrary: View {
         notes[book.id]?.map(\.editedAt).max() ?? book.createdAt
     }
 
-    private func sorted(_ books: [Book], _ notes: [ID: [NoteSummary]]) -> [Book] {
+    private func sorted(_ books: [Book], _ notes: [ID: [NoteSummary]], by sort: BookSort) -> [Book] {
         switch sort {
         case .recent: books.sorted { activity($0, notes) > activity($1, notes) }
         case .title: books.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
@@ -394,152 +366,195 @@ private struct BookLibrary: View {
 
 private func plural(_ n: Int, _ word: String) -> String { "\(n) \(word)\(n == 1 ? "" : "s")" }
 
-/// A cover with its reading progress and note count underneath. With no `coverHeight` it fills its column's width.
-private struct BookItem: View {
+// MARK: - Now reading
+
+/// The books being read, as cards: a tilted cover, the title, progress, what's left and Resume. Two to a row.
+private struct NowReading: View {
+    var books: [Book]
+    var onOpen: (ID) -> Void
+    @Environment(\.pageWidth) private var width
+
+    var body: some View {
+        let columns = width >= 760 ? 2 : 1
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12, alignment: .top), count: columns), spacing: 12) {
+            ForEach(books) { book in
+                NowReadingCard(book: book) { onOpen(book.id) }
+            }
+        }
+    }
+}
+
+private struct NowReadingCard: View {
     var book: Book
-    var notes: Int
-    var coverHeight: CGFloat?
     var onOpen: () -> Void
-    @State private var hovering = false
+    @State private var hover = HoverState()
+
+    /// "303 pages left · ~10 sessions", at the design's 30 pages a session.
+    private var left: String {
+        guard book.totalPages > 0 else { return "No page count" }
+        let pages = max(0, book.totalPages - book.currentPage)
+        let sessions = max(1, Int((Double(pages) / 30).rounded()))
+        return pages == 0 ? "Last page reached" : "\(plural(pages, "page")) left · ~\(plural(sessions, "session"))"
+    }
 
     var body: some View {
         Button(action: onOpen) {
-            VStack(alignment: .leading, spacing: 10) {
-                Group {
-                    if let coverHeight {
-                        BookCover(book: book).frame(height: coverHeight)
-                    } else {
-                        BookCover(book: book).frame(maxWidth: .infinity)
+            HStack(alignment: .top, spacing: 16) {
+                BookCover(book: book)
+                    .frame(width: 96, height: 144)
+                    .rotation3DEffect(.degrees(-14), axis: (x: 0, y: 1, z: 0), anchor: .leading, perspective: 0.6)
+                    .padding(.trailing, 4)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("NOW READING")
+                        .font(.system(size: 10.5, weight: .heavy))
+                        .tracking(0.9)
+                        .foregroundStyle(bookTint)
+                    Text(book.displayTitle)
+                        .font(.system(size: 18, weight: .bold, design: .serif))
+                        .lineLimit(2)
+                        .padding(.top, 5)
+                    if !book.author.isEmpty {
+                        Text(book.author).font(.system(size: 12.5)).foregroundStyle(Palette.ink2).lineLimit(1).padding(.top, 3)
                     }
+                    Spacer(minLength: 12)
+                    ProgressBar(value: Double(book.percent), color: bookTint, height: 5)
+                    (Text("\(book.percent)%").fontWeight(.bold).foregroundStyle(.primary)
+                        + Text(book.totalPages > 0 ? " · p. \(book.currentPage) of \(book.totalPages)" : ""))
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Palette.ink2)
+                        .monospacedDigit()
+                        .padding(.top, 6)
+                    Text(left).font(.system(size: 11.5)).foregroundStyle(Palette.ink2).monospacedDigit().padding(.top, 2)
+                    HStack(spacing: 5) {
+                        Image(systemName: "play").font(.system(size: 10, weight: .bold))
+                        Text("Resume")
+                    }
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Palette.surface)
+                    .padding(.horizontal, 11)
+                    .frame(height: 26)
+                    .background(Color.primary, in: Capsule())
+                    .padding(.top, 9)
                 }
-                .offset(y: hovering ? -5 : 0)
-                .animation(.timingCurve(0.3, 0.7, 0.2, 1, duration: 0.22), value: hovering)
-                HStack(spacing: 7) {
-                    if book.status == .reading {
-                        ProgressBar(value: Double(book.percent), color: Palette.ink2, height: 3).frame(minWidth: 16, maxWidth: 40)
-                        Text("\(book.percent)%").fixedSize()
-                    } else {
-                        Text(book.status.title).lineLimit(1)
-                    }
-                    if notes > 0 {
-                        Spacer(minLength: 0)
-                        HStack(spacing: 3) {
-                            Image(systemName: "note.text").font(.system(size: 9))
-                            Text("\(notes)")
-                        }
-                        .fixedSize()
-                        .help(plural(notes, "note"))
-                    }
-                }
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Palette.ink3)
-                .monospacedDigit()
-                .frame(height: 14)
-                // A shelf's cover sets the width; the line under it shouldn't widen it.
-                .frame(maxWidth: coverHeight == nil ? .infinity : coverHeight! * 2 / 3, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(minHeight: 144)
+            .padding(16)
+            .background { NowReadingBackground(color: book.color) }
+            .offset(y: hover.isOn ? -2 : 0)
+            .animation(.easeOut(duration: 0.15), value: hover.isOn)
+            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hover.isOn = $0 }
+        .help("Open \u{201C}\(book.displayTitle)\u{201D}")
+    }
+}
+
+/// Paper with a wash of the cover's colour from the top-left corner, as in the design.
+private struct NowReadingBackground: View {
+    var color: Color
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+        shape
+            .fill(Palette.surface)
+            .overlay {
+                shape.fill(RadialGradient(colors: [color.opacity(0.22), color.opacity(0)], center: .topLeading, startRadius: 0, endRadius: 420))
+            }
+            .overlay { shape.strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5) }
+            .shadow(color: Color(red: 70 / 255, green: 45 / 255, blue: 20 / 255).opacity(0.08), radius: 15, y: 10)
+    }
+}
+
+// MARK: - Grid
+
+/// A shelf's books: covers filling equal columns (six on a wide page), with the title, author and state under each.
+private struct BookGrid: View {
+    var books: [Book]
+    var onOpen: (ID) -> Void
+    @Environment(\.pageWidth) private var width
+
+    var body: some View {
+        // `pageWidth` is the whole column; the page pads it by 28 (18 when narrow) on each side.
+        let inner = max(200, min(width, 1140) - (width < 700 ? 36 : 56))
+        let spacing: CGFloat = width < 700 ? 16 : 22
+        let columns = max(2, min(6, Int((inner + spacing) / (140 + spacing))))
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: spacing, alignment: .top), count: columns), alignment: .leading, spacing: 26) {
+            ForEach(books) { book in
+                BookTile(book: book) { onOpen(book.id) }
+            }
+        }
+    }
+}
+
+private struct BookTile: View {
+    var book: Book
+    var onOpen: () -> Void
+    @State private var hover = HoverState()
+
+    var body: some View {
+        Button(action: onOpen) {
+            VStack(alignment: .leading, spacing: 0) {
+                LiftingCover(book: book, hover: hover)
+                    .padding(.bottom, 12)
+                Text(book.displayTitle).font(.system(size: 13, weight: .bold)).lineLimit(1)
+                Text(book.author.isEmpty ? " " : book.author).font(.system(size: 12)).foregroundStyle(Palette.ink2).lineLimit(1).padding(.top, 2)
+                BookStatePill(book: book).padding(.top, 7)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .onHover { hovering = $0 }
+        .onHover { hover.isOn = $0 }
         .help(book.displayTitle + (book.author.isEmpty ? "" : " \u{2014} \(book.author)"))
     }
 }
 
-/// The library as rows. Columns drop away as the page narrows, as in the design.
-private struct BookList: View {
-    var books: [Book]
-    var notes: [ID: [NoteSummary]]
-    var width: CGFloat
-    var onOpen: (ID) -> Void
-    @Environment(AppStore.self) private var store
-
-    private var showsAuthorAndCategory: Bool { width > 560 }
-    private var showsProgressAndNotes: Bool { width > 1080 }
+/// The cover over a soft ground shadow; it lifts and tips on hover. Only this view reads the hover.
+private struct LiftingCover: View {
+    var book: Book
+    var hover: HoverState
 
     var body: some View {
-        LazyVStack(spacing: 0) {
-            row(cover: AnyView(Color.clear), title: AnyView(Text("Title")), author: AnyView(Text("Author")), status: AnyView(Text("Status")),
-                progress: AnyView(Text("Progress")), category: AnyView(Text("Category")), notes: AnyView(Text("Notes")))
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Palette.ink3)
-                .frame(height: 26)
-            Divider()
-            ForEach(Array(books.enumerated()), id: \.element.id) { i, book in
-                BookRowButton(striped: i % 2 == 0) { onOpen(book.id) } label: { rowContent(book) }
+        Color.clear
+            .aspectRatio(2.0 / 3.0, contentMode: .fit)
+            .frame(maxWidth: .infinity)
+            .background(alignment: .bottom) {
+                Ellipse()
+                    .fill(RadialGradient(colors: [Color(red: 60 / 255, green: 40 / 255, blue: 20 / 255).opacity(0.28), .clear], center: .center, startRadius: 0, endRadius: 60))
+                    .scaleEffect(x: 1, y: 0.2)
+                    .frame(height: 70)
+                    .padding(.horizontal, 8)
+                    .offset(y: 35 - 1)
             }
-        }
-    }
-
-    private func rowContent(_ book: Book) -> some View {
-        let category = book.categoryID.flatMap(store.bookCategory)
-        return row(
-            cover: AnyView(BookCover(book: book, small: true)),
-            title: AnyView(Text(book.displayTitle).fontWeight(.semibold).lineLimit(1)),
-            author: AnyView(Text(book.author.isEmpty ? "\u{2014}" : book.author).foregroundStyle(Palette.ink2).lineLimit(1)),
-            status: AnyView(BookStatusBadge(status: book.status)),
-            progress: AnyView(HStack(spacing: 8) {
-                ProgressBar(value: Double(book.percent), color: book.color, height: 4)
-                Text("\(book.percent)%").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.ink2).monospacedDigit()
-            }),
-            category: AnyView(HStack(spacing: 6) {
-                if let category {
-                    ColorDot(color: category.color, size: 6)
-                    Text(category.name).foregroundStyle(Palette.ink2).lineLimit(1)
-                } else {
-                    Text("\u{2014}").foregroundStyle(Palette.ink3)
-                }
-            }.font(.system(size: 12))),
-            notes: AnyView(Text(notes[book.id]?.count.formatted() ?? "\u{2014}").monospacedDigit())
-        )
-        .font(.system(size: 13))
-        .frame(height: 52)
-    }
-
-    private func row(cover: AnyView, title: AnyView, author: AnyView, status: AnyView, progress: AnyView, category: AnyView, notes: AnyView) -> some View {
-        HStack(spacing: 14) {
-            cover.frame(width: 28)
-            title.frame(maxWidth: .infinity, alignment: .leading)
-            if showsAuthorAndCategory { author.frame(maxWidth: .infinity, alignment: .leading) }
-            status.frame(width: 100, alignment: .leading)
-            if showsProgressAndNotes { progress.frame(width: 120) }
-            if showsAuthorAndCategory { category.frame(maxWidth: .infinity, alignment: .leading) }
-            if showsProgressAndNotes { notes.frame(width: 52, alignment: .trailing) }
-        }
-        .padding(.horizontal, 10)
+            .overlay(alignment: .bottom) {
+                BookCover(book: book)
+                    .offset(y: hover.isOn ? -4 : 0)
+                    .rotationEffect(.degrees(hover.isOn ? -1 : 0))
+                    .animation(.easeOut(duration: 0.2), value: hover.isOn)
+            }
     }
 }
 
-private struct BookRowButton<Label: View>: View {
-    var striped: Bool
-    var action: () -> Void
-    @ViewBuilder var label: Label
-    @State private var hover = HoverState()
+/// "Want to read", "34% read" or "✓ Finished" under a cover.
+private struct BookStatePill: View {
+    var book: Book
 
     var body: some View {
-        Button(action: action) {
-            label
-                .background { HoverFill(hover: hover, color: Color.primary.opacity(0.06)) }
-                .background(striped ? Color.primary.opacity(0.025) : .clear)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .contentShape(Rectangle())
+        let (text, fg, bg): (String, Color, Color) = switch book.status {
+        case .reading: ("\(book.percent)% read", bookTint, bookTint.opacity(0.15))
+        case .want: ("Want to read", Palette.ink2, Color.primary.opacity(0.06))
+        case .done: ("\u{2713} Finished", Palette.green, Palette.green.opacity(0.13))
         }
-        .buttonStyle(.plain)
-        .onHover { hover.isOn = $0 }
-    }
-}
-
-private struct BookStatusBadge: View {
-    var status: BookStatus
-
-    var body: some View {
-        Text(status.title)
-            .font(.system(size: 11, weight: .semibold))
+        Text(text)
+            .font(.system(size: 10.5, weight: .bold))
+            .monospacedDigit()
             .lineLimit(1)
-            .foregroundStyle(status == .want ? Palette.ink2 : status.color)
-            .padding(.horizontal, 8)
+            .foregroundStyle(fg)
+            .padding(.horizontal, 7)
             .padding(.vertical, 2)
-            .background((status == .want ? Color.primary.opacity(0.07) : status.color.opacity(0.15)), in: Capsule())
+            .background(bg, in: Capsule())
     }
 }
 
@@ -742,6 +757,7 @@ private struct BookPanel: View {
     @AppStorage("books.scope") private var scope = "all"
     @State private var showsOptions = false
     @State private var showsCategories = false
+    @State private var showsManage = false
     @State private var choosingCover = false
     @State private var droppingCover = false
     @State private var hoveringCover = false
@@ -944,8 +960,12 @@ private struct BookPanel: View {
             BookCategoryPicker(selection: book.categoryID) { id in
                 store.editBook(book.id) { $0.categoryID = id }
                 showsCategories = false
+            } onManage: {
+                showsCategories = false
+                showsManage = true
             }
         }
+        .sheet(isPresented: $showsManage) { BookCategoriesSheet() }
     }
 
     // MARK: Progress
@@ -962,7 +982,7 @@ private struct BookPanel: View {
             }
             .font(.system(size: 11.5))
             .foregroundStyle(Palette.ink3)
-            ProgressBar(value: Double(book.percent), color: book.color, height: 4)
+            ProgressBar(value: Double(book.percent), color: bookTint, height: 4)
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 12)
@@ -1012,9 +1032,9 @@ private struct BookPanel: View {
         }
         return VStack(alignment: .leading, spacing: 0) {
             Divider().padding(.top, 8)
-            HStack(spacing: 6) {
-                Text("Reading notes").font(.system(size: 11, weight: .semibold))
-                Text("\(notes.count)").font(.system(size: 11)).monospacedDigit()
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                Text("Notes").font(.system(size: 15, weight: .bold)).foregroundStyle(.primary)
+                Text("\(notes.count)").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.ink2).monospacedDigit()
                 Spacer()
                 Button("New Reading Note", systemImage: "square.and.pencil", action: onNewNote)
                     .labelStyle(.iconOnly)
@@ -1022,16 +1042,23 @@ private struct BookPanel: View {
                     .foregroundStyle(Palette.ink2)
                     .help("New reading note")
             }
-            .foregroundStyle(Palette.ink3)
-            .padding(.leading, 18)
+            .padding(.leading, 16)
             .padding(.trailing, 10)
-            .padding(.top, 10)
-            .padding(.bottom, 4)
-            if notes.count > 5 {
-                NoteSearchField(placeholder: "Search notes in this book", text: $query)
-                    .padding(.horizontal, 10)
-                    .padding(.top, 4)
-                    .padding(.bottom, 6)
+            .padding(.top, 12)
+            .padding(.bottom, 6)
+            if !notes.isEmpty {
+                HStack(spacing: 7) {
+                    Image(systemName: "magnifyingglass").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.ink3)
+                    TextField("Search notes in this book", text: $query)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13))
+                        .onEscape { query = "" }
+                }
+                .padding(.horizontal, 10)
+                .frame(height: 30)
+                .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .padding(.horizontal, 12)
+                .padding(.bottom, 6)
             }
             if notes.isEmpty {
                 listMessage("No notes for this book yet", action: ("Start a reading note", onNewNote))
@@ -1096,54 +1123,69 @@ private struct BookPanel: View {
     }
 }
 
+/// A reading note in the book's list: its title with the page on the right, then when it was edited and a snippet.
 private struct BookNoteRow: View {
     var note: NoteSummary
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(note.displayTitle)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 13.5, weight: .bold))
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if !note.linkIDs.isEmpty {
-                    HStack(spacing: 3) {
-                        Image(systemName: "link").font(.system(size: 9, weight: .medium))
+                    HStack(spacing: 2) {
+                        Image(systemName: "link").font(.system(size: 9, weight: .semibold))
                         Text("\(note.linkIDs.count)")
                     }
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Color.accentColor)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(Palette.ink3)
                     .help(plural(note.linkIDs.count, "linked note"))
                 }
-            }
-            HStack(spacing: 6) {
-                if let location = note.location {
-                    Text(location).foregroundStyle(.secondary).monospacedDigit().lineLimit(1).fixedSize()
+                if let location = note.location, !location.isEmpty {
+                    Text(location)
+                        .font(.system(size: 10.5, weight: .bold))
+                        .foregroundStyle(bookTint)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .fixedSize()
                 }
-                Text(note.snippet).foregroundStyle(.tertiary).lineLimit(1)
             }
-            .font(.system(size: 12))
+            (Text(NoteDates.short(note.editedAt)).fontWeight(.semibold).foregroundStyle(.primary)
+                + Text("  " + (note.snippet.isEmpty ? "No additional text" : note.snippet)))
+                .font(.system(size: 12))
+                .foregroundStyle(Palette.ink2)
+                .lineLimit(1)
         }
         .padding(.vertical, 5)
     }
 }
 
-/// The shelves a book can go on, and a field to make a new one.
+/// The categories a book can go in, each editable in place from its ⋯ button, a field to make a new one, and
+/// Manage Categories….
 private struct BookCategoryPicker: View {
     var selection: ID?
     var onPick: (ID?) -> Void
+    var onManage: () -> Void
 
     @Environment(AppStore.self) private var store
     @State private var newName: String?
+    @State private var editing: ID?
     @FocusState private var fieldFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text("Category").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.ink3).padding(.horizontal, 6).padding(.vertical, 3)
             ForEach(store.bookCategories) { category in
-                row(category.name, selected: selection == category.id) { ColorDot(color: category.color, size: 8) } action: { onPick(category.id) }
+                if editing == category.id {
+                    BookCategoryEditor(category: category) { editing = nil }
+                } else {
+                    PickerCategoryRow(category: category, selected: selection == category.id,
+                                      onPick: { onPick(category.id) }, onEdit: { editing = category.id })
+                }
             }
-            row("No category", selected: selection == nil) {
+            pickerRow("No category", selected: selection == nil) {
                 Image(systemName: "xmark").font(.system(size: 10))
             } action: { onPick(nil) }
             Divider().padding(.vertical, 3)
@@ -1155,29 +1197,243 @@ private struct BookCategoryPicker: View {
                     .onSubmit {
                         if let category = store.addBookCategory(name: newName) { onPick(category.id) }
                     }
+                    .onEscape { self.newName = nil }
             } else {
-                row("New category\u{2026}", selected: false) {
+                pickerRow("New category\u{2026}", selected: false) {
                     Image(systemName: "plus").font(.system(size: 11))
                 } action: { newName = "" }
             }
+            pickerRow("Manage Categories\u{2026}", selected: false) {
+                Image(systemName: "slider.horizontal.3").font(.system(size: 11))
+            } action: { onManage() }
         }
         .padding(6)
-        .frame(width: 210)
+        .frame(width: 236)
+        .animation(.snappy(duration: 0.2), value: editing)
+    }
+}
+
+private func pickerRow<Icon: View>(_ title: String, selected: Bool, @ViewBuilder icon: () -> Icon, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+        HStack(spacing: 8) {
+            icon().frame(width: 16)
+            Text(title).lineLimit(1)
+            Spacer(minLength: 0)
+            if selected { Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)) }
+        }
+        .font(.system(size: 13))
+        .padding(.horizontal, 6)
+        .frame(height: 26)
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+}
+
+/// A category in the picker: click to choose it; the ⋯ that shows on hover opens its editor.
+private struct PickerCategoryRow: View {
+    var category: BookCategory
+    var selected: Bool
+    var onPick: () -> Void
+    var onEdit: () -> Void
+    @State private var hover = HoverState()
+
+    var body: some View {
+        HStack(spacing: 0) {
+            pickerRow(category.name, selected: selected) { ColorDot(color: category.color, size: 8) } action: { onPick() }
+            Button(action: onEdit) {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Palette.ink2)
+                    .frame(width: 24, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Rename, recolour or delete \u{201C}\(category.name)\u{201D}")
+            .modifier(HoverOpacity(hover: hover))
+        }
+        .background { HoverFill(hover: hover, color: Color.primary.opacity(0.06)).clipShape(RoundedRectangle(cornerRadius: 6)) }
+        .onHover { hover.isOn = $0 }
+    }
+}
+
+/// Name, colour and delete for one category, in place of its picker row.
+private struct BookCategoryEditor: View {
+    var category: BookCategory
+    var onDone: () -> Void
+
+    @Environment(AppStore.self) private var store
+    @State private var name = ""
+    @State private var confirmsDelete = false
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        let count = store.books.count(where: { $0.categoryID == category.id })
+        VStack(alignment: .leading, spacing: 8) {
+            TextField("Name", text: $name)
+                .textFieldStyle(.roundedBorder)
+                .focused($focused)
+                .onSubmit(done)
+                .onEscape { done() }
+            SwatchPicker(hex: Binding(get: { category.hex }, set: { store.setBookCategoryColor(category.id, hex: $0) }),
+                         size: 12, swatches: NoteCategory.palette)
+            if confirmsDelete {
+                Text(count == 0 ? "Delete \u{201C}\(category.name)\u{201D}?" : "\(plural(count, "book")) will become uncategorized.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Palette.ink2)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button("Cancel") { confirmsDelete = false }
+                    Spacer()
+                    Button("Delete", role: .destructive) { store.deleteBookCategory(category.id) }
+                        .foregroundStyle(Palette.red)
+                }
+                .controlSize(.small)
+            } else {
+                HStack {
+                    Button("Delete\u{2026}", role: .destructive) { confirmsDelete = true }
+                        .foregroundStyle(Palette.red)
+                    Spacer()
+                    Button("Done", action: done).keyboardShortcut(.defaultAction)
+                }
+                .controlSize(.small)
+            }
+        }
+        .padding(8)
+        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .onAppear {
+            name = category.name
+            focused = true
+        }
     }
 
-    private func row<Icon: View>(_ title: String, selected: Bool, @ViewBuilder icon: () -> Icon, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                icon().frame(width: 16)
-                Text(title).lineLimit(1)
-                Spacer(minLength: 0)
-                if selected { Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)) }
+    private func done() {
+        store.renameBookCategory(category.id, to: name)
+        onDone()
+    }
+}
+
+/// Every book category, empty ones included: rename, recolour, drag to reorder, delete, and add new ones.
+struct BookCategoriesSheet: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    @State private var newName = ""
+    @State private var deleting: BookCategory?
+    @FocusState private var newFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Book Categories").font(.system(size: 20, weight: .bold))
+                    Text("The sections of your library. Drag to reorder.").font(.system(size: 12.5)).foregroundStyle(Palette.ink2)
+                }
+                Spacer()
             }
-            .font(.system(size: 13))
-            .padding(.horizontal, 6)
-            .frame(height: 26)
-            .contentShape(Rectangle())
+            .padding(.horizontal, 20)
+            .padding(.top, 18)
+            .padding(.bottom, 10)
+
+            List {
+                ForEach(store.bookCategories) { category in
+                    BookCategoryManageRow(category: category) { deleting = category }
+                }
+                .onMove(perform: move)
+                HStack(spacing: 10) {
+                    Image(systemName: "plus").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.ink3).frame(width: 18)
+                    TextField("New category", text: $newName)
+                        .textFieldStyle(.plain)
+                        .focused($newFocused)
+                        .onSubmit(add)
+                }
+                .font(.system(size: 13))
+                .padding(.vertical, 4)
+            }
+            .listStyle(.inset)
+            .scrollContentBackground(.hidden)
+            .frame(minHeight: 220)
+
+            Divider()
+            HStack {
+                Text("\(store.bookCategories.count) \(store.bookCategories.count == 1 ? "category" : "categories")")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Palette.ink3)
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
         }
-        .buttonStyle(.plain)
+        .frame(width: 420, height: 440)
+        .confirmationDialog("Delete \u{201C}\(deleting?.name ?? "")\u{201D}?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+            Button("Delete", role: .destructive) {
+                if let deleting { store.deleteBookCategory(deleting.id) }
+            }
+        } message: {
+            let n = store.books.count(where: { $0.categoryID == deleting?.id })
+            Text("\(plural(n, "book")) will become uncategorized.")
+        }
+    }
+
+    private func add() {
+        if store.addBookCategory(name: newName) != nil { newName = "" }
+        newFocused = true
+    }
+
+    private func move(_ from: IndexSet, _ to: Int) {
+        let list = store.bookCategories
+        guard let source = from.first else { return }
+        store.moveBookCategory(list[source].id, before: to < list.count ? list[to].id : nil)
+    }
+}
+
+private struct BookCategoryManageRow: View {
+    var category: BookCategory
+    var onDelete: () -> Void
+
+    @Environment(AppStore.self) private var store
+    @State private var name = ""
+    @State private var choosingColor = false
+    @State private var hover = HoverState()
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        let count = store.books.count(where: { $0.categoryID == category.id })
+        HStack(spacing: 10) {
+            Button { choosingColor = true } label: {
+                ColorDot(color: category.color, size: 12).frame(width: 18, height: 18).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Colour")
+            .popover(isPresented: $choosingColor, arrowEdge: .bottom) {
+                SwatchPicker(hex: Binding(get: { category.hex }, set: { hex in
+                    store.setBookCategoryColor(category.id, hex: hex)
+                    choosingColor = false
+                }), size: 16, swatches: NoteCategory.palette)
+                .padding(10)
+            }
+            TextField("Name", text: $name)
+                .textFieldStyle(.plain)
+                .focused($focused)
+                .onSubmit(commit)
+                .onChange(of: focused) { if !focused { commit() } }
+            Text(plural(count, "book")).font(.system(size: 12)).foregroundStyle(Palette.ink3).monospacedDigit()
+            Button(action: onDelete) {
+                Image(systemName: "trash").font(.system(size: 11)).foregroundStyle(Palette.ink2).frame(width: 22, height: 22).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Delete category")
+            .modifier(HoverOpacity(hover: hover, forced: focused))
+        }
+        .font(.system(size: 13))
+        .padding(.vertical, 4)
+        .onHover { hover.isOn = $0 }
+        .onAppear { name = category.name }
+        .onChange(of: category.name) { if !focused { name = category.name } }
+        .onDisappear(perform: commit)
+    }
+
+    private func commit() {
+        if name.trimmingCharacters(in: .whitespaces).isEmpty { name = category.name } else { store.renameBookCategory(category.id, to: name) }
     }
 }
