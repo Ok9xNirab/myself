@@ -996,7 +996,7 @@ struct NoteEditor: View {
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         if let showsBrowser {
-            ToolbarItem(placement: .navigation) {
+            ToolbarItem(placement: .primaryAction) {
                 if backToList {
                     Button("All Notes", systemImage: "chevron.left") { showsBrowser.wrappedValue = true }
                         .help("Back to all notes")
