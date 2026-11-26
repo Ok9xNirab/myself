@@ -1054,16 +1054,10 @@ struct NoteEditor: View {
             Text("\(note.wordCount) words")
             if paperWidth > 560 { Text("\(characters) characters") }
             Spacer()
-            if note.hasBengali {
-                HStack(spacing: 6) {
-                    Text("অ")
-                        .font(NoteTypeface.font(size: 11))
-                        .frame(width: 16, height: 16)
-                        .background(Palette.amber.opacity(0.22), in: RoundedRectangle(cornerRadius: 4))
-                        .foregroundStyle(.primary)
-                    Text("Bengali · \(NoteTypeface.bengaliFamily)")
-                }
-                .foregroundStyle(Palette.ink2)
+            if reading {
+                Label("Reader mode", systemImage: "book.fill")
+                    .foregroundStyle(Color.accentColor)
+                    .help("Reader mode is on (⇧⌘R to turn it off)")
             }
             if paperWidth > 560 { Text("Markdown · LaTeX · \(codeCount) code").lineLimit(1) }
         }
