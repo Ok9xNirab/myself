@@ -60,9 +60,7 @@ struct ContentView: View {
         .onChange(of: scenePhase) {
             if scenePhase == .active { store.reloadSynced() } else { store.saveTypedText() }
         }
-        .sheet(isPresented: $store.isQuickOpenPresented) {
-            QuickOpenView()
-        }
+        .overlay { QuickOpenOverlay() }
         // Widget links (`myself://todos`, `myself://notes/new`, …) go to this window rather than a new one.
         .onOpenURL { url in
             if let link = DeepLink(url) { store.open(link) }

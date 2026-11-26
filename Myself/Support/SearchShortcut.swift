@@ -160,6 +160,15 @@ final class SearchShortcut {
         case .settings:
             showMainWindow()
             store.openSettings(.appearance)
+        case .newTodo:
+            showMainWindow()
+            store.newTodo()
+        case .newOfficeTask:
+            showMainWindow()
+            store.newOfficeTask()
+        case .newNote:
+            showMainWindow()
+            store.newNote()
         }
     }
 
@@ -205,7 +214,7 @@ final class SearchShortcut {
 /// MySelf the active app, and it closes when it loses focus (a click elsewhere, or switching apps).
 private final class SearchPanel: NSPanel {
     init() {
-        super.init(contentRect: NSRect(x: 0, y: 0, width: 580, height: 440),
+        super.init(contentRect: NSRect(x: 0, y: 0, width: QuickOpenView.width, height: 500),
                    styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView], backing: .buffered, defer: true)
         isFloatingPanel = true
         level = .modalPanel
@@ -230,12 +239,20 @@ private final class SearchPanel: NSPanel {
     func show<Content: View>(_ content: Content) {
         let appearance = UserDefaults.standard.string(forKey: PrefKey.appearance) ?? ""
         self.appearance = appearance == "dark" ? NSAppearance(named: .darkAqua) : appearance == "light" ? NSAppearance(named: .aqua) : nil
+        let radius = QuickOpenView.cornerRadius
         let host = NSHostingView(rootView: content
-            .background(Palette.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.border, lineWidth: 0.5) })
-        contentView = host
+            .overlay { RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5) })
         let size = host.fittingSize
+        // The design's glass: blur what's behind the panel (a SwiftUI material would only blend within this clear window).
+        let glass = NSVisualEffectView(frame: NSRect(origin: .zero, size: size))
+        glass.material = .popover
+        glass.blendingMode = .behindWindow
+        glass.state = .active
+        glass.maskImage = Self.roundedMask(radius: radius)
+        host.frame = glass.bounds
+        host.autoresizingMask = [.width, .height]
+        glass.addSubview(host)
+        contentView = glass
         // Centred on the screen with the pointer, a little above the middle, like Spotlight.
         let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
         if let visible = screen?.visibleFrame {
@@ -243,11 +260,25 @@ private final class SearchPanel: NSPanel {
             setFrame(NSRect(origin: origin, size: size), display: false)
         }
         makeKeyAndOrderFront(nil)
+        invalidateShadow()
         // The view's own `focused = true` runs before the panel is key, so put the cursor in the field once it is.
         DispatchQueue.main.async { [weak self] in
             guard let self, let field = Self.firstTextField(in: host) else { return }
             makeFirstResponder(field)
         }
+    }
+
+    /// A stretchable rounded-rectangle mask for the visual effect view, so the blur and the window shadow follow the corners.
+    private static func roundedMask(radius: CGFloat) -> NSImage {
+        let edge = radius * 2 + 1
+        let image = NSImage(size: NSSize(width: edge, height: edge), flipped: false) { rect in
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+            return true
+        }
+        image.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
+        image.resizingMode = .stretch
+        return image
     }
 
     private static func firstTextField(in view: NSView) -> NSTextField? {
