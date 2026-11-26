@@ -992,30 +992,6 @@ struct NoteEditor: View {
 
     // MARK: Toolbar
 
-    private var activeBlock: NoteBlock? { current.blocks.first { $0.id == activeID } }
-
-    /// A text block is being typed in, so inline formatting applies.
-    private var textActive: Bool {
-        guard let editingID, let block = current.blocks.first(where: { $0.id == editingID }) else { return false }
-        return block.kind.isText
-    }
-
-    /// Toolbar block buttons: toggle a text block's kind, or insert code, math and dividers below the active block.
-    private func setKind(_ kind: NoteBlock.Kind) {
-        guard let block = activeBlock else { insert(kind, after: current.blocks.last?.id); return }
-        if kind == .code || kind == .math || kind == .table || kind == .image || kind == .hr {
-            if block.kind.isText, block.text.isEmpty, kind != .hr { turnInto(block, kind) } else { insert(kind, after: block.id) }
-            return
-        }
-        guard block.kind.isText else { insert(kind, after: block.id); return }
-        let caret = editingID == block.id ? textFocus.selectionStart : nil
-        update(block.id) { b in
-            b.kind = b.kind == kind && kind != .p ? .p : kind
-            if b.kind == .todo, b.done == nil { b.done = false }
-        }
-        focus(block.id, caret: caret)
-    }
-
     private var toolbar: some View {
         HStack(spacing: 1) {
             if let showsBrowser {
@@ -1026,71 +1002,15 @@ struct NoteEditor: View {
                     toolButton("Show Note List", "sidebar.left", on: !showsBrowser.wrappedValue) { showsBrowser.wrappedValue.toggle() }
                         .help(showsBrowser.wrappedValue ? "Hide note list" : "Show note list")
                 }
-                separator
             }
             if reading {
+                if showsBrowser != nil { separator }
                 Label("Reader mode", systemImage: "book")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Palette.ink3)
                     .padding(.horizontal, 6)
-                Spacer()
-            } else {
-            Picker("Paragraph style", selection: Binding(
-                get: { activeBlock.map { [.h1, .h2, .h3].contains($0.kind) ? $0.kind : .p } ?? .p },
-                set: { setKind($0) }
-            )) {
-                Text("Body").tag(NoteBlock.Kind.p)
-                Text("Heading 1").tag(NoteBlock.Kind.h1)
-                Text("Heading 2").tag(NoteBlock.Kind.h2)
-                Text("Heading 3").tag(NoteBlock.Kind.h3)
             }
-            .labelsHidden()
-            .frame(width: 112)
-            .disabled(!(activeBlock?.kind.isText ?? false))
-            ScrollView(.horizontal) {
-                HStack(spacing: 1) {
-                    separator
-                    Group {
-                        toolButton("Bold (⌘B)", "bold") { textFocus.wrap("**", "**") }
-                        toolButton("Italic (⌘I)", "italic") { textFocus.wrap("*", "*") }
-                        toolButton("Strikethrough (⇧⌘X)", "strikethrough") { textFocus.wrap("~~", "~~") }
-                        toolButton("Highlight (⇧⌘H)", "highlighter") { textFocus.wrap("==", "==") }
-                        toolButton("Inline code (⌘E)", "chevron.left.forwardslash.chevron.right") { textFocus.wrap("`", "`", placeholder: "code") }
-                        toolButton("Link (⌘K)", "link") { textFocus.wrap("[", "](https://)", placeholder: "link") }
-                        Button { textFocus.wrap("$", "$", placeholder: "x^2") } label: {
-                            Text("x²").font(.system(size: 15, design: .serif).italic()).frame(minWidth: 28, minHeight: 28)
-                        }
-                        .help("Inline math (⇧⌘M)")
-                        Button {
-                            if let id = editingID, let selection = textFocus.selection { openLinkPicker(id, range: selection) }
-                        } label: {
-                            Text("[[ ]]")
-                                .font(.system(size: 10.5, weight: .bold, design: .monospaced))
-                                .kerning(-0.4)
-                                .frame(minWidth: 28, minHeight: 28)
-                        }
-                        .help("Link to a note (⇧⌘L), or type [[")
-                        .accessibilityLabel("Link to a note")
-                    }
-                    .disabled(!textActive)
-                    separator
-                    toolButton("Bulleted list", NoteBlock.Kind.bullet.systemImage, on: activeBlock?.kind == .bullet) { setKind(.bullet) }
-                    toolButton("Numbered list", NoteBlock.Kind.num.systemImage, on: activeBlock?.kind == .num) { setKind(.num) }
-                    toolButton("Checklist", NoteBlock.Kind.todo.systemImage, on: activeBlock?.kind == .todo) { setKind(.todo) }
-                    toolButton("Quote", NoteBlock.Kind.quote.systemImage, on: activeBlock?.kind == .quote) { setKind(.quote) }
-                    separator
-                    toolButton("Code block (```)", "curlybraces", on: activeBlock?.kind == .code) { setKind(.code) }
-                    toolButton("Math block ($$)", NoteBlock.Kind.math.systemImage, on: activeBlock?.kind == .math) { setKind(.math) }
-                    toolButton("Table", NoteBlock.Kind.table.systemImage, on: activeBlock?.kind == .table) { setKind(.table) }
-                    toolButton("Image", NoteBlock.Kind.image.systemImage) { setKind(.image) }
-                    toolButton("Divider (---)", NoteBlock.Kind.hr.systemImage) { setKind(.hr) }
-                }
-                .padding(.trailing, 16)
-            }
-            .scrollIndicators(.never)
-            .mask(LinearGradient(stops: [.init(color: .black, location: 0.92), .init(color: .clear, location: 1)], startPoint: .leading, endPoint: .trailing))
-            }
-            separator
+            Spacer()
             toolButton(reading ? "Turn Off Reader Mode (⇧⌘R)" : "Reader Mode (⇧⌘R)", reading ? "book.fill" : "book", on: reading, action: toggleReader)
                 .keyboardShortcut("r", modifiers: [.command, .shift])
             pageMenu

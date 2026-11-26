@@ -37,6 +37,9 @@ import SwiftUI
                 }
             }
             CommandMenu("Go") { GoCommands(store: store) }
+            #if os(macOS)
+            CommandGroup(replacing: .help) { HelpCommands() }
+            #endif
         }
 
         #if os(macOS)
@@ -66,6 +69,14 @@ import SwiftUI
             }
         }
         .defaultSize(width: 900, height: 700)
+        .handlesExternalEvents(matching: [])
+
+        Window("Markdown Guide", id: MarkdownGuideView.windowID) {
+            MarkdownGuideView()
+                .appPreferences()
+        }
+        .defaultSize(width: 680, height: 760)
+        .restorationBehavior(.disabled)
         .handlesExternalEvents(matching: [])
 
         Window("About \(AppInfo.name)", id: "about") {
