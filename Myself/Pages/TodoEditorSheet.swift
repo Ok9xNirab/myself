@@ -220,34 +220,6 @@ struct TodoEditorSheet: View {
     }
 }
 
-/// A rounded chip that's on or off (the sheet's Space and Due choices).
-private struct ChoiceChip<Label: View>: View {
-    var isOn: Bool
-    var tint: Color
-    var dashed = false
-    var action: () -> Void
-    @ViewBuilder var label: Label
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) { label }
-                .font(.system(size: 13.5, weight: .semibold))
-                .foregroundStyle(isOn ? tint : .primary)
-                .padding(.horizontal, 11)
-                .frame(height: 30)
-                .background(isOn ? tint.opacity(0.12) : Palette.surface, in: Capsule())
-                .overlay {
-                    Capsule().strokeBorder(isOn ? tint : Color.primary.opacity(dashed ? 0.2 : 0.08),
-                                           style: StrokeStyle(lineWidth: isOn ? 1.5 : 1, dash: dashed && !isOn ? [3, 3] : []))
-                }
-                .shadow(color: .black.opacity(isOn ? 0 : 0.04), radius: 1, y: 1)
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isOn ? .isSelected : [])
-    }
-}
-
 /// Low / Medium / High as segmented tabs with coloured flags.
 private struct PriorityTabs: View {
     @Binding var selection: Priority
@@ -282,21 +254,6 @@ private struct PriorityTabs: View {
         .fixedSize()
     }
 }
-
-#if os(macOS)
-private struct KeyCap: View {
-    var text: String
-    init(_ text: String) { self.text = text }
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: 11, weight: .semibold))
-            .padding(.horizontal, 5)
-            .frame(minWidth: 20, minHeight: 18)
-            .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
-    }
-}
-#endif
 
 /// One set of labels (TODO or Product Dev) as chips to switch on and off, with New Label and, in a chip's
 /// context menu, Delete Label. Used by the todo and card sheets.
