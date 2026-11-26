@@ -30,21 +30,21 @@ struct DashboardView: View {
 
             StatGrid(count: 1 + [office, university, jobStudy].filter { $0 }.count) {
                 StatTile(systemImage: "checklist", label: "Open todos", value: "\(store.todos.filter { !$0.done }.count)",
-                         foot: "\(store.todos.filter { !$0.done && $0.priority == .high }.count) high priority", color: Palette.blue)
+                         foot: "\(store.todos.filter { !$0.done && $0.priority == .high }.count) high priority", color: Page.todos.tint)
                 if office {
                     StatTile(systemImage: "briefcase", label: "Office due", value: "\(store.office.filter { !$0.done && (Day.fromToday($0.due) ?? 1) <= 0 }.count)",
-                             foot: "due today or overdue", color: .accentColor)
+                             foot: "due today or overdue", color: Page.office.tint)
                 }
                 if university {
                     let open = store.university.assignments.filter { !$0.done }
                     let thisWeek = open.filter { (Day.fromToday($0.due) ?? 7) < 7 }.count
                     StatTile(systemImage: "flag", label: "Assignments", value: "\(open.count)",
-                             foot: open.isEmpty ? "nothing open" : "\(thisWeek) due this week", color: Palette.violet)
+                             foot: open.isEmpty ? "nothing open" : "\(thisWeek) due this week", color: Page.university.tint)
                 }
                 if jobStudy {
                     let topics = store.jobStudy.flatMap(\.topics)
                     StatTile(systemImage: Page.jobStudy.systemImage, label: "Topics due", value: "\(store.count(for: .jobStudy))",
-                             foot: "\(topics.filter(\.revisedToday).count) revised today", color: Palette.amber)
+                             foot: "\(topics.filter(\.revisedToday).count) revised today", color: Page.jobStudy.tint)
                 }
             }
 
@@ -71,45 +71,72 @@ struct DashboardView: View {
     // MARK: Sections
 
     private func hero(focusCount: Int) -> some View {
-        HStack(alignment: .center, spacing: 24) {
+        let week = Day.calendar.component(.weekOfYear, from: .now)
+        return HStack(alignment: .center, spacing: 24) {
             VStack(alignment: .leading, spacing: 0) {
-                Text(Date.now.weekdayMonthDay).font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.ink3)
-                Text("\(greeting).").font(.system(size: 26, weight: .bold)).padding(.top, 4)
-                summary(focusCount: focusCount).font(.system(size: 13.5)).foregroundStyle(Palette.ink2).padding(.top, 6)
+                Text("\(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide))) · Week \(week)")
+                    .font(.system(size: 12.5, weight: .bold))
+                    .foregroundStyle(Color.dynamic(light: 0x7A4A1F, dark: 0xFFB98A))
+                Text("\(greeting).")
+                    .font(.system(size: 38, weight: .heavy))
+                    .kerning(-1.3)
+                    .padding(.top, 6)
+                summary(focusCount: focusCount)
+                    .font(.system(size: 15))
+                    .foregroundStyle(Color.dynamic(light: 0x45464F, dark: 0xA3A3AD))
+                    .lineSpacing(3)
+                    .frame(maxWidth: 520, alignment: .leading)
+                    .padding(.top, 8)
             }
             Spacer(minLength: 0)
-            if store.isEnabled(.university) {
-                let pct = store.university.syllabusPercent
-                Donut(value: Double(pct), size: 92, lineWidth: 9, color: Palette.green) {
-                    VStack(spacing: 0) {
-                        Text("\(pct)%").font(.numeral(22))
-                        Text("syllabus").font(.system(size: 9.5)).foregroundStyle(Palette.ink3)
-                    }
-                }
+            let rings = progressRings
+            if !rings.isEmpty { ProgressRings(rings: rings) }
+        }
+        .padding(.horizontal, 4)
+        .padding(.top, 10)
+        .padding(.bottom, 4)
+    }
+
+    /// Up to three rings for the hero: Job Study coverage, the University syllabus and today's todos.
+    private var progressRings: [ProgressRings.Ring] {
+        var rings: [ProgressRings.Ring] = []
+        if store.isEnabled(.jobStudy) {
+            let topics = store.jobStudy.flatMap(\.topics)
+            if !topics.isEmpty {
+                rings.append(.init(label: "Job Study", percent: topics.filter { $0.revisions > 0 }.count * 100 / topics.count, color: Page.jobStudy.tint))
             }
         }
-        .padding(.bottom, 2)
+        if store.isEnabled(.university), !store.university.syllabus.isEmpty {
+            rings.append(.init(label: "University syllabus", percent: store.university.syllabusPercent, color: Page.university.tint))
+        }
+        let open = store.todos.filter { !$0.done }.count
+        let doneToday = store.todos.filter { $0.done && Day.isToday($0.completedAt) }.count
+        if open + doneToday > 0 {
+            rings.append(.init(label: "Today\u{2019}s todos", percent: doneToday * 100 / (open + doneToday), color: Page.todos.tint))
+        }
+        return rings
     }
 
     private func summary(focusCount: Int) -> Text {
         guard store.isEnabled(.university) else {
             if focusCount > 0 {
-                let count = Text("\(focusCount)").fontWeight(.semibold).foregroundStyle(Color.accentColor)
-                return Text("You have \(count) \(focusCount == 1 ? "thing" : "things") due today.")
+                let count = Text("\(focusCount) \(focusCount == 1 ? "thing" : "things")").fontWeight(.semibold).foregroundStyle(.primary)
+                return Text("You have \(count) due today.")
             }
             return Text("Nothing overdue — a clean slate.")
         }
         let n = classesToday.count
         let classes = "\(n) \(n == 1 ? "class" : "classes")"
         if focusCount > 0 {
-            let count = Text("\(focusCount)").fontWeight(.semibold).foregroundStyle(Color.accentColor)
-            return Text("You have \(count) \(focusCount == 1 ? "thing" : "things") due today and \(classes) scheduled.")
+            let count = Text("\(focusCount) \(focusCount == 1 ? "thing" : "things")").fontWeight(.semibold).foregroundStyle(.primary)
+            let scheduled = Text(classes).fontWeight(.semibold).foregroundStyle(.primary)
+            return Text("You have \(count) due today and \(scheduled) scheduled.")
         }
         return Text(n == 0 ? "Nothing overdue — a clean slate. No classes today." : "Nothing overdue — a clean slate. \(classes) today.")
     }
 
     private func focusCard(_ focus: [FocusItem]) -> some View {
-        Card(title: "Today's focus", systemImage: "target", tint: .accentColor) {
+        Card(title: "Today\u{2019}s focus", systemImage: "scope", tint: Palette.amber) {
             Spacer()
             CountText(value: focus.count)
         } content: {
@@ -201,7 +228,7 @@ struct DashboardView: View {
 
     private var productCard: some View {
         let inProgress = store.cards(in: .inProgress).compactMap { card in store.product(card.productID).map { (card: card, project: $0) } }
-        return Card(title: "Product activity", systemImage: "shippingbox", tint: Palette.cyan) {
+        return Card(title: "Product activity", systemImage: "square.stack.3d.up", tint: Page.products.tint) {
             Spacer()
             GhostButton(title: "Open boards", trailingChevron: true) { store.go(.products) }
         } content: {
@@ -236,7 +263,7 @@ struct DashboardView: View {
 
     /// Workout is still sample data (`Page.isComingSoon`), so the card only announces it.
     private var trainingCard: some View {
-        Card(title: "Training", systemImage: "dumbbell", tint: Palette.red) {
+        Card(title: "Training", systemImage: "flame", tint: Page.workout.tint) {
             Spacer()
             Badge(text: "Coming soon", systemImage: "sparkles", color: .accentColor)
         } content: {
@@ -260,6 +287,52 @@ struct DashboardView: View {
                 .padding(16)
             }
         }
+    }
+}
+
+/// Concentric activity rings with a legend, on frosted glass (the design's `.d-rings`).
+struct ProgressRings: View {
+    struct Ring: Identifiable {
+        var label: String
+        var percent: Int
+        var color: Color
+        var id: String { label }
+    }
+
+    var rings: [Ring]
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                ForEach(Array(rings.enumerated()), id: \.element.id) { index, ring in
+                    let inset = CGFloat(index) * 13
+                    Circle().stroke(ring.color.opacity(0.16), lineWidth: 10).padding(inset)
+                    Circle()
+                        .trim(from: 0, to: max(0.005, min(1, Double(ring.percent) / 100)))
+                        .stroke(ring.color, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .padding(inset)
+                        .animation(.smooth(duration: 0.7), value: ring.percent)
+                }
+            }
+            .padding(5)
+            .frame(width: 104, height: 104)
+            VStack(alignment: .leading, spacing: 7) {
+                ForEach(rings) { ring in
+                    HStack(spacing: 8) {
+                        Circle().fill(ring.color).frame(width: 8, height: 8)
+                        Text(ring.label).foregroundStyle(Palette.ink2).frame(minWidth: 120, alignment: .leading)
+                        Text("\(ring.percent)%").fontWeight(.bold).monospacedDigit()
+                    }
+                    .font(.system(size: 12.5))
+                }
+            }
+        }
+        .padding(.leading, 12)
+        .padding(.trailing, 18)
+        .padding(.vertical, 12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
     }
 }
 

@@ -12,27 +12,59 @@ extension EnvironmentValues {
     }
 }
 
-/// Scrollable page body with the design's padding and max width.
+/// Scrollable page body with the design's padding and max width, over the theme's colour band.
 struct PageScroll<Content: View>: View {
     var maxWidth: CGFloat? = 1140
     @ViewBuilder var content: Content
+    @AppStorage(PrefKey.paperWidth) private var paperWidth = PaperWidth.comfortable
 
     var body: some View {
         // GeometryReader hands over the width while laying out, so a page is built at its real width the first
         // time, not at a guess and then again (switching between one and two columns on the way).
         GeometryReader { geo in
             let width = geo.size.width
+            // Paper width › Wide lets pages use the whole window.
+            let limit = paperWidth == .wide ? nil : maxWidth
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) { content }
                     .padding(.horizontal, width < 700 ? 18 : 28)
                     .padding(.top, 18)
                     .padding(.bottom, 56)
-                    .frame(maxWidth: maxWidth, alignment: .leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: limit, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: limit == nil ? .leading : .center)
                     .environment(\.pageWidth, width)
             }
+            .scrollContentBackground(.hidden)
         }
-        .background(Palette.background)
+        .scapeBackground()
+    }
+}
+
+/// The top of a space's page (the v2 design's `.spaceh`): a large icon tile in the space's colour, its name and
+/// what it's for.
+struct SpaceHeader: View {
+    var page: Page
+    var detail: String?
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 16) {
+            Image(systemName: page.systemImage)
+                .symbolVariant(.fill)
+                .font(.system(size: 26, weight: .medium))
+                .foregroundStyle(.white)
+                .frame(width: 60, height: 60)
+                .background {
+                    RoundedRectangle(cornerRadius: 17, style: .continuous)
+                        .fill(page.tint.gradient)
+                        .shadow(color: .black.opacity(0.15), radius: 10, y: 8)
+                }
+            VStack(alignment: .leading, spacing: 5) {
+                Text(page.title).font(.system(size: 34, weight: .heavy)).kerning(-1)
+                Text(detail ?? page.subtitle).font(.system(size: 14)).foregroundStyle(.primary.opacity(0.7))
+            }
+        }
+        .padding(.top, 6)
+        .padding(.bottom, 4)
     }
 }
 
@@ -107,19 +139,36 @@ struct Card<Accessory: View, Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Image(systemName: systemImage).foregroundStyle(tint).font(.system(size: 13, weight: .medium)).frame(width: 18)
-                Text(title).font(.system(size: 13, weight: .semibold))
+            HStack(spacing: 9) {
+                CardIcon(systemImage: systemImage, tint: tint)
+                Text(title).font(.system(size: 14, weight: .bold))
                 accessory
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .frame(height: 40)
-            Divider().overlay(Palette.border)
+            .padding(.leading, 16)
+            .padding(.trailing, 14)
+            .padding(.top, 13)
+            .padding(.bottom, 8)
             content
         }
+        .padding(.bottom, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .cardBackground()
+        .cardBackground(radius: 18)
+    }
+}
+
+/// The small tinted icon tile at the start of a card header.
+struct CardIcon: View {
+    var systemImage: String
+    var tint: Color
+    var size: CGFloat = 24
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.system(size: size * 0.5, weight: .semibold))
+            .foregroundStyle(tint)
+            .frame(width: size, height: size)
+            .background(tint.opacity(0.13), in: RoundedRectangle(cornerRadius: size * 0.3, style: .continuous))
     }
 }
 
@@ -129,11 +178,16 @@ extension Card where Accessory == EmptyView {
     }
 }
 
-/// Right-aligned count in a card header.
+/// Count in a card header, as a small grey pill.
 struct CountText: View {
     var value: Int
     var body: some View {
-        Text("\(value)").font(.system(size: 12)).monospacedDigit().foregroundStyle(Palette.ink3)
+        Text("\(value)")
+            .font(.system(size: 11, weight: .bold)).monospacedDigit()
+            .foregroundStyle(Palette.ink2)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 1)
+            .background(Color.primary.opacity(0.06), in: Capsule())
     }
 }
 
@@ -151,8 +205,8 @@ struct GhostButton: View {
                 Text(title)
                 if trailingChevron { Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)) }
             }
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(Color.accentColor)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Palette.ink2)
         }
         .buttonStyle(.borderless)
     }
@@ -166,22 +220,28 @@ struct StatTile: View {
     var color: Color
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Label {
-                Text(label).foregroundStyle(Palette.ink2)
-            } icon: {
-                Image(systemName: systemImage).foregroundStyle(color)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 9) {
+                CardIcon(systemImage: systemImage, tint: color, size: 28)
+                Text(label).font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink2).lineLimit(1)
             }
-            .font(.system(size: 12, weight: .medium))
-            Text(value).font(.numeral(28)).foregroundStyle(color).padding(.top, 8)
-            if let foot {
-                Text(foot).font(.system(size: 11)).foregroundStyle(Palette.ink3).padding(.top, 4)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(value).font(.system(size: 30, weight: .heavy)).kerning(-1).foregroundStyle(.primary)
+                if let foot {
+                    Text(foot).font(.system(size: 12, weight: .semibold)).foregroundStyle(color).lineLimit(1)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .cardBackground()
+        .padding(.horizontal, 16)
+        .padding(.top, 14)
+        .padding(.bottom, 15)
+        .background {
+            // A wash of the tile's colour from the top right corner.
+            EllipticalGradient(colors: [color.opacity(0.11), color.opacity(0)], center: .topTrailing, startRadiusFraction: 0, endRadiusFraction: 0.55)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .cardBackground(radius: 18)
     }
 }
 
@@ -231,11 +291,11 @@ struct Badge: View {
             if let systemImage { Image(systemName: systemImage).font(.system(size: 9, weight: .bold)) }
             Text(text)
         }
-        .font(.system(size: 11, weight: .medium))
+        .font(.system(size: 11.5, weight: .semibold))
         .foregroundStyle(color)
         .padding(.horizontal, 7)
         .padding(.vertical, 2)
-        .background(color.opacity(0.11), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+        .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         .fixedSize()
     }
 }
@@ -267,11 +327,11 @@ struct LabelChip: View {
             Circle().fill(label.color).frame(width: 6, height: 6)
             Text(label.name)
         }
-        .font(.system(size: 11, weight: .medium))
+        .font(.system(size: 11.5, weight: .semibold))
         .foregroundStyle(label.color)
         .padding(.horizontal, 7)
         .padding(.vertical, 2)
-        .background(label.color.opacity(0.13), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+        .background(label.color.opacity(0.13), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         .fixedSize()
     }
 }
@@ -397,13 +457,13 @@ struct ColorTabs<Item: Identifiable>: View {
                     }
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(active ? Color.primary : Palette.ink2)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 5)
+                    .padding(.horizontal, 13)
+                    .padding(.vertical, 6)
                     .background {
                         if active {
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            Capsule()
                                 .fill(Palette.surface)
-                                .shadow(color: .black.opacity(0.12), radius: 1, y: 0.5)
+                                .shadow(color: .black.opacity(0.12), radius: 1.5, y: 0.5)
                         }
                     }
                     .contentShape(Rectangle())
@@ -557,7 +617,7 @@ struct ListRow<Content: View>: View {
             .padding(.horizontal, 16)
             .padding(.vertical, verticalPadding + density.paddingDelta)
             .contentShape(Rectangle())
-            .overlay(alignment: .bottom) { Rectangle().fill(Palette.border).frame(height: 0.5) }
+            .overlay(alignment: .bottom) { Rectangle().fill(Color.primary.opacity(0.06)).frame(height: 0.5).padding(.horizontal, 12) }
     }
 }
 

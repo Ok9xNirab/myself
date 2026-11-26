@@ -126,6 +126,12 @@ let cloudSchema = Schema([
     /// The note's `[NoteBlock]` as JSON, so the block format can grow without schema changes. Large notes are kept
     /// outside the database (and sync as a CloudKit asset).
     @Attribute(.externalStorage) var blocksData: Data = Data()
+    /// Page icon and cover (see `Note.icon`); added in 1.8.
+    var icon: String?
+    var iconColor: Int?
+    var iconImage: String?
+    var cover: String?
+    var coverImage: String?
     var createdAt: Date = Date.now
     var editedAt: Date = Date.now
     var updatedAt: Date = Date.now

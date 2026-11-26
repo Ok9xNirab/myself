@@ -12,6 +12,7 @@ struct OfficeView: View {
         let done = filtered.filter(\.done).sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
 
         PageScroll {
+            SpaceHeader(page: .office)
             Callout(systemImage: "briefcase") {
                 Text("Office tasks are always **high priority** and sorted by due date. Attach a reference link to each so it's one click to the ticket or doc.")
             }

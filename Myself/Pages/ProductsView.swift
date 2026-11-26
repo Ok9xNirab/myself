@@ -12,6 +12,7 @@ struct ProductsView: View {
         let project = store.selectedProduct.flatMap(store.product) ?? store.products.first
 
         PageScroll(maxWidth: nil) {
+            SpaceHeader(page: .products)
             if let project {
                 ColorTabs(items: store.products, selection: project.id, title: \.name, color: \.color,
                           onSelect: { store.selectedProduct = $0 }, addHelp: "New Project", onAdd: newProduct)

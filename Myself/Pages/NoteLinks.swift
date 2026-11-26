@@ -370,7 +370,11 @@ private struct LinkChip: View {
     var body: some View {
         Button { onOpen(note.id) } label: {
             HStack(spacing: 6) {
-                ColorDot(color: origin.color, size: 6)
+                if note.icon != nil || note.iconImage != nil {
+                    NoteIconView(summary: note, size: 16)
+                } else {
+                    ColorDot(color: origin.color, size: 6)
+                }
                 Text(note.displayTitle).lineLimit(1)
             }
             .font(.system(size: 12.5))
@@ -436,5 +440,130 @@ struct NoteLocationField: View {
                 .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 4))
         }
         .help("Where in the book")
+    }
+}
+
+/// The rail beside a note in a wide editor (the v2 design's "On this page" / "Linked from"): the note's
+/// headings, which scroll to their block, the notes it links to and the notes that mention it.
+struct NoteSideRail: View {
+    var note: Note
+    /// Headings are listed only while editing: reader mode draws the note as one text view, with no blocks to
+    /// scroll to.
+    var outline: Bool
+    var onOpen: (ID) -> Void
+    var onScrollTo: (ID) -> Void
+    @Environment(AppStore.self) private var store
+
+    var body: some View {
+        let all = store.noteSummaries
+        let outgoing = (all.first { $0.id == note.id }?.linkIDs ?? []).compactMap { id in all.first { $0.id == id } }
+        let backlinks = all.filter { $0.id != note.id && $0.linkIDs.contains(note.id) && store.isNoteVisible($0) }
+        let headings = outline ? note.blocks.filter { [.h1, .h2, .h3].contains($0.kind) && !NoteText.plain($0.text).trimmingCharacters(in: .whitespaces).isEmpty } : []
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if !headings.isEmpty {
+                    heading("On this page")
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(headings) { block in
+                            OutlineRow(title: NoteText.plain(block.text), indent: block.kind == .h3 ? 12 : block.kind == .h2 ? 6 : 0) { onScrollTo(block.id) }
+                        }
+                    }
+                    .padding(.bottom, 22)
+                }
+                if !outgoing.isEmpty {
+                    heading("Linked notes")
+                    VStack(spacing: 6) {
+                        ForEach(outgoing) { RailNoteCard(note: $0, origin: store.noteOrigin(of: $0)) { onOpen($0) } }
+                    }
+                    .padding(.bottom, 22)
+                }
+                heading("Linked from")
+                if backlinks.isEmpty {
+                    Text("No notes link here yet. Type [[ in another note to link to this one.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Palette.ink3)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    VStack(spacing: 6) {
+                        ForEach(backlinks) { RailNoteCard(note: $0, origin: store.noteOrigin(of: $0)) { onOpen($0) } }
+                    }
+                }
+            }
+            .padding(.top, 40)
+            .padding(.trailing, 22)
+            .padding(.leading, 4)
+            .padding(.bottom, 24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .scrollIndicators(.never)
+    }
+
+    private func heading(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11.5, weight: .bold))
+            .kerning(0.5)
+            .textCase(.uppercase)
+            .foregroundStyle(Palette.ink2)
+            .padding(.bottom, 8)
+    }
+}
+
+private struct OutlineRow: View {
+    var title: String
+    var indent: CGFloat
+    var action: () -> Void
+    @State private var hover = HoverState()
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 13))
+                .foregroundStyle(hover.isOn ? Color.primary : Palette.ink2)
+                .lineLimit(2)
+                .padding(.leading, 10 + indent)
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .leading) { Rectangle().fill(Color.primary.opacity(0.08)).frame(width: 2) }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover.isOn = $0 }
+    }
+}
+
+private struct RailNoteCard: View {
+    var note: NoteSummary
+    var origin: (name: String, color: Color)
+    var onOpen: (ID) -> Void
+    @State private var hover = HoverState()
+
+    var body: some View {
+        Button { onOpen(note.id) } label: {
+            HStack(alignment: .top, spacing: 8) {
+                if note.icon != nil || note.iconImage != nil {
+                    NoteIconView(summary: note, size: 22)
+                }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(note.displayTitle).font(.system(size: 13, weight: .semibold)).foregroundStyle(.primary).lineLimit(2)
+                    HStack(spacing: 5) {
+                        ColorDot(color: origin.color, size: 6)
+                        Text(origin.name).lineLimit(1)
+                    }
+                    .font(.system(size: 12))
+                    .foregroundStyle(Palette.ink2)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(hover.isOn ? Palette.surface2 : Palette.surface)
+            }
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.07), lineWidth: 0.5))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover.isOn = $0 }
     }
 }

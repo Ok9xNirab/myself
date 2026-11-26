@@ -71,7 +71,8 @@ extension Note: CloudBacked {
             Self.blockCache[m.recordID] = (m.updatedAt, blocks)
         }
         self.init(id: m.recordID, categoryID: m.category?.recordID ?? "", title: m.title, pinned: m.pinned, readerMode: m.readerMode,
-                  bookID: m.bookID, location: m.location, blocks: blocks, createdAt: m.createdAt, editedAt: m.editedAt, updatedAt: m.updatedAt)
+                  bookID: m.bookID, location: m.location, blocks: blocks, icon: m.icon, iconColor: m.iconColor, iconImage: m.iconImage,
+                  cover: m.cover, coverImage: m.coverImage, createdAt: m.createdAt, editedAt: m.editedAt, updatedAt: m.updatedAt)
     }
 
     func apply(to m: NoteModel, in store: CloudStore) {
@@ -81,6 +82,11 @@ extension Note: CloudBacked {
         m.bookID = bookID
         m.location = location
         m.blocksData = (try? JSONEncoder().encode(blocks)) ?? Data()
+        if m.icon != icon { m.icon = icon }
+        if m.iconColor != iconColor { m.iconColor = iconColor }
+        if m.iconImage != iconImage { m.iconImage = iconImage }
+        if m.cover != cover { m.cover = cover }
+        if m.coverImage != coverImage { m.coverImage = coverImage }
         m.createdAt = createdAt
         m.editedAt = editedAt
         if m.category?.recordID != categoryID { m.category = store.model(NoteCategoryModel.self, id: categoryID) }

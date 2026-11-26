@@ -17,7 +17,7 @@ struct JobStudyView: View {
                 PageScroll { JobStudyContent() }
             }
         }
-        .background(Palette.background)
+        .scapeBackground()
     }
 }
 
@@ -62,7 +62,8 @@ private struct JobStudyContent: View {
     var body: some View {
         let active = store.jobStudy.first { $0.id == selection } ?? store.jobStudy.first
 
-        Group {
+        VStack(alignment: .leading, spacing: 18) {
+            SpaceHeader(page: .jobStudy)
             if width >= 820 {
                 HStack(alignment: .top, spacing: 16) {
                     sidebar(active: active).frame(width: 240)

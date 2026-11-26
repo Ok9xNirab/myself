@@ -30,7 +30,11 @@ enum SelfTest {
         let categories = SampleData.noteCategories + [SampleData.philosophyCategory]
         let bookCategories = SampleData.bookCategories
         let books = SampleData.books()
-        let notes = SampleData.notes()
+        var notes = SampleData.notes()
+        if notes.count > 1 {
+            (notes[0].icon, notes[0].iconColor, notes[0].cover) = ("function", 2, CoverGradient.lagoon.rawValue)
+            (notes[1].iconImage, notes[1].coverImage) = ("icon.jpg", "cover.jpg")
+        }
         var todos = SampleData.todos()
         let office = SampleData.office()
         var university = SampleData.university()

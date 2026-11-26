@@ -577,6 +577,15 @@ private struct NoteRow: View {
     var sort: NoteSort
 
     var body: some View {
+        HStack(alignment: .center, spacing: 9) {
+            if note.icon != nil || note.iconImage != nil {
+                NoteIconView(summary: note, size: 28)
+            }
+            text
+        }
+    }
+
+    private var text: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 if note.pinned {

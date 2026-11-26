@@ -29,6 +29,12 @@ struct NoteEditor: View {
     @State private var slash: SlashMenu?
     @State private var textFocus = NoteTextFocus()
     @State private var paperWidth: CGFloat = 780
+    @State private var scrollHeight: CGFloat = 0
+    /// Width of the editor below the toolbar, which decides whether the side rail fits.
+    @State private var editorWidth: CGFloat = 0
+    @AppStorage(PrefKey.paperWidth) private var paperWidthSetting = PaperWidth.comfortable
+    /// Pointer over the top of the note, which shows Add icon / Add cover.
+    @State private var headerHover = HoverState()
     /// Image block waiting for a file from the open panel.
     @State private var choosingImageFor: ID?
     /// Blocks selected as blocks (Esc in a block, or ⌘A twice), which Delete removes.
@@ -75,45 +81,77 @@ struct NoteEditor: View {
     /// Reader mode: everything renders, nothing can be changed.
     fileprivate var reading: Bool { current.isReading }
 
+    /// The rail beside the note ("On this page", links), when the editor is wide enough for it; otherwise links
+    /// show under the note.
+    private var showsRail: Bool { editorWidth >= 980 }
+
+    /// Space between the paper's edge and the text.
+    private var paperInset: CGFloat { paperWidth < 640 ? 28 : 56 }
+
     var body: some View {
         VStack(spacing: 0) {
             toolbar
             Divider()
-            ScrollView {
-                paper
-                    #if os(macOS)
-                    .onChange(of: selectedBlocks.isEmpty) { if selectedBlocks.isEmpty { stopSelectionMonitor() } }
-                    .onDisappear(perform: stopSelectionMonitor)
-                    #else
-                    .focusable(!selectedBlocks.isEmpty)
-                    .focused($selectionFocused)
-                    .focusEffectDisabled()
-                    .onKeyPress(keys: [.delete, .deleteForward]) { _ in
-                        deleteSelectedBlocks()
-                        return .handled
+            ScrollViewReader { proxy in
+                HStack(alignment: .top, spacing: 0) {
+                    ScrollView {
+                        paper
+                            #if os(macOS)
+                            .onChange(of: selectedBlocks.isEmpty) { if selectedBlocks.isEmpty { stopSelectionMonitor() } }
+                            .onDisappear(perform: stopSelectionMonitor)
+                            #else
+                            .focusable(!selectedBlocks.isEmpty)
+                            .focused($selectionFocused)
+                            .focusEffectDisabled()
+                            .onKeyPress(keys: [.delete, .deleteForward]) { _ in
+                                deleteSelectedBlocks()
+                                return .handled
+                            }
+                            .onKeyPress(.escape) {
+                                selectedBlocks = []
+                                return .handled
+                            }
+                            .onChange(of: selectionFocused) { if !selectionFocused { selectedBlocks = [] } }
+                            #endif
+                            // Settings › Paper width decides the measure.
+                            .frame(maxWidth: paperWidthSetting.note)
+                            .padding(.horizontal, paperInset)
+                            .padding(.top, current.hasCover ? 0 : 40)
+                            // The paper reaches the bottom of the window however short the note is.
+                            .frame(minHeight: max(0, scrollHeight - 18), alignment: .top)
+                            .background {
+                                UnevenRoundedRectangle(topLeadingRadius: 22, topTrailingRadius: 22, style: .continuous)
+                                    .fill(Palette.surface)
+                                    .shadow(color: Color(red: 30 / 255, green: 30 / 255, blue: 70 / 255).opacity(0.08), radius: 20, y: 10)
+                                    .overlay {
+                                        UnevenRoundedRectangle(topLeadingRadius: 22, topTrailingRadius: 22, style: .continuous)
+                                            .strokeBorder(Color.primary.opacity(0.07), lineWidth: 0.5)
+                                    }
+                            }
+                            .padding(.horizontal, paperWidth < 640 ? 12 : 28)
+                            .padding(.top, 18)
+                            .frame(maxWidth: .infinity)
                     }
-                    .onKeyPress(.escape) {
-                        selectedBlocks = []
-                        return .handled
+                    .onGeometryChange(for: CGSize.self) { $0.size } action: { (paperWidth, scrollHeight) = ($0.width, $0.height) }
+                    .onScrollPhaseChange { _, phase in if phase.isScrolling { hoverLink(nil, rect: .zero) } }
+                    .coordinateSpace(.named(Self.linkSpace))
+                    .overlay(alignment: .topLeading) {
+                        if let hoveredLink { NoteLinkPreviewPlacement(hover: hoveredLink) }
                     }
-                    .onChange(of: selectionFocused) { if !selectionFocused { selectedBlocks = [] } }
-                    #endif
-                    // A note's own window fills its width; the Notes page keeps a readable measure.
-                    .frame(maxWidth: showsBrowser == nil ? .infinity : 780)
-                    .padding(.leading, paperWidth < 640 ? 52 : 64)
-                    .padding(.trailing, paperWidth < 640 ? 36 : 64)
-                    .padding(.top, 30)
-                    .frame(maxWidth: .infinity)
+                    if showsRail {
+                        NoteSideRail(note: current, outline: !reading, onOpen: followLink) { id in
+                            withAnimation(.smooth) { proxy.scrollTo(id, anchor: .top) }
+                        }
+                        .frame(width: 236)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                    }
+                }
             }
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { paperWidth = $0 }
-            .onScrollPhaseChange { _, phase in if phase.isScrolling { hoverLink(nil, rect: .zero) } }
-            .coordinateSpace(.named(Self.linkSpace))
-            .overlay(alignment: .topLeading) {
-                if let hoveredLink { NoteLinkPreviewPlacement(hover: hoveredLink) }
-            }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { editorWidth = $0 }
             Divider()
             statusBar
         }
+        .scapeBackground(height: 260)
         .onAppear {
             splitPastedDocuments()
             if isFresh && !reading { focus(Self.titleID, caret: nil) }
@@ -147,6 +185,8 @@ struct NoteEditor: View {
         }
         // Lazy, so blocks off screen aren't built or laid out on every change.
         return LazyVStack(alignment: .leading, spacing: 0) {
+            NoteLookHeader(note: current, bleed: paperInset, editable: !reading, hover: headerHover)
+                .onHover { headerHover.isOn = $0 }
             HStack(spacing: 6) {
                 ColorDot(color: book?.color ?? category?.color ?? Palette.ink3, size: 8)
                 Text(book?.displayTitle ?? category?.name ?? "Uncategorized").lineLimit(1)
@@ -156,13 +196,16 @@ struct NoteEditor: View {
             .font(.system(size: 12))
             .foregroundStyle(Palette.ink3)
             .padding(.bottom, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onHover { headerHover.isOn = $0 }
 
             if reading {
                 NoteReaderView(note: current, imageURL: imageURL, onOpenImage: openImage, isKnownNote: { known.contains($0) },
                                onOpenNote: followLink, onHoverNote: { id, rect in hoverLink(id, rect: rect.offsetBy(dx: readerOrigin.point.x, dy: readerOrigin.point.y)) })
                     .onGeometryChange(for: CGPoint.self) { $0.frame(in: .named(Self.linkSpace)).origin } action: { readerOrigin.point = $0 }
                 Color.clear.frame(height: 40)
-                NoteLinksSection(noteID: note.id, onOpen: followLink)
+                if !showsRail { NoteLinksSection(noteID: note.id, onOpen: followLink) }
                 Color.clear.frame(height: 120)
             } else {
             NoteTextView(text: Binding(get: { current.title }, set: { title in store.editNote(note.id) { $0.title = title.replacingOccurrences(of: "\n", with: "") } }),
@@ -173,6 +216,7 @@ struct NoteEditor: View {
                          onKey: titleKey,
                          onFocusChange: { focusChanged(Self.titleID, $0) })
                 .padding(.bottom, 6)
+                .onHover { headerHover.isOn = $0 }
 
             HStack(spacing: 10) {
                 if note.bookID != nil {
@@ -204,8 +248,10 @@ struct NoteEditor: View {
                 .contentShape(Rectangle())
                 .onTapGesture(perform: tailClick)
 
-            NoteLinksSection(noteID: note.id, onOpen: followLink)
-                .padding(.bottom, 48)
+            if !showsRail {
+                NoteLinksSection(noteID: note.id, onOpen: followLink)
+                    .padding(.bottom, 48)
+            }
             }
         }
         .coordinateSpace(.named(Self.paperSpace))

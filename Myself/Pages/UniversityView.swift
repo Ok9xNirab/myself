@@ -29,6 +29,7 @@ struct UniversityView: View {
 
         @Bindable var store = store
         return PageScroll {
+            SpaceHeader(page: .university)
             StatGrid {
                 StatTile(systemImage: "calendar", label: "Classes / week", value: "\(u.classes.reduce(0) { $0 + $1.days.count })",
                          foot: "\(u.classes.count) subjects", color: Palette.blue)

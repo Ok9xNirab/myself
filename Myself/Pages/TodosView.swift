@@ -24,6 +24,7 @@ struct TodosView: View {
         let done = filtered.filter(\.done)
 
         PageScroll {
+            SpaceHeader(page: .todos)
             HStack(spacing: 8) {
                 SearchField(placeholder: "Search tasks…", text: $query)
                 Picker("Label", selection: $labelFilter) {

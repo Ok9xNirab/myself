@@ -5,6 +5,9 @@ enum PrefKey {
     static let appearance = "appearance"          // "", "light", "dark"
     static let sidebarStyle = "sidebarStyle"      // SidebarStyle raw value
     static let rowDensity = "rowDensity"          // RowDensity raw value
+    static let spaceTheme = "spaceTheme"          // SpaceTheme raw value
+    static let themeAppearance = "themeAppearance" // ThemeAppearance raw value: match the system, or let the theme decide
+    static let paperWidth = "paperWidth"          // PaperWidth raw value
     static let iCloudSync = "iCloudSync"
     static let syncFeatures = "syncFeatureVisibility"
     static let syncAppearance = "syncAppearance"
@@ -45,10 +48,19 @@ extension EnvironmentValues {
 }
 
 extension View {
-    /// Applies the appearance and row density chosen in Settings.
-    func appPreferences(appearance: String, density: RowDensity) -> some View {
-        self
-            .preferredColorScheme(appearance == "dark" ? .dark : appearance == "light" ? .light : nil)
+    /// Applies the appearance, theme and row density chosen in Settings.
+    func appPreferences() -> some View { modifier(AppPreferences()) }
+}
+
+private struct AppPreferences: ViewModifier {
+    @AppStorage(PrefKey.appearance) private var appearance = ""
+    @AppStorage(PrefKey.rowDensity) private var density = RowDensity.regular
+    @AppStorage(PrefKey.spaceTheme) private var theme = SpaceTheme.default
+    @AppStorage(PrefKey.themeAppearance) private var mode = ThemeAppearance.system
+
+    func body(content: Content) -> some View {
+        content
+            .preferredColorScheme(themedColorScheme(appearance: appearance, theme: theme, mode: mode))
             .environment(\.rowDensity, density)
     }
 }

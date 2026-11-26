@@ -7,14 +7,13 @@ import SwiftUI
     #endif
     @State private var store = AppStore()
     @AppStorage(PrefKey.appearance) private var appearance = ""
-    @AppStorage(PrefKey.rowDensity) private var density = RowDensity.regular
     @AppStorage(PrefKey.menuBarIcon) private var showsMenuBarIcon = true
 
     var body: some Scene {
         WindowGroup(id: "main") {
             ContentView()
                 .environment(store)
-                .appPreferences(appearance: appearance, density: density)
+                .appPreferences()
         }
         .defaultSize(width: 1240, height: 820)
         // Widget links open in the main window (a new one only if it was closed), never a note or image window.
@@ -44,7 +43,7 @@ import SwiftUI
         Settings {
             SettingsView()
                 .environment(store)
-                .appPreferences(appearance: appearance, density: density)
+                .appPreferences()
         }
 
         // A note opened on its own (double-click in the note list). Opening a note that already has a window brings that window forward.
@@ -52,7 +51,7 @@ import SwiftUI
             if let noteID {
                 NoteWindow(noteID: noteID)
                     .environment(store)
-                    .appPreferences(appearance: appearance, density: density)
+                    .appPreferences()
             }
         }
         .defaultSize(width: 760, height: 680)
@@ -63,7 +62,7 @@ import SwiftUI
             if let name {
                 NoteImageViewer(name: name)
                     .environment(store)
-                    .appPreferences(appearance: appearance, density: density)
+                    .appPreferences()
             }
         }
         .defaultSize(width: 900, height: 700)
@@ -71,7 +70,7 @@ import SwiftUI
 
         Window("About \(AppInfo.name)", id: "about") {
             AboutView()
-                .appPreferences(appearance: appearance, density: density)
+                .appPreferences()
                 .windowMinimizeBehavior(.disabled)
         }
         .windowStyle(.hiddenTitleBar)

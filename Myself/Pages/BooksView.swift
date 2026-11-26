@@ -112,9 +112,10 @@ private struct BookLibrary: View {
                     .padding(.horizontal, side)
                     .padding(.bottom, 40)
                 }
+                .scrollContentBackground(.hidden)
             }
         }
-        .background(Palette.surface)
+        .scapeBackground()
         .alert("Rename Category", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Name", text: $renameText)
             Button("Rename") { if let renaming { store.renameBookCategory(renaming.id, to: renameText) } }

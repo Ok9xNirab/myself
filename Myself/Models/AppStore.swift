@@ -35,15 +35,16 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
 
     var systemImage: String {
         switch self {
+        // The v2 design's icons; each has a `.fill` variant, which the sidebar lays under the outline as a tint.
         case .dashboard: "square.grid.2x2"
-        case .todos: "checklist"
+        case .todos: "checkmark.circle"
         case .university: "graduationcap"
         case .office: "briefcase"
-        case .jobStudy: "book"
-        case .products: "shippingbox"
-        case .workout: "dumbbell"
-        case .notes: "note.text"
-        case .books: "book.pages"
+        case .jobStudy: "book.closed"
+        case .products: "square.stack.3d.up"
+        case .workout: "flame"
+        case .notes: "doc.text"
+        case .books: "book"
         }
     }
 
@@ -89,17 +90,26 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
     }
 
     /// Icon tile colour in Settings › Features.
-    var featureColor: Color {
+    /// The page's colour in the sidebar and headers (the design's `--c`).
+    var tint: Color {
         switch self {
-        case .dashboard, .office: Palette.blue
-        case .todos: Palette.green
-        case .university: Palette.violet
-        case .jobStudy, .notes: Palette.amber
-        case .products: Palette.cyan
-        case .workout: Palette.red
-        case .books: Color(hex: 0xA2845E)
+        case .dashboard: Color.dynamic(light: 0x5856D6, dark: 0x8E8CF2)
+        case .todos: Color.dynamic(light: 0x1F9A5A, dark: 0x5FD393)
+        case .office: Color.dynamic(light: 0x2F6FEC, dark: 0x7AA6FF)
+        case .university: Color.dynamic(light: 0x7A4FE0, dark: 0xB9A0FF)
+        case .jobStudy: Color.dynamic(light: 0xE06A00, dark: 0xFFAE5C)
+        case .products: Color.dynamic(light: 0x1F8A4F, dark: 0x5FD393)
+        case .workout: Color.dynamic(light: 0xD63A3A, dark: 0xFF7B7B)
+        case .notes: Color.dynamic(light: 0x11808E, dark: 0x4CC9D8)
+        case .books: Color.dynamic(light: 0x8F5A26, dark: 0xD49A60)
         }
     }
+
+    /// Order of the sidebar's "Spaces" (everything but Dashboard and TODOs).
+    static let spaceOrder: [Page] = [.office, .university, .jobStudy, .products, .workout, .notes, .books]
+
+    var featureColor: Color { tint }
+
 
     /// Sidebar section order. `allCases` order can't drive it: new pages go last to keep the ⌘1–⌘9 shortcuts stable.
     private static let groupOrder = ["Overview", "Plan & Track", "Capture", "Build", "Health"]
@@ -457,6 +467,35 @@ final class AppStore {
     func label(_ id: ID) -> TaskLabel? { allLabels.first { $0.id == id } }
 
     /// Sidebar badge counts.
+    /// A class on a particular day, for the sidebar's "Up next".
+    struct ClassSession {
+        var uniClass: UniClass
+        var dayOffset: Int
+
+        var dayLabel: String {
+            switch dayOffset {
+            case 0: "Today"
+            case 1: "Tomorrow"
+            default: Day.calendar.date(byAdding: .day, value: dayOffset, to: .now)?.formatted(.dateTime.weekday(.wide)) ?? ""
+            }
+        }
+    }
+
+    /// The next class that hasn't started yet, within a week.
+    func nextClass(now: Date = .now) -> ClassSession? {
+        let calendar = Day.calendar
+        let minute = calendar.component(.hour, from: now) * 60 + calendar.component(.minute, from: now)
+        for offset in 0..<8 {
+            guard let day = calendar.date(byAdding: .day, value: offset, to: now) else { continue }
+            let weekday = Weekday.of(day)
+            let next = university.classes
+                .filter { $0.days.contains(weekday) && (offset > 0 || $0.time.hour * 60 + $0.time.minute > minute) }
+                .min { $0.time < $1.time }
+            if let next { return ClassSession(uniClass: next, dayOffset: offset) }
+        }
+        return nil
+    }
+
     func count(for page: Page) -> Int {
         switch page {
         case .dashboard, .notes: 0
@@ -621,10 +660,10 @@ final class AppStore {
         guard note != notes[i] else { return [:] }
         note.editedAt = .now
         note.updatedAt = .now
-        let images = Set(notes[i].blocks.compactMap(\.image))
+        let images = Set(notes[i].imageNames)
         notes[i] = note
         // An image block removed, replaced or turned into text takes its file with it.
-        let released = releaseImages(images.subtracting(note.blocks.compactMap(\.image)))
+        let released = releaseImages(images.subtracting(note.imageNames))
         unsavedNotes.insert(id)
         noteSave.schedule { [weak self] in self?.saveUnsavedNotes() }
         return released
@@ -651,7 +690,7 @@ final class AppStore {
     @discardableResult
     private func releaseImages(_ names: some Collection<String>) -> [String: Data] {
         guard !names.isEmpty else { return [:] }
-        let used = Set(notes.flatMap(\.blocks).compactMap(\.image))
+        let used = Set(notes.flatMap(\.imageNames))
         var released: [String: Data] = [:]
         for name in names where !used.contains(name) {
             released[name] = sync.imageData(name)
@@ -681,6 +720,32 @@ final class AppStore {
 
     func setPinned(_ ids: [ID], _ pinned: Bool) { updateNotes(ids) { $0.pinned = pinned } }
 
+    // MARK: Note icon and cover
+
+    /// Changes a note's icon or cover. Like pinning it isn't an edit, so "Date edited" stays; an uploaded image it
+    /// replaces is deleted unless another note shares it, and comes back on undo.
+    func setNoteLook(_ id: ID, actionName: String, undoManager: UndoManager?, _ change: (inout Note) -> Void) {
+        guard let old = notes.first(where: { $0.id == id }) else { return }
+        var note = old
+        change(&note)
+        guard note != old else { return }
+        updateNotes([id], change)
+        let released = releaseImages(Set(old.imageNames).subtracting(note.imageNames))
+        undoManager?.registerUndo(withTarget: self) { store in
+            for (name, data) in released { store.sync.saveImage(data, name: name) }
+            store.setNoteLook(id, actionName: actionName, undoManager: undoManager) {
+                ($0.icon, $0.iconColor, $0.iconImage, $0.cover, $0.coverImage) = (old.icon, old.iconColor, old.iconImage, old.cover, old.coverImage)
+            }
+        }
+        undoManager?.setActionName(actionName)
+    }
+
+    /// Stores an uploaded icon (PNG, 256 px) or cover (JPEG, 2000 px) image and returns its file name.
+    func addNoteLookImage(_ data: Data, icon: Bool) -> String? {
+        guard let image = NoteImages.downsized(from: data, maxPixels: icon ? 256 : 2000, png: icon) else { return nil }
+        return sync.saveImage(image, ext: icon ? "png" : "jpg")
+    }
+
     /// Turns reader mode on or off; like pinning, it isn't an edit, so "Date edited" stays.
     func setReaderMode(_ id: ID, _ on: Bool) { updateNotes([id]) { $0.readerMode = on ? true : nil } }
 
@@ -709,7 +774,7 @@ final class AppStore {
             unsavedNotes.remove(note.id)
             sync.delete(Note.self, id: note.id)
         }
-        let images = releaseImages(removed.flatMap(\.blocks).compactMap(\.image))
+        let images = releaseImages(removed.flatMap(\.imageNames))
         undoManager?.registerUndo(withTarget: self) { $0.restore(notes: removed, categories: [], images: images, undoManager: undoManager) }
         undoManager?.setActionName(removed.count == 1 ? "Delete Note" : "Delete Notes")
         return images
@@ -1339,7 +1404,7 @@ final class AppStore {
     }
     #endif
 
-    private static let appearanceKeys = [PrefKey.appearance, PrefKey.sidebarStyle, PrefKey.rowDensity]
+    private static let appearanceKeys = [PrefKey.appearance, PrefKey.sidebarStyle, PrefKey.rowDensity, PrefKey.spaceTheme, PrefKey.themeAppearance, PrefKey.paperWidth]
     private static let settingsSyncedAtKey = "settingsSyncedAt"
 
     /// This Mac's share of the synced settings: only the groups turned on under Settings › iCloud › Also sync.

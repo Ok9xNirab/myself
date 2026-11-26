@@ -13,7 +13,7 @@ struct SettingsView: View {
             Tab("iCloud", systemImage: "icloud", value: .iCloud) { ICloudSettings() }
         }
         #if os(macOS)
-        .frame(width: 480)
+        .frame(width: 520)
         .scenePadding(.vertical)
         #endif
     }
@@ -26,6 +26,9 @@ private struct GeneralSettings: View {
     @AppStorage(PrefKey.appearance) private var appearance = ""
     @AppStorage(PrefKey.sidebarStyle) private var sidebarStyle = SidebarStyle.floating
     @AppStorage(PrefKey.rowDensity) private var density = RowDensity.regular
+    @AppStorage(PrefKey.spaceTheme) private var theme = SpaceTheme.default
+    @AppStorage(PrefKey.themeAppearance) private var themeAppearance = ThemeAppearance.system
+    @AppStorage(PrefKey.paperWidth) private var paperWidth = PaperWidth.comfortable
     #if os(macOS)
     @AppStorage(PrefKey.menuBarIcon) private var showsMenuBarIcon = true
     #if DIRECT_DISTRIBUTION
@@ -56,12 +59,38 @@ private struct GeneralSettings: View {
 
     var body: some View {
         Form {
-            Section {
+            Section("Theme") {
+                VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Space background")
+                        Text("The colours behind the top of every page. Ink is a dark theme.")
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                    }
+                    SpaceThemePicker(selection: $theme)
+                }
+                .padding(.vertical, 4)
+                Picker(selection: $themeAppearance) {
+                    ForEach(ThemeAppearance.allCases) { Text($0.title).tag($0) }
+                } label: {
+                    Text("Match system appearance")
+                    Text(themeAppearance == .system ? "Light or dark follows Appearance below." : "The theme sets light or dark: Ink is dark, the others light.")
+                }
+                Picker(selection: $paperWidth) {
+                    ForEach(PaperWidth.allCases) { Text($0.title).tag($0) }
+                } label: {
+                    Text("Paper width")
+                    Text(paperWidth == .comfortable ? "Pages and notes keep a readable width." : "Pages and notes use the whole window.")
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Section("Appearance") {
                 Picker("Appearance", selection: $appearance) {
                     Text("Auto").tag("")
                     Text("Light").tag("light")
                     Text("Dark").tag("dark")
                 }
+                .disabled(themeAppearance == .theme)
                 Picker("Sidebar style", selection: $sidebarStyle) {
                     ForEach(SidebarStyle.allCases) { Text($0.title).tag($0) }
                 }
@@ -244,7 +273,7 @@ private struct ICloudSettings: View {
                 }
                 Toggle(isOn: $syncAppearance) {
                     Text("Appearance")
-                    Text("Theme, sidebar style and row density.")
+                    Text("Theme, light or dark, paper width, sidebar style and row density.")
                 }
             } header: {
                 Text("Also sync")

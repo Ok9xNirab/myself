@@ -29,6 +29,9 @@ struct NoteSummary: Identifiable, Equatable {
     var linkIDs: [ID]
     var createdAt: Date
     var editedAt: Date
+    var icon: String?
+    var iconColor: Int?
+    var iconImage: String?
 
     var displayTitle: String { title.isEmpty ? "Untitled" : title }
 
@@ -41,6 +44,9 @@ struct NoteSummary: Identifiable, Equatable {
         bookID = note.bookID
         location = note.location
         linkIDs = note.linkIDs
+        icon = note.icon
+        iconColor = note.iconColor
+        iconImage = note.iconImage
         createdAt = note.createdAt
         editedAt = Date(timeIntervalSinceReferenceDate: (note.editedAt.timeIntervalSinceReferenceDate / 60).rounded(.down) * 60)
     }
@@ -62,6 +68,15 @@ struct Note: Identifiable, Equatable, Codable, SyncRecord {
     /// Where in the book a reading note is ("pp. 35–43").
     var location: String?
     var blocks: [NoteBlock] = [NoteBlock()]
+    /// The page icon: an SF Symbol from `NoteIcon.symbols`, drawn on a gradient from `NoteIcon.colors`
+    /// (`iconColor`), or an uploaded image (`iconImage`, a note image file name), which wins when both are set.
+    /// All optional so notes saved before icons existed still decode.
+    var icon: String?
+    var iconColor: Int?
+    var iconImage: String?
+    /// The cover: a `CoverGradient` raw value, or an uploaded image (`coverImage`), which wins when both are set.
+    var cover: String?
+    var coverImage: String?
     var createdAt = Date.now
     /// Last change to the title or blocks; shown and sorted as "Date edited".
     var editedAt = Date.now
@@ -71,6 +86,13 @@ struct Note: Identifiable, Equatable, Codable, SyncRecord {
     var displayTitle: String { title.isEmpty ? "Untitled" : title }
 
     var isReading: Bool { readerMode == true }
+
+    /// Every note image file this note uses: its image blocks, icon and cover. An image file is kept while any
+    /// note uses it.
+    var imageNames: [String] { blocks.compactMap(\.image) + [iconImage, coverImage].compactMap { $0 } }
+
+    var hasIcon: Bool { icon != nil || iconImage != nil }
+    var hasCover: Bool { cover != nil || coverImage != nil }
 
     /// Title and block text, lowercased, for search.
     var searchText: String { (title + " " + blocks.map { NoteText.withoutLinkTargets($0.text) }.joined(separator: " ")).lowercased() }

@@ -138,51 +138,56 @@ private struct PageView: View {
     }
 }
 
-/// A sidebar row. Not a `Label`: the sidebar sizes a label's icon itself (large next to 13 pt text) and ignores
-/// its font, so the icon is drawn here at a fixed size, centred in a fixed width so the titles line up.
-private struct SidebarRow: View {
-    var page: Page
-    /// `.increased` on the selected row, whose background is the accent colour.
-    @Environment(\.backgroundProminence) private var prominence
-
-    var body: some View {
-        HStack(spacing: 7) {
-            Image(systemName: page.systemImage)
-                .font(.system(size: 13))
-                .foregroundStyle(prominence == .increased ? AnyShapeStyle(.white) : AnyShapeStyle(Color.accentColor))
-                .frame(width: 18)
-            Text(page.title)
-        }
-    }
-}
-
+/// The v2 sidebar: Dashboard and TODOs, then every enabled feature under "Spaces" in its own colour, the next
+/// class, and the iCloud status. Drawn by hand rather than as a `List` so a selected space gets its tint and edge
+/// bar as in the design.
 private struct Sidebar: View {
     @Environment(AppStore.self) private var store
     @Environment(\.rowDensity) private var density
     @AppStorage(PrefKey.sidebarStyle) private var style = SidebarStyle.floating
 
     var body: some View {
-        List(selection: Binding(get: { store.page }, set: { if let page = $0 { store.go(page) } })) {
-            ForEach(Page.groups(store.enabledPages), id: \.name) { group in
-                Section(group.name) {
-                    ForEach(group.pages) { page in
-                        SidebarRow(page: page)
-                            .badge(badge(for: page))
-                            .tag(page)
-                    }
+        let enabled = store.enabledPages
+        let top = [Page.dashboard, .todos].filter { enabled.contains($0) }
+        let spaces = Page.spaceOrder.filter { enabled.contains($0) }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 1) {
+                ForEach(top) { row($0, space: false) }
+                if !spaces.isEmpty {
+                    Text("Spaces")
+                        .font(.system(size: 10.5, weight: .bold))
+                        .kerning(0.8)
+                        .textCase(.uppercase)
+                        .foregroundStyle(Palette.ink2)
+                        .padding(.horizontal, 8)
+                        .padding(.top, 18)
+                        .padding(.bottom, 6)
+                    ForEach(spaces) { row($0, space: true) }
+                }
+                if store.isEnabled(.university), let next = store.nextClass() {
+                    UpNextCard(session: next)
+                        .padding(.top, 14)
+                        .onTapGesture { store.go(.university) }
                 }
             }
+            .padding(.horizontal, 12)
+            .padding(.top, 6)
+            .padding(.bottom, 12)
         }
-        .listStyle(.sidebar)
-        .environment(\.defaultMinListRowHeight, 28 + density.paddingDelta * 2)
+        .scrollIndicators(.never)
         .modifier(SidebarBackground(style: style))
         .safeAreaInset(edge: .bottom, spacing: 0) { footer }
     }
 
-    private func badge(for page: Page) -> Text? {
-        if page.isComingSoon { return Text("Soon") }
+    private func row(_ page: Page, space: Bool) -> some View {
+        SidebarRow(page: page, selected: store.page == page, badge: badge(for: page), colouredBadge: space,
+                   height: 30 + density.paddingDelta * 2) { store.go(page) }
+    }
+
+    private func badge(for page: Page) -> String? {
+        if page.isComingSoon { return "Soon" }
         let count = store.count(for: page)
-        return count > 0 ? Text("\(count)") : nil
+        return count > 0 ? "\(count)" : nil
     }
 
     /// iCloud sync status; clicking it opens Settings › iCloud.
@@ -192,16 +197,21 @@ private struct Sidebar: View {
             Button { store.openSettings(.iCloud) } label: {
                 HStack(spacing: 9) {
                     Image(systemName: sync.status.systemImage)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(sync.status.color)
-                        .frame(width: 26, height: 26)
-                        .background(sync.status.color.opacity(0.14), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(sync.status.title).font(.system(size: 12.5, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 30, height: 30)
+                        .background(LinearGradient(colors: [Color(hex: 0x5E8BFF), Color(hex: 0xA35BD8)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                                    in: Circle())
+                        .overlay(Circle().strokeBorder(Palette.surface, lineWidth: 2))
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(sync.status.title).font(.system(size: 13, weight: .semibold))
                         TimelineView(.periodic(from: .now, by: 30)) { context in
-                            Text(detail(sync, now: context.date))
-                                .font(.system(size: 11))
-                                .foregroundStyle(Palette.ink3)
+                            HStack(spacing: 5) {
+                                Circle().fill(sync.status.color).frame(width: 6, height: 6)
+                                Text(detail(sync, now: context.date))
+                            }
+                            .font(.system(size: 11))
+                            .foregroundStyle(Palette.ink2)
                         }
                     }
                     .lineLimit(1)
@@ -215,11 +225,13 @@ private struct Sidebar: View {
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
                 .foregroundStyle(Palette.ink2)
+                .frame(width: 26, height: 26)
                 .help("Settings (⌘,)")
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .overlay(alignment: .top) { Divider() }
+        .padding(.top, 10)
+        .padding(.bottom, 10)
+        .overlay(alignment: .top) { Rectangle().fill(Color.primary.opacity(0.07)).frame(height: 0.5).padding(.horizontal, 10) }
     }
 
     private func detail(_ sync: CloudStore, now: Date) -> String {
@@ -232,6 +244,99 @@ private struct Sidebar: View {
             if now.timeIntervalSince(date) < 45 { return "Updated just now" }
             return "Updated " + RelativeDateTimeFormatter().localizedString(for: date, relativeTo: now)
         }
+    }
+}
+
+/// One sidebar row: the page's icon in its colour, its title and a count. The selected row takes a wash of the
+/// page's colour and a bar on the sidebar's edge.
+private struct SidebarRow: View {
+    var page: Page
+    var selected: Bool
+    var badge: String?
+    var colouredBadge: Bool
+    var height: CGFloat
+    var action: () -> Void
+    @State private var hover = HoverState()
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                // An outline over a faint fill of the same symbol: the design's stroke icons with `fill-opacity: .16`.
+                ZStack {
+                    Image(systemName: page.systemImage).symbolVariant(.fill).opacity(0.16)
+                    Image(systemName: page.systemImage).symbolVariant(.none)
+                }
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(page.tint)
+                .frame(width: 20)
+                Text(page.title)
+                    .font(.system(size: 13, weight: selected ? .semibold : .medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                if let badge {
+                    Text(badge)
+                        .font(.system(size: 11, weight: colouredBadge ? .bold : .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(colouredBadge ? page.tint : Palette.ink2)
+                        .padding(.horizontal, 6)
+                        .frame(minWidth: 20, minHeight: 18)
+                        .background(colouredBadge ? page.tint.opacity(0.13) : Color.primary.opacity(selected ? 0.0 : 0.055), in: Capsule())
+                        .background(selected && !colouredBadge ? Palette.surface.opacity(0.7) : .clear, in: Capsule())
+                }
+            }
+            .padding(.horizontal, 8)
+            .frame(height: height)
+            .background {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(selected ? page.tint.opacity(0.14) : hover.isOn ? Color.primary.opacity(0.045) : .clear)
+            }
+            .overlay(alignment: .leading) {
+                if selected {
+                    UnevenRoundedRectangle(cornerRadii: .init(bottomTrailing: 3, topTrailing: 3))
+                        .fill(page.tint)
+                        .frame(width: 3)
+                        .padding(.vertical, 7)
+                        .offset(x: -12)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover.isOn = $0 }
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+/// "Up next": the next class, under the spaces.
+private struct UpNextCard: View {
+    var session: AppStore.ClassSession
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text("Up next").textCase(.uppercase).kerning(0.5).fontWeight(.bold)
+                Spacer()
+                Text(session.dayLabel).fontWeight(.semibold)
+            }
+            .font(.system(size: 10.5))
+            .foregroundStyle(Palette.violet)
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 1.5).fill(session.uniClass.color).frame(width: 3)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(session.uniClass.subject).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                    Text([session.uniClass.time.formatted, session.uniClass.room].filter { !$0.isEmpty }.joined(separator: " · "))
+                        .font(.system(size: 11.5)).foregroundStyle(Palette.ink2).lineLimit(1)
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Palette.violet.opacity(0.09), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Palette.violet.opacity(0.18), lineWidth: 0.5))
+        .contentShape(Rectangle())
     }
 }
 

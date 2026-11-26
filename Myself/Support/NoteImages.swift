@@ -41,17 +41,21 @@ enum NoteImages {
     }
 
     /// An uploaded book cover scaled down to at most 600 pixels on its longest side, as a JPEG.
-    static func bookCover(from data: Data) -> Data? {
+    static func bookCover(from data: Data) -> Data? { downsized(from: data, maxPixels: 600) }
+
+    /// The image scaled to fit `maxPixels`, as JPEG, or PNG (keeping transparency) for icons.
+    static func downsized(from data: Data, maxPixels: CGFloat, png: Bool = false) -> Data? {
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: 600,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixels,
         ]
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
               let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
         let out = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(out, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
-        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.84] as CFDictionary)
+        let type = png ? UTType.png : UTType.jpeg
+        guard let destination = CGImageDestinationCreateWithData(out, type.identifier as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, image, (png ? [:] : [kCGImageDestinationLossyCompressionQuality: 0.84]) as CFDictionary)
         return CGImageDestinationFinalize(destination) ? out as Data : nil
     }
 
