@@ -56,7 +56,7 @@ private struct AppearanceSettings: View {
                     ForEach(PaperWidth.allCases) { Text($0.title).tag($0) }
                 } label: {
                     Text("Paper width")
-                    Text(paperWidth == .comfortable ? "Pages and notes keep a readable width." : "Pages and notes use the whole window.")
+                    Text(paperWidth == .comfortable ? "Pages and notes keep a readable width." : "Pages use the whole window; notes get a wider column.")
                 }
             }
             .pickerStyle(.segmented)

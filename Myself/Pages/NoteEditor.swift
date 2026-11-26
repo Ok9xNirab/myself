@@ -1051,10 +1051,11 @@ struct NoteEditor: View {
             Button("Duplicate Page", systemImage: "plus.square.on.square", action: onDuplicate)
             Button("Delete Page", systemImage: "trash", role: .destructive, action: onDelete)
         } label: {
-            Label("Page Options", systemImage: "ellipsis")
+            // The menu leads with Move to, so it shows the folder a note is filed in; a reading note has no category.
+            Label("Page Options", systemImage: note.bookID == nil ? "folder" : "ellipsis")
         }
         .menuIndicator(.hidden)
-        .help("Page options")
+        .help(note.bookID == nil ? "Move to a category and page options" : "Page options")
     }
 
     // MARK: Status bar
