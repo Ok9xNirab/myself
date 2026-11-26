@@ -182,6 +182,9 @@ final class AppStore {
     var noteRequest: NoteRequest?
     /// Asks the Book Notes page to open a reading note; the page clears it.
     var bookNoteRequest: ID?
+    /// Set when the current page is clicked again in the sidebar: Notes goes back to its list, Book Notes to its
+    /// library. The page clears it.
+    var homeRequest: Page?
     var editingUniversity: UniversityEditor?
     /// The office task open in the editor sheet; one that isn't in `office` yet is a new one.
     var editingOffice: OfficeTask?
@@ -408,6 +411,12 @@ final class AppStore {
     var crumb: (page: Page, detail: String)?
     var canGoBack: Bool { historyIndex > 0 }
     var canGoForward: Bool { historyIndex < history.count - 1 }
+
+    /// The sidebar's click: goes to the page, or, if it's already open, asks it to show its top level.
+    func select(_ page: Page) {
+        guard page == self.page else { return go(page) }
+        if page == .notes || page == .books { homeRequest = page }
+    }
 
     func go(_ page: Page) {
         isQuickOpenPresented = false

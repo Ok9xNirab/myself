@@ -67,6 +67,11 @@ struct NotesView: View {
             updateCrumb()
         }
         .onChange(of: store.noteRequest) { handle(store.noteRequest) }
+        .onChange(of: store.homeRequest) {
+            guard store.homeRequest == .notes else { return }
+            store.homeRequest = nil
+            showsList = true
+        }
         .onChange(of: showsList) { selection = []; updateCrumb() }
         .onChange(of: openID) { if openID != freshID { freshID = nil }; updateCrumb() }
         .onChange(of: scope) { updateCrumb() }

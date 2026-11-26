@@ -48,6 +48,11 @@ struct BooksView: View {
             updateCrumb(book)
         }
         .onChange(of: store.bookNoteRequest) { handle(store.bookNoteRequest) }
+        .onChange(of: store.homeRequest) {
+            guard store.homeRequest == .books else { return }
+            store.homeRequest = nil
+            openBookID = ""
+        }
         .onChange(of: book?.displayTitle) { updateCrumb(book) }
         .onDisappear {
             store.saveUnsavedNotes()

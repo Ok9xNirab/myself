@@ -211,7 +211,7 @@ private struct Sidebar: View {
 
     private func row(_ page: Page, space: Bool) -> some View {
         SidebarRow(page: page, selected: store.page == page, badge: badge(for: page), colouredBadge: space,
-                   height: 30 + density.paddingDelta * 2) { store.go(page) }
+                   height: 30 + density.paddingDelta * 2) { store.select(page) }
     }
 
     private func badge(for page: Page) -> String? {
