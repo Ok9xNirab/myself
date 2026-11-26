@@ -21,22 +21,27 @@ struct JobStudyView: View {
     }
 }
 
-/// Scrolls `content` when `enabled`, staying only as tall as the content (so a short list keeps its card short).
+/// Scrolls `content` when `enabled`, filling the card's height (side by side, both cards reach the bottom of the
+/// window with their footers pinned); otherwise the page scrolls.
 private struct CardScroll<Content: View>: View {
     var enabled: Bool
     @ViewBuilder var content: Content
-    @State private var height: CGFloat = 0
 
     var body: some View {
         if enabled {
-            ScrollView {
-                content.onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
-            }
-            .frame(maxHeight: height)
+            ScrollView { content }
+                .frame(maxHeight: .infinity, alignment: .top)
         } else {
             content
         }
     }
+}
+
+private enum StudyTone {
+    static let orangeText = Color.dynamic(light: 0xB25D00, dark: 0xFFAE5C)
+    static let greenText = Color.dynamic(light: 0x1F8A4F, dark: 0x5FD393)
+    static let soft = Color.primary.opacity(0.045)
+    static let line = Color.primary.opacity(0.07)
 }
 
 private enum TopicFilter: String, CaseIterable {
@@ -63,12 +68,13 @@ private struct JobStudyContent: View {
         let active = store.jobStudy.first { $0.id == selection } ?? store.jobStudy.first
 
         VStack(alignment: .leading, spacing: 18) {
-            SpaceHeader(page: .jobStudy)
+            SpaceHeader(page: .jobStudy, detail: headerDetail)
             if width >= 820 {
-                HStack(alignment: .top, spacing: 16) {
-                    sidebar(active: active).frame(width: 240)
-                    main(active)
+                HStack(alignment: .top, spacing: 14) {
+                    sidebar(active: active).frame(width: 250).frame(maxHeight: .infinity, alignment: .top)
+                    main(active).frame(maxHeight: .infinity, alignment: .top)
                 }
+                .frame(maxHeight: .infinity, alignment: .top)
             } else {
                 VStack(spacing: 16) {
                     sidebar(active: active)
@@ -88,6 +94,14 @@ private struct JobStudyContent: View {
         }
     }
 
+    /// "9 subjects · 171 topics due for revision"
+    private var headerDetail: String? {
+        let n = store.jobStudy.count
+        guard n > 0 else { return nil }
+        let due = store.jobStudy.reduce(0) { $0 + $1.dueCount }
+        return "\(n) \(n == 1 ? "subject" : "subjects") \u{00B7} \(due) \(due == 1 ? "topic" : "topics") due for revision"
+    }
+
     // MARK: Subjects
 
     private func sidebar(active: StudySubject?) -> some View {
@@ -96,40 +110,42 @@ private struct JobStudyContent: View {
 
         return VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Subjects").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.ink3)
+                Text("Subjects").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink2)
                 Spacer()
                 IconButton(systemImage: "plus", help: "Add subject", action: newSubject)
             }
-            .padding(.leading, 14)
-            .padding(.trailing, 8)
-            .padding(.top, 10)
-            .padding(.bottom, 4)
+            .padding(.leading, 16)
+            .padding(.trailing, 10)
+            .padding(.top, 14)
+            .padding(.bottom, 6)
 
             Group {
                 if width >= 820 {
                     CardScroll(enabled: true) {
-                        VStack(spacing: 2) { subjectButtons(active: active) }
+                        VStack(spacing: 4) { subjectButtons(active: active) }
+                            .padding(.horizontal, 7)
+                            .padding(.bottom, 8)
                     }
                 } else {
-                    FlowLayout(spacing: 2, lineSpacing: 2) { subjectButtons(active: active) }
+                    FlowLayout(spacing: 4, lineSpacing: 4) { subjectButtons(active: active) }
+                        .padding(.horizontal, 7)
+                        .padding(.bottom, 8)
                 }
             }
-            .padding(.horizontal, 6)
-            .padding(.bottom, 8)
 
             if store.jobStudy.isEmpty {
                 Text("No subjects yet.").font(.system(size: 12)).foregroundStyle(Palette.ink3).padding(.horizontal, 16).padding(.bottom, 10)
             }
 
-            Divider().overlay(Palette.border)
             HStack(spacing: 0) {
                 footerStat(all.reduce(0) { $0 + $1.revisions }.formatted(), "revisions")
                 footerStat("\(all.filter(\.isDue).count)", "due")
                 footerStat("\(covered)%", "covered")
             }
-            .padding(.vertical, 10)
+            .padding(.vertical, 12)
+            .overlay(alignment: .top) { Rectangle().fill(StudyTone.line).frame(height: 0.5) }
         }
-        .cardBackground()
+        .cardBackground(radius: 18)
     }
 
     @ViewBuilder
@@ -141,8 +157,8 @@ private struct JobStudyContent: View {
 
     private func footerStat(_ value: String, _ label: String) -> some View {
         VStack(spacing: 1) {
-            Text(value).font(.system(size: 14, weight: .semibold)).monospacedDigit()
-            Text(label).font(.system(size: 11)).foregroundStyle(Palette.ink3)
+            Text(value).font(.system(size: 13, weight: .semibold)).monospacedDigit()
+            Text(label).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(Palette.ink2)
         }
         .frame(maxWidth: .infinity)
     }
@@ -166,8 +182,8 @@ private struct JobStudyContent: View {
             .id(active.id)
         } else {
             EmptyStateView(systemImage: "book", title: "No subjects yet", subtitle: "Add a subject and list topics to track revisions.")
-                .frame(maxWidth: .infinity)
-                .cardBackground()
+                .frame(maxWidth: .infinity, maxHeight: width >= 820 ? .infinity : nil, alignment: .top)
+                .cardBackground(radius: 18)
         }
     }
 }
@@ -178,32 +194,56 @@ private struct SubjectButton: View {
     /// In the narrow layout the subjects wrap, so each one gets a fixed width instead of the column's.
     var fixedWidth: Bool
     var action: () -> Void
-    @State private var hovering = false
+    @State private var hover = HoverState()
 
     var body: some View {
         let due = subject.dueCount
+        let color = subject.color
         Button(action: action) {
-            HStack(spacing: 10) {
-                ColorDot(color: subject.color)
+            HStack(spacing: 12) {
+                Circle().fill(color).frame(width: 9, height: 9)
+                    .padding(isSelected ? 3 : 0)
+                    .background { if isSelected { Circle().fill(color.opacity(0.22)) } }
+                    .frame(width: 16)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(subject.subject).font(.system(size: 13.5, weight: .semibold)).lineLimit(1)
-                    Text("\(subject.topics.count) topics" + (due > 0 ? " · \(due) due" : ""))
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(Palette.ink3)
+                    Text(subject.subject).font(.system(size: 14, weight: .semibold)).lineLimit(1)
+                    Text("\(subject.topics.count) topics" + (due > 0 ? " \u{00B7} \(due) due" : ""))
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(Palette.ink2)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Text("\(subject.percent)%").font(.system(size: 11.5)).monospacedDigit().foregroundStyle(Palette.ink2)
+                Donut(value: Double(subject.percent), size: 16, lineWidth: 3, color: color) { EmptyView() }
+                Text("\(subject.percent)%")
+                    .font(.system(size: 13, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(isSelected ? color : Palette.ink2)
+                    .frame(minWidth: 34, alignment: .trailing)
             }
-            .padding(8)
-            .frame(width: fixedWidth ? 200 : nil)
-            .background(
-                isSelected ? Color.accentColor.opacity(0.12) : hovering ? Palette.surface2 : .clear,
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-            )
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(width: fixedWidth ? 220 : nil)
+            .background {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(isSelected ? AnyShapeStyle(color.opacity(0.12)) : AnyShapeStyle(hover.isOn ? StudyTone.soft : .clear))
+            }
+            .overlay {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(color.opacity(0.3), lineWidth: 1)
+                }
+            }
+            .overlay(alignment: .leading) {
+                // The selected subject's edge bar, on the card's edge.
+                if isSelected && !fixedWidth {
+                    UnevenRoundedRectangle(bottomTrailingRadius: 3, topTrailingRadius: 3).fill(color)
+                        .frame(width: 3)
+                        .padding(.vertical, 6)
+                        .offset(x: -7)
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .onHover { hovering = $0 }
+        .onHover { hover.isOn = $0 }
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
@@ -221,26 +261,29 @@ private struct SubjectChecklist: View {
         let shown = subject.topics.filter(filter.includes)
 
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 4) {
-                VStack(alignment: .leading, spacing: 9) {
-                    HStack(spacing: 9) {
-                        ColorDot(color: subject.color)
-                        Text(subject.subject).font(.system(size: 17, weight: .bold))
-                    }
+            HStack(alignment: .center, spacing: 4) {
+                VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 10) {
-                        ProgressBar(value: Double(pct), color: pct == 100 ? Palette.green : .accentColor, height: 5)
-                            .frame(maxWidth: 280)
-                        Text("\(pct)% revised at least once").font(.system(size: 11.5)).foregroundStyle(Palette.ink3).fixedSize()
+                        Circle().fill(subject.color).frame(width: 9, height: 9)
+                        Text(subject.subject).font(.system(size: 22, weight: .bold)).lineLimit(1)
+                    }
+                    HStack(spacing: 12) {
+                        ProgressBar(value: Double(pct), color: subject.color, height: 5)
+                            .frame(width: 190)
+                        Text("\(pct)% revised at least once \u{00B7} \(subject.topics.count) topics \u{00B7} \(subject.dueCount) due")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Palette.ink2)
+                            .lineLimit(1)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 IconButton(systemImage: "pencil", help: "Edit subject", action: onEdit)
                 IconButton(systemImage: "trash", help: "Delete subject", action: onDelete)
             }
-            .padding(.leading, 18)
-            .padding(.trailing, 12)
-            .padding(.top, 16)
-            .padding(.bottom, 12)
+            .padding(.leading, 20)
+            .padding(.trailing, 16)
+            .padding(.top, 20)
+            .padding(.bottom, 14)
 
             HStack(spacing: 4) {
                 ForEach(TopicFilter.allCases, id: \.self) { f in
@@ -248,15 +291,16 @@ private struct SubjectChecklist: View {
                 }
                 Spacer(minLength: 8)
                 if width >= 640 {
-                    Text("Tick = +1 revision today · ± to correct · double-click to rename")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(Palette.ink3)
+                    Text("Tick = +1 revision today \u{00B7} \u{00B1} to correct")
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(Palette.ink2)
                         .lineLimit(1)
+                        .help("Double-click a topic to rename it; drag to reorder.")
                 }
             }
-            .padding(.horizontal, 18)
-            .padding(.bottom, 10)
-            Divider().overlay(Palette.border)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 12)
+            Rectangle().fill(StudyTone.line).frame(height: 0.5)
 
             CardScroll(enabled: width >= 820) {
                 VStack(alignment: .leading, spacing: 0) {
@@ -267,19 +311,27 @@ private struct SubjectChecklist: View {
                         }
                     }
                     if shown.isEmpty {
-                        Text(emptyMessage).font(.system(size: 12)).foregroundStyle(Palette.ink3).padding(18)
+                        Text(emptyMessage).font(.system(size: 12.5)).foregroundStyle(Palette.ink2).padding(20)
                     }
-                    if filter == .all {
-                        InlineAdder(placeholder: "Add topic…") { store.addStudyTopic(subject: subject.id, name: $0) }
-                            .padding(.leading, 18)
-                            .padding(.trailing, 12)
-                            .padding(.vertical, 8)
-                            .modifier(TopicDrop(subject: subject.id, before: nil))
-                    }
+                    // Dropping here moves a topic to the end.
+                    Color.clear.frame(height: 12).modifier(TopicDrop(subject: subject.id, before: nil))
                 }
             }
+
+            HStack(spacing: 12) {
+                TopicAdder(tint: StudyTone.orangeText) { store.addStudyTopic(subject: subject.id, name: $0) }
+                    .modifier(TopicDrop(subject: subject.id, before: nil))
+                Text("Showing \(shown.count) of \(subject.topics.count) topics")
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(Palette.ink2)
+                    .fixedSize()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .overlay(alignment: .top) { Rectangle().fill(StudyTone.line).frame(height: 0.5) }
         }
-        .cardBackground()
+        .frame(maxHeight: width >= 820 ? .infinity : nil, alignment: .top)
+        .cardBackground(radius: 18)
     }
 
     private var emptyMessage: String {
@@ -297,23 +349,45 @@ private struct FilterPill: View {
     var count: Int
     var isOn: Bool
     var action: () -> Void
-    @State private var hovering = false
+    @State private var hover = HoverState()
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
-                Text(title).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(isOn ? Color.primary : Palette.ink2)
-                Text("\(count)").font(.system(size: 11)).monospacedDigit().foregroundStyle(Palette.ink3)
+            HStack(spacing: 7) {
+                Text(title)
+                Text("\(count)").monospacedDigit()
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(isOn || hovering ? Palette.surface2 : .clear, in: Capsule())
-            .overlay { Capsule().strokeBorder(isOn ? Palette.border : .clear) }
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(isOn ? Color.primary : Palette.ink2)
+            .padding(.horizontal, 11)
+            .frame(height: 28)
+            .background(isOn ? Color.primary.opacity(0.06) : hover.isOn ? StudyTone.soft : .clear, in: Capsule())
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .onHover { hovering = $0 }
+        .onHover { hover.isOn = $0 }
         .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+}
+
+/// "+ Add topic" in the checklist's footer: a field in the space's colour that adds on Return.
+private struct TopicAdder: View {
+    var tint: Color
+    var onAdd: (String) -> Void
+    @State private var text = ""
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "plus").font(.system(size: 13, weight: .semibold)).foregroundStyle(tint)
+            TextField("Add topic", text: $text, prompt: Text("Add topic").foregroundStyle(tint))
+                .textFieldStyle(.plain)
+                .font(.system(size: 14, weight: .semibold))
+                .onSubmit {
+                    onAdd(text)
+                    text = ""
+                }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -335,7 +409,7 @@ private struct TopicRow: View {
     var body: some View {
         let compact = width < 640
         HStack(alignment: compact ? .top : .center, spacing: 12) {
-            CheckCircle(isOn: topic.revisedToday) { withAnimation { store.reviseTopic(subject: subject, topic: topic.id) } }
+            RevisionCheck(isOn: topic.revisedToday) { withAnimation { store.reviseTopic(subject: subject, topic: topic.id) } }
                 .help(topic.revisedToday ? "Undo today\u{2019}s revision" : "Revised today")
             if compact {
                 VStack(alignment: .leading, spacing: 6) {
@@ -349,16 +423,17 @@ private struct TopicRow: View {
                 actions.opacity(1)
             } else {
                 topicBody.frame(maxWidth: .infinity, alignment: .leading)
-                lastRevised.frame(minWidth: 64, alignment: .trailing)
+                lastRevised.frame(minWidth: 80, alignment: .trailing)
                 stepper
                 actions
             }
         }
-        .padding(.leading, 18)
-        .padding(.trailing, 12)
-        .padding(.vertical, 9)
-        .background { HoverFill(hover: hover, color: Palette.surface2.opacity(0.6)) }
-        .overlay(alignment: .bottom) { Rectangle().fill(Palette.border).frame(height: 0.5) }
+        .padding(.leading, 20)
+        .padding(.trailing, 16)
+        .padding(.vertical, 12)
+        .frame(minHeight: 60)
+        .background { HoverFill(hover: hover, color: Color.primary.opacity(0.03)) }
+        .overlay(alignment: .bottom) { Rectangle().fill(StudyTone.line).frame(height: 0.5) }
         .onHover { hover.isOn = $0 }
         .modifier(TopicDrag(topic: topic.id, enabled: !renaming))
         .modifier(TopicDrop(subject: subject, before: topic.id))
@@ -373,7 +448,7 @@ private struct TopicRow: View {
             if renaming {
                 TextField("Topic", text: $name)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 13.5))
+                    .font(.system(size: 15))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
                     .background(Palette.surface, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -388,7 +463,7 @@ private struct TopicRow: View {
                     #endif
             } else {
                 Text(topic.name)
-                    .font(.system(size: 13.5))
+                    .font(.system(size: 15))
                     .foregroundStyle(topic.revisedToday ? Palette.ink2 : .primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
@@ -406,10 +481,16 @@ private struct TopicRow: View {
         }
     }
 
+    /// "Today" in green, "2d ago" in grey, and due topics ("9d ago", "Not revised") in orange.
     private var lastRevised: some View {
-        Text(topic.lastRevisedText)
-            .font(.system(size: 11.5))
-            .foregroundStyle(topic.isDue ? Palette.amber : Palette.ink3)
+        let text: String = {
+            guard let last = topic.lastRevised, let ago = Day.fromToday(last).map({ -$0 }) else { return "Not revised" }
+            return ago <= 0 ? "Today" : ago == 1 ? "Yesterday" : ago < 60 ? "\(ago)d ago" : last.monthDay
+        }()
+        return Text(text)
+            .font(.system(size: 13.5, weight: topic.isDue || topic.revisedToday ? .semibold : .regular))
+            .foregroundStyle(topic.revisedToday ? StudyTone.greenText : topic.isDue ? StudyTone.orangeText : Palette.ink2)
+            .lineLimit(1)
             .help(topic.isDue ? "Due \u{2014} not revised in the last \(StudyTopic.dueDays) days" : "Last revised")
     }
 
@@ -417,21 +498,23 @@ private struct TopicRow: View {
         HStack(spacing: 0) {
             stepButton("minus", "Remove a revision", delta: -1).disabled(topic.revisions == 0)
             Text("\(topic.revisions)\u{00D7}")
-                .font(.system(size: 11.5, weight: .semibold))
+                .font(.system(size: 13.5, weight: .bold))
                 .monospacedDigit()
-                .frame(minWidth: 26)
+                .frame(minWidth: 30)
             stepButton("plus", "Add a revision", delta: 1)
         }
+        .padding(.horizontal, 2)
         .background(Palette.surface, in: Capsule())
-        .overlay { Capsule().strokeBorder(Palette.border) }
+        .overlay { Capsule().strokeBorder(Color.primary.opacity(0.08)) }
+        .shadow(color: .black.opacity(0.04), radius: 1, y: 1)
     }
 
     private func stepButton(_ systemImage: String, _ help: String, delta: Int) -> some View {
         Button { withAnimation { store.adjustRevisions(subject: subject, topic: topic.id, by: delta) } } label: {
             Image(systemName: systemImage)
-                .font(.system(size: 9, weight: .bold))
+                .font(.system(size: 10.5, weight: .semibold))
                 .foregroundStyle(Palette.ink2)
-                .frame(width: 22, height: 22)
+                .frame(width: 26, height: 28)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -531,7 +614,7 @@ private struct NoteChip: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            Image(systemName: "note.text").font(.system(size: 10))
+            Image(systemName: "doc.text").font(.system(size: 11))
             Text(title).lineLimit(1).truncationMode(.tail)
             Button(action: unlink) {
                 Image(systemName: "xmark").font(.system(size: 8, weight: .bold)).foregroundStyle(Palette.ink3)
@@ -542,14 +625,14 @@ private struct NoteChip: View {
             .opacity(hovering ? 1 : 0)
             #endif
         }
-        .font(.system(size: 11.5))
+        .font(.system(size: 12.5))
         .foregroundStyle(hovering ? Color.accentColor : Palette.ink2)
-        .padding(.leading, 7)
-        .padding(.trailing, 6)
-        .padding(.vertical, 2)
-        .frame(maxWidth: 260, alignment: .leading)
-        .background(hovering ? Color.accentColor.opacity(0.12) : Palette.surface2, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(hovering ? Color.accentColor.opacity(0.4) : Palette.border) }
+        .padding(.leading, 8)
+        .padding(.trailing, 7)
+        .padding(.vertical, 4)
+        .frame(maxWidth: 280, alignment: .leading)
+        .background(hovering ? Color.accentColor.opacity(0.12) : StudyTone.soft, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(hovering ? Color.accentColor.opacity(0.4) : StudyTone.line) }
         .contentShape(Rectangle())
         .onTapGesture(perform: open)
         .onHover { hovering = $0 }
@@ -665,16 +748,37 @@ private struct IconButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: systemImage).font(.system(size: 12)).foregroundStyle(Palette.ink2).frame(width: 24, height: 24)
+            Image(systemName: systemImage).font(.system(size: 13)).foregroundStyle(Palette.ink2).frame(width: 28, height: 28)
         }
         .buttonStyle(.borderless)
         .help(help)
     }
 }
 
-/// Add / edit sheet for a subject's name and colour.
+/// The square revision checkbox: ticking logs a revision for today.
+private struct RevisionCheck: View {
+    var isOn: Bool
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 5.5, style: .continuous).fill(isOn ? Color.accentColor : .clear)
+                RoundedRectangle(cornerRadius: 5.5, style: .continuous).strokeBorder(isOn ? Color.accentColor : Palette.ink3, lineWidth: 1.6)
+                if isOn { Image(systemName: "checkmark").font(.system(size: 11, weight: .heavy)).foregroundStyle(.white) }
+            }
+            .frame(width: 20, height: 20)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+}
+
+/// Add / edit sheet for a subject's name and colour, in the quick-add style.
 private struct StudySubjectSheet: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
     @State var draft: StudySubject
     var undoManager: UndoManager?
     /// Called with the subject's ID after saving, so the page can select a new subject.
@@ -682,15 +786,23 @@ private struct StudySubjectSheet: View {
     @FocusState private var focused: Bool
 
     private var isNew: Bool { !store.jobStudy.contains { $0.id == draft.id } }
+    private var canSave: Bool { !trimmed(draft.subject).isEmpty }
 
     var body: some View {
-        EditorForm(title: isNew ? "New Subject" : "Edit Subject", isNew: isNew, canSave: !trimmed(draft.subject).isEmpty, onSave: save) {
-            Section {
-                TextField("Subject", text: $draft.subject, prompt: Text("System Design"))
-                    .focused($focused)
+        QuickSheet(isNew: isNew, addTitle: "Add subject", canSave: canSave, onSave: save) {
+            SheetIcon(systemImage: Page.jobStudy.systemImage, color: draft.color)
+        } header: {
+            SheetTitleField(title: "Subject", prompt: "System Design", text: $draft.subject) {
+                guard canSave else { return }
+                save()
+                dismiss()
             }
-            Section("Colour") {
-                SwatchPicker(hex: $draft.hex)
+            .focused($focused)
+            Text(isNew ? "Add topics once it\u{2019}s created" : "\(draft.topics.count) topics \u{00B7} \(draft.dueCount) due")
+                .font(.system(size: 14)).foregroundStyle(Palette.ink2)
+        } rows: {
+            SheetRow(title: "Colour", systemImage: "paintpalette", last: true) {
+                SwatchPicker(hex: $draft.hex, size: 20).padding(.top, 4)
             }
         }
         .onAppear { focused = true }
