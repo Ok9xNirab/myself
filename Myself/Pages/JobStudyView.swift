@@ -18,6 +18,11 @@ struct JobStudyView: View {
             }
         }
         .scapeBackground()
+        #if os(macOS)
+        // Side by side, no scroll view sits under the toolbar, so macOS would draw its solid title bar; hide it so
+        // the theme band shows through as on the scrolling pages.
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        #endif
     }
 }
 
