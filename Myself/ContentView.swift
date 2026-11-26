@@ -113,6 +113,8 @@ struct ContentView: View {
             PageCrumb(page: store.page)
         }
         .sharedBackgroundVisibility(.hidden)
+        // With the title removed nothing else fills the bar, so this keeps Search (and pages' buttons) on the right.
+        ToolbarSpacer(.flexible)
         #endif
         // No Back / Forward buttons (the v2 design has none); Go › Back / Forward (⌘[ / ⌘]) still navigate.
         ToolbarItem(placement: .primaryAction) {
