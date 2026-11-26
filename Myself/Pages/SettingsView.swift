@@ -36,13 +36,6 @@ private struct AppearanceSettings: View {
 
     var body: some View {
         Form {
-            #if canImport(UIKit)
-            Section("App icon") {
-                AppIconPicker()
-                    .padding(.vertical, 4)
-            }
-            #endif
-
             Section("Theme") {
                 VStack(alignment: .leading, spacing: 10) {
                     VStack(alignment: .leading, spacing: 2) {
