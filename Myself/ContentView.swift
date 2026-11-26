@@ -123,7 +123,7 @@ struct ContentView: View {
 }
 
 #if os(macOS)
-/// The toolbar's breadcrumb: the page's outline icon, its name, and "/ crumb" in grey (the v2 `.crumb`).
+/// The toolbar's breadcrumb: the page's outline icon and its name (the v2 `.crumb`).
 private struct PageCrumb: View {
     var page: Page
 
@@ -131,7 +131,6 @@ private struct PageCrumb: View {
         HStack(spacing: 7) {
             Image(systemName: page.systemImage).font(.system(size: 14, weight: .regular)).foregroundStyle(Palette.ink2)
             Text(page.title).font(.system(size: 14, weight: .semibold))
-            Text("/ \(page.crumb)").font(.system(size: 14, weight: .medium)).foregroundStyle(Palette.ink2)
         }
         .lineLimit(1)
         .fixedSize()
