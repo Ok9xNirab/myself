@@ -14,7 +14,9 @@ enum NoteSort: String, CaseIterable, Identifiable {
     }
 }
 
-/// Notes: category panel → note list → block editor (`NoteEditor`). Fills the detail column instead of using `PageScroll`.
+/// Notes in the v2 layout: a page of its own (header, category chips with a filter, pinned cards, then the other
+/// notes grouped by date in cards) and, once a note is opened, its editor across the whole column with a Back
+/// button. Fills the detail column instead of using `PageScroll` for the editor; the list uses `PageScroll`.
 struct NotesView: View {
     @Environment(AppStore.self) private var store
     @Environment(\.undoManager) private var undoManager
@@ -22,21 +24,20 @@ struct NotesView: View {
     @Environment(\.openWindow) private var openWindow
     #endif
 
-    /// "all", "pinned" or a category ID.
+    /// "all" or a category ID. ("pinned", from before the v2 layout, reads as "all".)
     @AppStorage("notes.scope") private var scope = "all"
     @AppStorage("notes.sort") private var sort = NoteSort.edited
     @AppStorage("notes.open") private var openID = ""
-    @AppStorage("notes.browser") private var showsBrowser = true
-    @AppStorage("notes.railWidth") private var railWidth = 188.0
-    /// 0 until the user drags it, so the list keeps its window-size default.
-    @AppStorage("notes.listWidth") private var storedListWidth = 0.0
+    /// Whether the list page shows; false while a note is open in the editor.
+    @AppStorage("notes.list") private var showsList = true
 
     @State private var query = ""
     @State private var searchesAll = false
+    /// Notes picked with ⌘-click (or ⇧-click) for the bulk bar.
     @State private var selection: Set<ID> = []
     /// A note created just now, so the editor focuses its title.
     @State private var freshID: ID?
-    @State private var newCategoryName: String?
+    @State private var showsNewCategory = false
     @State private var renamingID: ID?
     @State private var dropTarget: String?
     @State private var pendingDelete: [ID] = []
@@ -45,58 +46,35 @@ struct NotesView: View {
 
     var body: some View {
         let scope = validScope
-        let list = filtered(scope)
-        // The list reads `noteSummaries`, not `notes`, so typing in the open note doesn't redraw it.
-        let open = (store.noteSummaries.first { $0.id == openID && $0.bookID == nil } ?? list.first)?.id
+        let open = store.noteSummaries.first { $0.id == openID && $0.bookID == nil }?.id
 
-        GeometryReader { geo in
-            let railShown = showsBrowser && geo.size.width >= 940
-            let defaultListWidth: CGFloat = geo.size.width >= 940 ? 300 : geo.size.width >= 700 ? 272 : 236
-            // Keep at least 360pt for the editor, however wide the columns were dragged.
-            let railW = railShown ? min(railWidth, 280) : 0
-            let listMax = max(220, geo.size.width - railW - 360)
-            let listWidth = min(storedListWidth > 0 ? storedListWidth : defaultListWidth, listMax)
-            HStack(spacing: 0) {
-                if railShown {
-                    rail(scope)
-                        .frame(width: railW)
-                        .transition(.move(edge: .leading).combined(with: .opacity))
-                    ColumnResizer(width: railW, range: 150...280) { railWidth = $0 } onReset: { railWidth = 188 }
-                }
-                if showsBrowser {
-                    noteList(list, scope: scope)
-                        .frame(width: listWidth)
-                        .background(Palette.surface.opacity(0.5))
-                        .transition(.move(edge: .leading).combined(with: .opacity))
-                    ColumnResizer(width: listWidth, range: 220...listMax) { storedListWidth = $0 } onReset: { storedListWidth = 0 }
-                }
-                Group {
-                    if let open {
-                        OpenNoteEditor(id: open, isFresh: freshID == open, showsBrowser: $showsBrowser,
-                                       onDuplicate: { duplicate(open) }, onDelete: { delete([open]) })
-                            .id(open)
-                    } else {
-                        EmptyStateView(systemImage: "note.text", title: "No note selected", subtitle: "Pick a note from the list or create a new one.")
-                            .frame(maxHeight: .infinity)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Palette.surface)
+        Group {
+            if !showsList, let open {
+                OpenNoteEditor(id: open, isFresh: freshID == open, showsBrowser: $showsList, backToList: true,
+                               onDuplicate: { duplicate(open) }, onDelete: { delete([open]) })
+                    .id(open)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                browser(filtered(scope), scope: scope)
             }
-            .background(Palette.background)
-            .animation(.smooth(duration: 0.25), value: showsBrowser)
         }
-        .overlay(alignment: .top) { Divider() }
+        .toolbar { toolbar }
+        .sheet(isPresented: $showsNewCategory) {
+            NoteCategorySheet(hex: NoteCategory.palette[store.noteCategories.count % NoteCategory.palette.count]) { pick($0) }
+        }
         .onAppear {
-            if let open { selection = [open] }
             handle(store.noteRequest)
+            updateCrumb()
         }
         .onChange(of: store.noteRequest) { handle(store.noteRequest) }
-        .onChange(of: selection) {
-            if selection.count == 1, let id = selection.first { openID = id }
+        .onChange(of: showsList) { selection = []; updateCrumb() }
+        .onChange(of: openID) { if openID != freshID { freshID = nil }; updateCrumb() }
+        .onChange(of: scope) { updateCrumb() }
+        .onChange(of: store.noteCategories) { updateCrumb() }
+        .onDisappear {
+            store.saveUnsavedNotes()
+            if store.crumb?.page == .notes { store.crumb = nil }
         }
-        .onChange(of: openID) { if openID != freshID { freshID = nil } }
-        .onDisappear { store.saveUnsavedNotes() }
         .confirmationDialog("Delete \(pendingDelete.count) notes?", isPresented: Binding(get: { pendingDelete.count > 1 }, set: { if !$0 { pendingDelete = [] } })) {
             Button("Delete", role: .destructive) { delete(pendingDelete, confirmed: true) }
         } message: {
@@ -113,19 +91,47 @@ struct NotesView: View {
         }
     }
 
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        if showsList {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Picker("Sort by", selection: $sort) {
+                        ForEach(NoteSort.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    Label("Sort", systemImage: "arrow.up.arrow.down")
+                }
+                .menuIndicator(.hidden)
+                .help("Sort notes")
+            }
+        }
+        ToolbarItem(placement: .primaryAction) {
+            Button { addNote() } label: {
+                Label("New note", systemImage: "square.and.pencil")
+                    .labelStyle(.titleAndIcon)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Palette.surface)
+                    .padding(.horizontal, 12)
+                    .frame(height: 28)
+                    .background(Color.primary, in: Capsule())
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .help("New note (⌥⌘N)")
+        }
+    }
+
     // MARK: Derived
 
     /// The stored scope, or "all" when its category no longer exists.
     private var validScope: String {
-        scope == "all" || scope == "pinned" || store.noteCategory(scope) != nil ? scope : "all"
+        store.noteCategory(scope) != nil ? scope : "all"
     }
 
     private func scopeName(_ scope: String) -> String {
-        switch scope {
-        case "all": "All Notes"
-        case "pinned": "Pinned"
-        default: store.noteCategory(scope)?.name ?? "All Notes"
-        }
+        store.noteCategory(scope)?.name ?? "All"
     }
 
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespaces).lowercased() }
@@ -137,7 +143,7 @@ struct NotesView: View {
         let matches = q.isEmpty ? nil : Set(store.notes.filter { index.text(for: $0).contains(q) }.map(\.id))
         var list = store.noteSummaries.filter { note in
             // Reading notes live on the Book Notes page.
-            guard note.bookID == nil, everywhere || (scope == "pinned" ? note.pinned : note.categoryID == scope) else { return false }
+            guard note.bookID == nil, everywhere || note.categoryID == scope else { return false }
             return matches?.contains(note.id) ?? true
         }
         switch sort {
@@ -148,254 +154,213 @@ struct NotesView: View {
         return list
     }
 
-    /// List sections: search results, or Pinned followed by date (or first-letter) groups.
-    private func sections(_ list: [NoteSummary], scope: String) -> [(title: String, notes: [NoteSummary])] {
+    /// The unpinned notes in date (or first-letter) groups; search results are one group.
+    private func groups(_ list: [NoteSummary]) -> [(title: String, notes: [NoteSummary])] {
         if !trimmedQuery.isEmpty {
             let n = list.count
-            return [("\(n) result\(n == 1 ? "" : "s")\(searchesAll ? " in all notes" : "")", list)]
+            return n == 0 ? [] : [("\(n) result\(n == 1 ? "" : "s")\(searchesAll && validScope != "all" ? " in all notes" : "")", list)]
         }
         var out: [(title: String, notes: [NoteSummary])] = []
-        let pinned = scope == "pinned" ? [] : list.filter(\.pinned)
-        if !pinned.isEmpty { out.append(("Pinned", pinned)) }
-        for note in list where scope == "pinned" || !note.pinned {
+        for note in list where !note.pinned {
             let title = switch sort {
             case .title: String(note.displayTitle.prefix(1)).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil).uppercased()
             case .created: NoteDates.group(note.createdAt)
             case .edited: NoteDates.group(note.editedAt)
             }
-            if let i = out.indices.last(where: { out[$0].title == title }), !(i == 0 && !pinned.isEmpty) {
-                out[i].notes.append(note)
-            } else {
-                out.append((title, [note]))
-            }
+            if out.last?.title == title { out[out.count - 1].notes.append(note) } else { out.append((title, [note])) }
         }
         return out
     }
 
+    /// Every note in the order the page shows them: pinned first, then the groups.
+    private func order(_ list: [NoteSummary]) -> [ID] {
+        trimmedQuery.isEmpty ? list.filter(\.pinned).map(\.id) + list.filter { !$0.pinned }.map(\.id) : list.map(\.id)
+    }
+
     private func count(_ scope: String) -> Int {
-        switch scope {
-        case "all": store.noteSummaries.count(where: { $0.bookID == nil })
-        case "pinned": store.noteSummaries.count(where: { $0.pinned && $0.bookID == nil })
-        default: store.noteSummaries.count(where: { $0.categoryID == scope && $0.bookID == nil })
-        }
+        scope == "all" ? store.noteSummaries.count(where: { $0.bookID == nil })
+            : store.noteSummaries.count(where: { $0.categoryID == scope && $0.bookID == nil })
     }
 
-    // MARK: Category panel
-
-    private func rail(_ scope: String) -> some View {
-        List(selection: Binding(get: { scope }, set: { if let s = $0 { pick(s) } })) {
-            scopeRow("all", title: "All Notes", systemImage: "tray")
-            scopeRow("pinned", title: "Pinned", systemImage: "pin")
-            Section("Categories") {
-                ForEach(store.noteCategories) { category in
-                    categoryRow(category)
-                }
-                if newCategoryName != nil {
-                    HStack(spacing: 8) {
-                        ColorDot(color: Color(hex: NoteCategory.palette[store.noteCategories.count % NoteCategory.palette.count]), size: 8)
-                        TextField("Category name", text: Binding(get: { newCategoryName ?? "" }, set: { newCategoryName = $0 }))
-                            .textFieldStyle(.plain)
-                            .onSubmit(createCategory)
-                            .onEscape { newCategoryName = nil }
-                    }
-                }
-            }
-        }
-        .listStyle(.sidebar)
-        .scrollContentBackground(.hidden)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            HStack {
-                Text("Notebook").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.ink3)
-                Spacer()
-                Button("New Category", systemImage: "folder.badge.plus") { newCategoryName = "" }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(Palette.ink2)
-                    .help("New category")
-            }
-            .padding(.leading, 16)
-            .padding(.trailing, 10)
-            .padding(.top, 10)
-        }
+    private func updateCrumb() {
+        let open = store.noteSummaries.first { $0.id == openID && $0.bookID == nil }
+        let detail = !showsList ? open.flatMap { store.noteCategory($0.categoryID)?.name } : scopeName(validScope)
+        store.crumb = detail.map { (page: Page.notes, detail: $0) }
     }
 
-    private func scopeRow(_ id: String, title: String, systemImage: String) -> some View {
-        Label {
-            HStack {
-                Text(title)
-                Spacer()
-                Text(count(id).formatted()).font(.system(size: 12)).foregroundStyle(.secondary).monospacedDigit()
-            }
-        } icon: {
-            Image(systemName: systemImage)
-        }
-        .tag(id)
-        .modifier(NoteDropTarget(id: id, target: $dropTarget, onDrop: drop))
-    }
+    // MARK: List page
 
-    private func categoryRow(_ category: NoteCategory) -> some View {
-        HStack(spacing: 8) {
-            ColorDot(color: category.color, size: 8)
-            if renamingID == category.id {
-                RenameField(name: category.name) { name in
-                    if let name { store.renameNoteCategory(category.id, to: name) }
-                    renamingID = nil
-                }
-            } else {
-                Text(category.name).lineLimit(1)
-                    .onTapGesture(count: 2) { renamingID = category.id }
-            }
-            Spacer(minLength: 4)
-            Text(count(category.id).formatted()).font(.system(size: 12)).foregroundStyle(.secondary).monospacedDigit()
-        }
-        .tag(category.id)
-        .help("Double-click to rename")
-        .contextMenu {
-            Button("New Note in \(category.name)", systemImage: "square.and.pencil") { pick(category.id); addNote(in: category.id) }
-            Button("Rename", systemImage: "pencil") { renamingID = category.id }
-            #if os(macOS)
-            Button("Export as PDF…", systemImage: "arrow.down.document") { exportCategory(category) }
-                .disabled(count(category.id) == 0)
-            Button("Export as Separate PDFs…", systemImage: "doc.on.doc") { exportCategory(category, separately: true) }
-                .disabled(count(category.id) == 0)
-            #endif
-            Divider()
-            Button("Delete Category", systemImage: "trash", role: .destructive) { deleteCategory(category) }
-        }
-        .modifier(NoteDropTarget(id: category.id, target: $dropTarget, onDrop: drop))
-    }
-
-    // MARK: Note list
-
-    private func noteList(_ list: [NoteSummary], scope: String) -> some View {
+    private func browser(_ list: [NoteSummary], scope: String) -> some View {
         let q = trimmedQuery
-        let found = q.isEmpty ? [:] : Dictionary(store.notes.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        let wide = scope == "all" || scope == "pinned" || (!q.isEmpty && searchesAll)
-        return VStack(spacing: 0) {
-            listHeader(list, scope: scope)
-            NoteSearchField(placeholder: "Search \(searchesAll ? "all notes" : scopeName(scope))", text: $query)
-                .padding(.horizontal, 10)
-                .padding(.bottom, 8)
-            if !q.isEmpty, scope != "all" {
-                Picker("Search in", selection: $searchesAll) {
-                    Text(scopeName(scope)).tag(false)
-                    Text("All notes").tag(true)
+        let pins = q.isEmpty ? list.filter(\.pinned) : []
+        let groups = groups(list)
+        // Category names on rows only when the list mixes categories.
+        let mixed = scope == "all" || (!q.isEmpty && searchesAll)
+        let all = store.noteSummaries.filter { $0.bookID == nil }
+        let editedToday = all.count(where: { Day.calendar.isDateInToday($0.editedAt) })
+
+        return PageScroll(maxWidth: 980) {
+            SpaceHeader(page: .notes, detail: "\(all.count) \(all.count == 1 ? "page" : "pages") · \(editedToday) edited today")
+
+            chipBar(scope)
+
+            if all.isEmpty {
+                VStack(spacing: 14) {
+                    EmptyStateView(systemImage: Page.notes.systemImage, title: "No notes yet", subtitle: "Pages with math, code, tables and images.")
+                    Button("New Note", systemImage: "square.and.pencil") { addNote() }
+                        .buttonStyle(.borderedProminent)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .padding(.horizontal, 10)
-                .padding(.bottom, 8)
-            }
-            if list.isEmpty {
-                VStack(spacing: 8) {
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
+                .cardBackground(radius: 18)
+            } else if list.isEmpty {
+                VStack(spacing: 10) {
                     if q.isEmpty {
-                        Text("No notes in \(scopeName(scope))")
-                        Button("New note") { addNote() }.buttonStyle(.borderless)
+                        Text("No notes in \(scopeName(scope)) yet.")
+                        Button("New Note in \(scopeName(scope))") { addNote() }.buttonStyle(.borderless)
                     } else {
-                        Text("No notes match \u{201C}\(query)\u{201D}")
+                        Text("No pages match \u{201C}\(query)\u{201D}.")
                         if !searchesAll, scope != "all" { Button("Search all notes") { searchesAll = true }.buttonStyle(.borderless) }
                     }
                 }
-                .font(.system(size: 12.5))
-                .foregroundStyle(Palette.ink3)
-                .padding(.top, 40)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            } else {
-                List(selection: $selection) {
-                    ForEach(sections(list, scope: scope), id: \.title) { section in
-                        Section(section.title) {
-                            ForEach(section.notes) { note in
-                                NoteRow(note: note, match: found[note.id], category: wide ? store.noteCategory(note.categoryID) : nil, query: q, sort: sort)
-                                    .tag(note.id)
-                                    .draggable(dragPayload(for: note.id))
-                            }
-                        }
+                .font(.system(size: 13.5))
+                .foregroundStyle(Palette.ink2)
+                .padding(.vertical, 12)
+                .padding(.horizontal, 4)
+            }
+
+            if !pins.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    NoteSectionHeading(title: "Pinned", count: nil, systemImage: "pin")
+                    PinnedGrid(notes: pins) { note in
+                        PinnedNoteCard(note: note, category: store.noteCategory(note.categoryID), selected: selection.contains(note.id))
+                            .modifier(NoteItemActions(id: note.id, select: { click(note.id, modifiers: $0, order: order(list)) },
+                                                      payload: dragPayload(for: note.id)) { rowMenu(menuIDs(note.id)) })
                     }
                 }
-                .listStyle(.sidebar)
-                .scrollContentBackground(.hidden)
-                #if os(macOS)
-                // Double-click (or Return) opens the note in its own window.
-                .contextMenu(forSelectionType: ID.self) { ids in
-                    if !ids.isEmpty { rowMenu(Array(ids)) }
-                } primaryAction: { ids in
-                    ids.forEach { openWindow(id: NoteWindow.id, value: $0) }
-                }
-                .onDeleteCommand { delete(Array(selection)) }
-                #else
-                .contextMenu(forSelectionType: ID.self) { ids in if !ids.isEmpty { rowMenu(Array(ids)) } }
-                #endif
             }
-            if selection.count > 1 { bulkBar }
+
+            ForEach(groups, id: \.title) { group in
+                VStack(alignment: .leading, spacing: 10) {
+                    NoteSectionHeading(title: group.title, count: group.notes.count, systemImage: nil)
+                    VStack(spacing: 0) {
+                        ForEach(Array(group.notes.enumerated()), id: \.element.id) { i, note in
+                            NoteListRow(note: note, category: store.noteCategory(note.categoryID), showsCategory: mixed,
+                                        query: q, match: q.isEmpty ? nil : store.notes.first { $0.id == note.id },
+                                        sort: sort, selected: selection.contains(note.id), first: i == 0)
+                                .modifier(NoteItemActions(id: note.id, select: { click(note.id, modifiers: $0, order: order(list)) },
+                                                          payload: dragPayload(for: note.id)) { rowMenu(menuIDs(note.id)) })
+                        }
+                    }
+                    .padding(6)
+                    .cardBackground(radius: 18)
+                }
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if !selection.isEmpty {
+                bulkBar.padding(.bottom, 16).transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.snappy(duration: 0.2), value: selection.isEmpty)
+        #if os(macOS)
+        .onExitCommand { selection = [] }
+        #endif
+    }
+
+    // MARK: Chips
+
+    private func chipBar(_ scope: String) -> some View {
+        HStack(spacing: 10) {
+            ScrollView(.horizontal) {
+                HStack(spacing: 6) {
+                    NoteChip(name: "All", color: Color.primary.opacity(0.82), count: count("all"), on: scope == "all", targeted: dropTarget == "all") { pick("all") }
+                        .modifier(ChipDropTarget(id: "all", target: $dropTarget, onDrop: drop))
+                    ForEach(store.noteCategories) { category in
+                        if renamingID == category.id {
+                            chipField(color: category.color) {
+                                RenameField(name: category.name) { name in
+                                    if let name { store.renameNoteCategory(category.id, to: name) }
+                                    renamingID = nil
+                                }
+                            }
+                        } else {
+                            NoteChip(name: category.name, color: category.color, count: count(category.id), on: scope == category.id,
+                                     targeted: dropTarget == category.id) { pick(category.id) }
+                                .contextMenu { categoryMenu(category) }
+                                .modifier(ChipDropTarget(id: category.id, target: $dropTarget, onDrop: drop))
+                        }
+                    }
+                    Button("New Category", systemImage: "plus") { showsNewCategory = true }
+                            .labelStyle(.iconOnly)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Palette.ink2)
+                            .frame(width: 30, height: 30)
+                            .background(.thinMaterial, in: Circle())
+                            .overlay(Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+                            .contentShape(Circle())
+                            .buttonStyle(.plain)
+                            .help("New category")
+                }
+                .padding(.vertical, 6)
+                .padding(.horizontal, 2)
+            }
+            .scrollIndicators(.never)
+            .padding(.vertical, -6)
         }
     }
 
-    private func listHeader(_ list: [NoteSummary], scope: String) -> some View {
-        HStack(spacing: 2) {
-            Menu {
-                Picker("Show", selection: Binding(get: { scope }, set: pick)) {
-                    Label("All Notes", systemImage: "tray").tag("all")
-                    Label("Pinned", systemImage: "pin").tag("pinned")
-                    Divider()
-                    ForEach(store.noteCategories) { Text($0.name).tag($0.id) }
-                }
-                .pickerStyle(.inline)
-            } label: {
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 6) {
-                        if let category = store.noteCategory(scope) { ColorDot(color: category.color, size: 8) }
-                        Text(scopeName(scope)).font(.system(size: 14, weight: .bold)).lineLimit(1)
-                        Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)).foregroundStyle(Palette.ink3)
-                    }
-                    Text("\(list.count.formatted()) \(trimmedQuery.isEmpty ? "notes" : "matching")")
-                        .font(.system(size: 11)).foregroundStyle(Palette.ink3).monospacedDigit()
-                }
-                .contentShape(Rectangle())
-            }
-            .menuStyle(.button)
-            .buttonStyle(.plain)
-            .menuIndicator(.hidden)
-            .help("Switch category")
-            Spacer()
-            Menu {
-                Picker("Sort by", selection: $sort) {
-                    ForEach(NoteSort.allCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.inline)
-            } label: {
-                Image(systemName: "arrow.up.arrow.down")
-            }
-            .menuStyle(.button)
-            .buttonStyle(.borderless)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help("Sort")
-            Button("New Note", systemImage: "square.and.pencil") { addNote() }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.borderless)
-                .help("New note (⌥⌘N)")
+    private func chipField(color: Color, @ViewBuilder content: () -> some View) -> some View {
+        HStack(spacing: 7) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            content()
         }
-        .foregroundStyle(Palette.ink2)
-        .padding(.leading, 16)
-        .padding(.trailing, 12)
-        .padding(.top, 10)
-        .padding(.bottom, 8)
+        .font(.system(size: 13, weight: .semibold))
+        .padding(.horizontal, 11)
+        .frame(height: 30)
+        .background(Palette.surface, in: Capsule())
+        .overlay(Capsule().strokeBorder(Color.accentColor, lineWidth: 1.5))
+    }
+
+    @ViewBuilder
+    private func categoryMenu(_ category: NoteCategory) -> some View {
+        Button("New Note in \(category.name)", systemImage: "square.and.pencil") { pick(category.id); addNote(in: category.id) }
+        Button("Rename", systemImage: "pencil") { renamingID = category.id }
+        #if os(macOS)
+        Button("Export as PDF…", systemImage: "arrow.down.document") { exportCategory(category) }
+            .disabled(count(category.id) == 0)
+        Button("Export as Separate PDFs…", systemImage: "doc.on.doc") { exportCategory(category, separately: true) }
+            .disabled(count(category.id) == 0)
+        #endif
+        Divider()
+        Button("Delete Category", systemImage: "trash", role: .destructive) { deleteCategory(category) }
+    }
+
+    // MARK: Rows
+
+    /// A row's context menu acts on the selection when the row is part of it.
+    private func menuIDs(_ id: ID) -> [ID] {
+        selection.contains(id) ? Array(selection) : [id]
     }
 
     @ViewBuilder
     private func rowMenu(_ ids: [ID]) -> some View {
         let allPinned = ids.allSatisfy { id in store.noteSummaries.first { $0.id == id }?.pinned == true }
-        Button(allPinned ? "Unpin" : "Pin", systemImage: allPinned ? "pin.slash" : "pin") { store.setPinned(ids, !allPinned) }
-        Menu("Move to") {
-            ForEach(store.noteCategories) { category in
-                Button(category.name) { store.moveNotes(ids, to: category.id) }
-            }
+        if ids.count == 1, let id = ids.first {
+            Button("Open", systemImage: "doc.text") { openNote(id) }
         }
         #if os(macOS)
         Button(ids.count == 1 ? "Open in New Window" : "Open in \(ids.count) Windows", systemImage: "macwindow") {
             ids.forEach { openWindow(id: NoteWindow.id, value: $0) }
         }
         #endif
+        Divider()
+        Button(allPinned ? "Unpin" : "Pin", systemImage: allPinned ? "pin.slash" : "pin") { store.setPinned(ids, !allPinned) }
+        Menu("Move to") {
+            ForEach(store.noteCategories) { category in
+                Button(category.name) { store.moveNotes(ids, to: category.id) }
+            }
+        }
         if ids.count == 1, let id = ids.first {
             Button("Duplicate", systemImage: "plus.square.on.square") { duplicate(id) }
         }
@@ -409,9 +374,8 @@ struct NotesView: View {
     private var bulkBar: some View {
         let ids = Array(selection)
         let allPinned = ids.allSatisfy { id in store.noteSummaries.first { $0.id == id }?.pinned == true }
-        return HStack(spacing: 2) {
-            Text("\(selection.count) selected").font(.system(size: 12.5, weight: .semibold))
-            Spacer()
+        return HStack(spacing: 4) {
+            Text("\(selection.count) selected").font(.system(size: 13, weight: .semibold)).padding(.trailing, 8)
             Menu {
                 ForEach(store.noteCategories) { category in
                     Button(category.name) { store.moveNotes(ids, to: category.id); selection = [] }
@@ -426,8 +390,11 @@ struct NotesView: View {
             .help("Move to category")
             Group {
                 Button(allPinned ? "Unpin" : "Pin", systemImage: allPinned ? "pin.slash" : "pin") { store.setPinned(ids, !allPinned); selection = [] }
+                #if os(macOS)
+                Button("Export as PDF", systemImage: "arrow.down.document") { export(ids) }
+                #endif
                 Button("Delete", systemImage: "trash") { delete(ids) }
-                Button("Clear Selection", systemImage: "xmark") { selection = openID.isEmpty ? [] : [openID] }
+                Button("Clear Selection", systemImage: "xmark") { selection = [] }
             }
             .labelStyle(.iconOnly)
             .buttonStyle(.borderless)
@@ -436,22 +403,38 @@ struct NotesView: View {
         .padding(.leading, 16)
         .padding(.trailing, 10)
         .frame(height: 40)
-        .background(Palette.surface)
-        .overlay(alignment: .top) { Divider() }
+        .background {
+            Capsule().fill(.regularMaterial).shadow(color: .black.opacity(0.14), radius: 14, y: 6)
+        }
+        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+    }
+
+    /// A click opens the note; ⌘-click toggles it in the selection and ⇧-click extends the selection to it.
+    private func click(_ id: ID, modifiers: EventModifiers, order: [ID]) {
+        if modifiers.contains(.command) {
+            if selection.contains(id) { selection.remove(id) } else { selection.insert(id) }
+        } else if modifiers.contains(.shift), let anchor = order.first(where: selection.contains),
+                  let a = order.firstIndex(of: anchor), let b = order.firstIndex(of: id) {
+            selection.formUnion(order[min(a, b)...max(a, b)])
+        } else if !selection.isEmpty {
+            selection = []
+        } else {
+            openNote(id)
+        }
     }
 
     #if os(macOS)
-    /// Exports notes as one PDF, in the order the list shows them.
+    /// Exports notes as one PDF, in the order the page shows them.
     private func export(_ ids: [ID]) {
-        let order = filtered(validScope).map(\.id)
+        let order = order(filtered(validScope))
         let wanted = Set(ids)
         let byID = Dictionary(store.notes.filter { wanted.contains($0.id) }.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let notes = (order.filter(wanted.contains) + ids.filter { !order.contains($0) }).compactMap { byID[$0] }
-        let name = notes.count == 1 ? notes[0].displayTitle : "\(scopeName(validScope)) Notes"
+        let name = notes.count == 1 ? notes[0].displayTitle : validScope == "all" ? "Notes" : "\(scopeName(validScope)) Notes"
         NoteExport.savePDF(notes, name: name, store: store)
     }
 
-    /// Exports every note in a category, pinned first, then in the list's sort order: as one PDF, or one per note.
+    /// Exports every note in a category, pinned first, then in the page's sort order: as one PDF, or one per note.
     private func exportCategory(_ category: NoteCategory, separately: Bool = false) {
         var notes = store.notes.filter { $0.categoryID == category.id && $0.bookID == nil }
         switch sort {
@@ -478,6 +461,13 @@ struct NotesView: View {
     private func pick(_ newScope: String) {
         scope = newScope
         searchesAll = false
+        selection = []
+    }
+
+    private func openNote(_ id: ID) {
+        selection = []
+        openID = id
+        showsList = false
     }
 
     private func handle(_ request: NoteRequest?) {
@@ -487,49 +477,37 @@ struct NotesView: View {
         case .new:
             addNote()
         case .open(let id):
-            guard let note = store.notes.first(where: { $0.id == id }) else { return }
-            if validScope != "all", validScope != note.categoryID { scope = note.categoryID }
+            guard store.notes.contains(where: { $0.id == id }) else { return }
             query = ""
-            showsBrowser = true
-            selection = [id]
-            openID = id
+            openNote(id)
         }
     }
 
     private func addNote(in categoryID: ID? = nil) {
-        let open = store.notes.first { $0.id == openID }
+        let open = showsList ? nil : store.notes.first { $0.id == openID }
         guard let categoryID = categoryID ?? store.noteCategory(validScope)?.id ?? open?.categoryID ?? store.noteCategories.first?.id else { return }
         let note = store.addNote(in: categoryID)
-        if validScope == "pinned" { scope = categoryID }
         query = ""
         freshID = note.id
-        selection = [note.id]
-        openID = note.id
+        openNote(note.id)
     }
 
     private func duplicate(_ id: ID) {
         guard let copy = store.duplicateNote(id) else { return }
-        selection = [copy.id]
-        openID = copy.id
+        if !showsList { openID = copy.id }
     }
 
-    /// Deletes notes and opens the one that took the first deleted note's place. Several at once asks first.
+    /// Deletes notes. Several at once asks first; deleting the open note goes back to the list.
     private func delete(_ ids: [ID], confirmed: Bool = false) {
         guard !ids.isEmpty else { return }
         if ids.count > 1, !confirmed { pendingDelete = ids; return }
         pendingDelete = []
-        let order = sections(filtered(validScope), scope: validScope).flatMap(\.notes).map(\.id)
-        let first = order.firstIndex { ids.contains($0) } ?? 0
-        let remaining = order.filter { !ids.contains($0) }
-        let next = remaining.isEmpty ? nil : remaining[min(first, remaining.count - 1)]
         store.deleteNotes(ids, undoManager: undoManager)
-        selection = next.map { [$0] } ?? []
-        openID = next ?? ""
-    }
-
-    private func createCategory() {
-        if let category = store.addNoteCategory(name: newCategoryName ?? "") { pick(category.id) }
-        newCategoryName = nil
+        selection.subtract(ids)
+        if ids.contains(openID) {
+            showsList = true
+            openID = ""
+        }
     }
 
     private func deleteCategory(_ category: NoteCategory, confirmed: Bool = false) {
@@ -538,14 +516,11 @@ struct NotesView: View {
         store.deleteNoteCategory(category.id, undoManager: undoManager)
     }
 
-    /// Drop on All Notes does nothing, on Pinned pins, on a category moves.
+    /// A drop on All does nothing; on a category it moves the notes there.
     private func drop(_ ids: [ID], on target: String) {
-        switch target {
-        case "all": return
-        case "pinned": store.setPinned(ids, true)
-        default: store.moveNotes(ids, to: target)
-        }
-        selection = openID.isEmpty ? [] : [openID]
+        guard target != "all" else { return }
+        store.moveNotes(ids, to: target)
+        selection = []
     }
 }
 
@@ -556,67 +531,348 @@ struct OpenNoteEditor: View {
     var id: ID
     var isFresh: Bool
     var showsBrowser: Binding<Bool>
+    var backToList = false
     var onDuplicate: () -> Void
     var onDelete: () -> Void
     @Environment(AppStore.self) private var store
 
     var body: some View {
         if let note = store.notes.first(where: { $0.id == id }) {
-            NoteEditor(note: note, isFresh: isFresh, showsBrowser: showsBrowser, onDuplicate: onDuplicate, onDelete: onDelete)
+            NoteEditor(note: note, isFresh: isFresh, showsBrowser: showsBrowser, backToList: backToList, onDuplicate: onDuplicate, onDelete: onDelete)
         }
     }
 }
 
-private struct NoteRow: View {
-    var note: NoteSummary
-    /// The full note while searching, for the text around the match.
-    var match: Note?
-    /// Shown when the list mixes categories.
-    var category: NoteCategory?
-    var query: String
-    var sort: NoteSort
+/// New category: name and colour, in the v2 quick sheet. Calls `onAdd` with the new category's ID.
+private struct NoteCategorySheet: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State var hex: UInt32
+    var onAdd: (ID) -> Void
+    @FocusState private var focused: Bool
+
+    private var canSave: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 9) {
-            if note.icon != nil || note.iconImage != nil {
-                NoteIconView(summary: note, size: 28)
+        QuickSheet(isNew: true, addTitle: "Add category", canSave: canSave, onSave: save) {
+            SheetIcon(systemImage: "folder", color: Color(hex: hex))
+        } header: {
+            SheetTitleField(title: "Category", prompt: "Algorithms", text: $name) {
+                guard canSave else { return }
+                save()
+                dismiss()
             }
-            text
+            .focused($focused)
+            Text("Group notes by subject or project").font(.system(size: 14)).foregroundStyle(Palette.ink2)
+        } rows: {
+            SheetRow(title: "Colour", systemImage: "paintpalette", last: true) {
+                SwatchPicker(hex: $hex, size: 20, swatches: NoteCategory.palette).padding(.top, 4)
+            }
+        }
+        .onAppear { focused = true }
+    }
+
+    private func save() {
+        if let category = store.addNoteCategory(name: name, hex: hex) { onAdd(category.id) }
+    }
+}
+
+/// Click (with its modifier keys), drag and context menu for a pinned card or list row.
+private struct NoteItemActions<Menu: View>: ViewModifier {
+    var id: ID
+    var select: (EventModifiers) -> Void
+    var payload: String
+    @ViewBuilder var menu: () -> Menu
+
+    func body(content: Content) -> some View {
+        content
+            .contentShape(Rectangle())
+            .onTapGesture {
+                #if os(macOS)
+                let flags = NSEvent.modifierFlags
+                select(flags.contains(.command) ? .command : flags.contains(.shift) ? .shift : [])
+                #else
+                select([])
+                #endif
+            }
+            .draggable(payload)
+            .contextMenu { menu() }
+    }
+}
+
+/// A section title: "Pinned", "Today 2".
+private struct NoteSectionHeading: View {
+    var title: String
+    var count: Int?
+    var systemImage: String?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if let systemImage { Image(systemName: systemImage).font(.system(size: 11, weight: .semibold)) }
+            Text(title).font(.system(size: 13, weight: .bold))
+            if let count { Text(count.formatted()).font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink3).monospacedDigit() }
+        }
+        .foregroundStyle(Palette.ink2)
+        .padding(.leading, 4)
+        .padding(.top, 4)
+    }
+}
+
+/// A category filter chip: a dot, the name and its count; filled in its colour when on.
+private struct NoteChip: View {
+    var name: String
+    var color: Color
+    var count: Int
+    var on: Bool
+    var targeted: Bool
+    var action: () -> Void
+    @State private var hover = HoverState()
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Circle().fill(on ? .white : color).frame(width: 8, height: 8)
+                Text(name).lineLimit(1)
+                Text(count.formatted())
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(on ? .white.opacity(0.8) : Palette.ink2)
+                    .monospacedDigit()
+            }
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(on ? .white : .primary)
+            .padding(.leading, 10)
+            .padding(.trailing, 11)
+            .frame(height: 30)
+            .background { ChipBackground(color: color, on: on, hover: hover) }
+            .overlay {
+                if targeted { Capsule().strokeBorder(Color.accentColor, lineWidth: 2) }
+            }
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover.isOn = $0 }
+        .fixedSize()
+    }
+}
+
+private struct ChipBackground: View {
+    var color: Color
+    var on: Bool
+    var hover: HoverState
+
+    var body: some View {
+        if on {
+            Capsule().fill(color).shadow(color: color.opacity(0.3), radius: 6, y: 3)
+        } else {
+            Capsule().fill(Palette.surface.opacity(hover.isOn ? 0.92 : 0.62))
+                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.07), lineWidth: 0.5))
+        }
+    }
+}
+
+/// Hands over the note IDs dropped on a chip and outlines it while notes are over it.
+private struct ChipDropTarget: ViewModifier {
+    var id: String
+    @Binding var target: String?
+    var onDrop: ([ID], String) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .dropDestination(for: String.self) { items, _ in
+                let ids = items.flatMap { $0.split(separator: "\n").map(String.init) }
+                onDrop(ids, id)
+                return !ids.isEmpty
+            } isTargeted: { on in
+                if on { target = id } else if target == id { target = nil }
+            }
+    }
+}
+
+/// Pinned notes as cards, three to a row (two, then one, on narrower pages).
+private struct PinnedGrid<Card: View>: View {
+    var notes: [NoteSummary]
+    @ViewBuilder var card: (NoteSummary) -> Card
+    @Environment(\.pageWidth) private var width
+
+    var body: some View {
+        let columns = width >= 820 ? 3 : width >= 520 ? 2 : 1
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14, alignment: .top), count: columns), spacing: 14) {
+            ForEach(notes) { card($0) }
+        }
+    }
+}
+
+/// A pinned note: its cover (or its category's colours), the icon on the cover's edge, title, category and time,
+/// and the content badges.
+private struct PinnedNoteCard: View {
+    var note: NoteSummary
+    var category: NoteCategory?
+    var selected: Bool
+    @State private var hover = HoverState()
+
+    private var color: Color { category?.color ?? Palette.ink3 }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            cover
+                .frame(height: 72)
+                .frame(maxWidth: .infinity)
+                .clipped()
+                .overlay(alignment: .bottomLeading) {
+                    icon
+                        .padding(3)
+                        .background(Palette.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .padding(.leading, 9)
+                        .offset(y: 17)
+                }
+                .zIndex(1)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(note.displayTitle).font(.system(size: 14, weight: .bold)).lineLimit(1)
+                Text("\(category?.name ?? "Notes") · \(NoteDates.stamp(note.editedAt))")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Palette.ink2)
+                    .lineLimit(1)
+                NoteBadges(note: note, tint: nil).padding(.top, 6)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 24)
+            .padding(.bottom, 12)
+            .frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
+        }
+        .background(Palette.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Palette.surface)
+                .shadow(color: .black.opacity(0.07), radius: 9, y: 6)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(selected ? Color.accentColor : Palette.border, lineWidth: selected ? 2 : 0.5)
+        }
+        .modifier(HoverLift(hover: hover))
+        .onHover { hover.isOn = $0 }
+    }
+
+    @ViewBuilder
+    private var cover: some View {
+        if let name = note.coverImage {
+            StoredNoteImage(name: name, contentMode: .fill) { Palette.surface2 }
+        } else if let cover = note.cover.flatMap(CoverGradient.init(rawValue:)) {
+            MeshGradientView(colors: cover.colors)
+        } else {
+            MeshGradientView(colors: NoteTint.cover(category?.hex ?? 0x8E8E93))
         }
     }
 
-    private var text: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                if note.pinned {
-                    Image(systemName: "pin.fill").font(.system(size: 9)).foregroundStyle(Palette.amber)
-                }
-                Text(highlighted(note.displayTitle))
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if let category {
-                    HStack(spacing: 4) {
-                        ColorDot(color: category.color, size: 6)
-                        Text(category.name).lineLimit(1)
-                    }
-                    .font(.system(size: 11))
-                    .foregroundStyle(.tertiary)
-                    .frame(maxWidth: 96, alignment: .trailing)
-                    .fixedSize()
-                }
-            }
-            HStack(spacing: 6) {
-                Text(NoteDates.short(sort == .created ? note.createdAt : note.editedAt))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                Text(highlighted(query.isEmpty ? note.snippet : excerpt))
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-            }
-            .font(.system(size: 12))
+    @ViewBuilder
+    private var icon: some View {
+        if note.icon != nil || note.iconImage != nil {
+            NoteIconView(summary: note, size: 28)
+        } else {
+            Image(systemName: "doc.text")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 28, height: 28)
+                .background(color.gradient, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .padding(.vertical, 5)
+    }
+}
+
+/// Raises a card a little while the pointer is over it.
+private struct HoverLift: ViewModifier {
+    var hover: HoverState
+
+    func body(content: Content) -> some View {
+        content
+            .offset(y: hover.isOn ? -2 : 0)
+            .animation(.easeOut(duration: 0.15), value: hover.isOn)
+    }
+}
+
+/// A note in a group's card: a glyph tile in its category's colour, title and time, then category, snippet and
+/// badges.
+private struct NoteListRow: View {
+    var note: NoteSummary
+    var category: NoteCategory?
+    var showsCategory: Bool
+    var query: String
+    /// The full note while searching, for the text around the match.
+    var match: Note?
+    var sort: NoteSort
+    var selected: Bool
+    var first: Bool
+    @State private var hover = HoverState()
+
+    private var color: Color { category?.color ?? Palette.ink3 }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            glyph
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(highlighted(note.displayTitle))
+                        .font(.system(size: 14.5, weight: .semibold))
+                        .kerning(-0.1)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(NoteDates.stamp(sort == .created ? note.createdAt : note.editedAt))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Palette.ink2)
+                        .monospacedDigit()
+                }
+                HStack(spacing: 8) {
+                    if showsCategory, let category {
+                        Text(category.name).font(.system(size: 12, weight: .semibold)).foregroundStyle(color).lineLimit(1).fixedSize()
+                        Text("·").font(.system(size: 12)).foregroundStyle(Palette.ink3)
+                    }
+                    Text(highlighted(query.isEmpty ? note.snippet : excerpt))
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(Palette.ink2)
+                        .lineLimit(1)
+                        .frame(maxWidth: 460, alignment: .leading)
+                    NoteBadges(note: note, tint: color)
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 14)
+        .padding(.vertical, 11)
+        .background {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(selected ? Color.accentColor.opacity(0.13) : .clear)
+            HoverFill(hover: hover, color: color.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .overlay(alignment: .top) {
+            if !first { Rectangle().fill(Palette.border).frame(height: 0.5).padding(.leading, 60).padding(.trailing, 14) }
+        }
+        .onHover { hover.isOn = $0 }
+    }
+
+    @ViewBuilder
+    private var glyph: some View {
+        if note.icon != nil || note.iconImage != nil {
+            NoteIconView(summary: note, size: 36)
+        } else {
+            Text(glyphText)
+                .font(.system(size: glyphText.count > 1 ? 13 : 15, weight: .bold, design: glyphText == "</>" ? .monospaced : .default))
+                .foregroundStyle(color)
+                .frame(width: 36, height: 36)
+                .background(color.opacity(0.13), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(color.opacity(0.25), lineWidth: 0.5))
+        }
+    }
+
+    /// What the design's `glyph` picks: Bengali, then code, math, checklist, or plain text.
+    private var glyphText: String {
+        if NoteText.hasBengali(note.title) { return "অ" }
+        if note.hasCode { return "</>" }
+        if note.hasMath { return "∑" }
+        if note.todos > 0 { return "✓" }
+        return "Aa"
     }
 
     /// Text around the first match, for search results.
@@ -638,67 +894,43 @@ private struct NoteRow: View {
     }
 }
 
-/// Highlights a category row while notes are dragged over it, and hands over the dropped note IDs.
-/// A column divider that resizes the column to its left: drag to resize, double-click to reset.
-private struct ColumnResizer: View {
-    let width: CGFloat
-    let range: ClosedRange<CGFloat>
-    let onChange: (CGFloat) -> Void
-    let onReset: () -> Void
-
-    @State private var startWidth: CGFloat?
-    @State private var hovering = false
+/// ∑ for math, </> for code and ☑ done/total for checklists: grey on cards, in the category's colour in rows.
+private struct NoteBadges: View {
+    var note: NoteSummary
+    var tint: Color?
 
     var body: some View {
-        Divider()
-            .overlay {
-                Rectangle()
-                    .fill(hovering || startWidth != nil ? Color.accentColor.opacity(0.5) : .clear)
-                    .frame(width: 2)
-                    .animation(.easeOut(duration: 0.15), value: hovering)
+        HStack(spacing: 4) {
+            if note.hasMath { badge(Text("∑")).help("Math") }
+            if note.hasCode { badge(Text("</>").font(.system(size: 10.5, weight: .bold, design: .monospaced))).help("Code") }
+            if note.todos > 0 {
+                badge(Text("\(Image(systemName: "checkmark.square")) \(note.todosDone)/\(note.todos)")).help("To-dos")
             }
-            .overlay {
-                Color.clear
-                    .frame(width: 9)
-                    .contentShape(Rectangle())
-                    .onHover { hovering = $0 }
-                    #if os(macOS)
-                    .pointerStyle(.columnResize)
-                    #endif
-                    .gesture(
-                        DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                            .onChanged { value in
-                                let start = startWidth ?? width
-                                startWidth = start
-                                onChange(min(max(start + value.translation.width, range.lowerBound), range.upperBound))
-                            }
-                            .onEnded { _ in startWidth = nil }
-                    )
-                    .onTapGesture(count: 2, perform: onReset)
-            }
-            .zIndex(1)
+        }
+        .fixedSize()
+    }
+
+    private func badge(_ text: Text) -> some View {
+        text
+            .font(.system(size: 11, weight: .bold))
+            .monospacedDigit()
+            .foregroundStyle(tint ?? Palette.ink2)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1)
+            .background((tint?.opacity(0.12) ?? Palette.surface2), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
     }
 }
 
-private struct NoteDropTarget: ViewModifier {
-    var id: String
-    @Binding var target: String?
-    var onDrop: ([ID], String) -> Void
+/// Colours for a pinned note without a cover: its category's colour, lightened three ways for the mesh.
+enum NoteTint {
+    static func cover(_ hex: UInt32) -> [UInt32] {
+        [mix(hex, 0xFFFFFF, 0.6), mix(hex, 0xFFE3F3, 0.72), mix(hex, 0xDCE6FF, 0.66)]
+    }
 
-    func body(content: Content) -> some View {
-        content
-            .dropDestination(for: String.self) { items, _ in
-                let ids = items.flatMap { $0.split(separator: "\n").map(String.init) }
-                onDrop(ids, id)
-                return !ids.isEmpty
-            } isTargeted: { on in
-                if on { target = id } else if target == id { target = nil }
-            }
-            .listRowBackground(
-                target == id
-                    ? RoundedRectangle(cornerRadius: 7).fill(Color.accentColor.opacity(0.1)).overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Color.accentColor, lineWidth: 1.5)).padding(.horizontal, 8)
-                    : nil
-            )
+    private static func mix(_ a: UInt32, _ b: UInt32, _ t: Double) -> UInt32 {
+        func ch(_ v: UInt32, _ s: UInt32) -> Double { Double((v >> s) & 0xFF) }
+        func m(_ s: UInt32) -> UInt32 { UInt32((ch(a, s) * (1 - t) + ch(b, s) * t).rounded()) << s }
+        return m(16) | m(8) | m(0)
     }
 }
 
@@ -785,6 +1017,21 @@ enum NoteDates {
         if days < 30 { return "Previous 30 days" }
         if Day.calendar.isDate(date, equalTo: .now, toGranularity: .year) { return date.formatted(.dateTime.month(.wide)) }
         return date.formatted(.dateTime.year())
+    }
+
+    /// The list page's time: "2m ago" / "5h ago" today, the time yesterday, the weekday this week, then "Oct 18".
+    static func stamp(_ date: Date, now: Date = .now) -> String {
+        let days = -(Day.fromToday(date) ?? 0)
+        if days <= 0 {
+            let s = now.timeIntervalSince(date)
+            if s < 45 { return "just now" }
+            if s < 3600 { return "\(max(1, Int((s / 60).rounded())))m ago" }
+            return "\(Int((s / 3600).rounded(.down)))h ago"
+        }
+        if days == 1 { return date.formatted(date: .omitted, time: .shortened) }
+        if days < 7 { return date.formatted(.dateTime.weekday(.abbreviated)) }
+        let sameYear = Day.calendar.isDate(date, equalTo: now, toGranularity: .year)
+        return sameYear ? date.formatted(.dateTime.month(.abbreviated).day()) : date.formatted(.dateTime.month(.abbreviated).day().year())
     }
 
     /// "just now", "5 min ago", "2 h ago", "3 d ago", then a date.

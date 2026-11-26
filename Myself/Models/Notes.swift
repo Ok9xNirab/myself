@@ -32,10 +32,31 @@ struct NoteSummary: Identifiable, Equatable {
     var icon: String?
     var iconColor: Int?
     var iconImage: String?
+    var cover: String?
+    var coverImage: String?
+    /// What the list's badges show: math and code blocks, and the checklist's done / total.
+    var hasMath: Bool
+    var hasCode: Bool
+    var todosDone: Int
+    var todos: Int
 
     var displayTitle: String { title.isEmpty ? "Untitled" : title }
 
     init(_ note: Note) {
+        cover = note.cover
+        coverImage = note.coverImage
+        var (math, code, done, todos) = (false, false, 0, 0)
+        for block in note.blocks {
+            switch block.kind {
+            case .math: math = true
+            case .code: code = true
+            case .todo:
+                todos += 1
+                if block.done == true { done += 1 }
+            default: break
+            }
+        }
+        (hasMath, hasCode, todosDone, self.todos) = (math, code, done, todos)
         id = note.id
         categoryID = note.categoryID
         title = note.title

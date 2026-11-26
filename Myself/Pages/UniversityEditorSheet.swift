@@ -21,10 +21,11 @@ func trimmed(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNe
 struct SwatchPicker: View {
     @Binding var hex: UInt32
     var size: CGFloat = 16
+    var swatches = Palette.swatches
 
     var body: some View {
         HStack(spacing: 8) {
-            ForEach(Palette.swatches, id: \.self) { swatch in
+            ForEach(swatches, id: \.self) { swatch in
                 let selected = swatch == hex
                 Button { hex = swatch } label: {
                     Circle()

@@ -403,6 +403,9 @@ final class AppStore {
     // MARK: Navigation
 
     var page: Page { history[historyIndex] }
+    /// What the toolbar breadcrumb shows after a page's name ("Notes / University"), set by the page itself. It only
+    /// shows while `crumb.page` is the current page.
+    var crumb: (page: Page, detail: String)?
     var canGoBack: Bool { historyIndex > 0 }
     var canGoForward: Bool { historyIndex < history.count - 1 }
 
@@ -782,10 +785,10 @@ final class AppStore {
     }
 
     @discardableResult
-    func addNoteCategory(name: String) -> NoteCategory? {
+    func addNoteCategory(name: String, hex: UInt32? = nil) -> NoteCategory? {
         let name = name.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return nil }
-        let category = NoteCategory(id: newID(), name: name, hex: NoteCategory.palette[noteCategories.count % NoteCategory.palette.count],
+        let category = NoteCategory(id: newID(), name: name, hex: hex ?? NoteCategory.palette[noteCategories.count % NoteCategory.palette.count],
                                     sortOrder: (noteCategories.map(\.sortOrder).max() ?? -1) + 1, updatedAt: .now)
         noteCategories.append(category)
         sync.save(category)

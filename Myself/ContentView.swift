@@ -128,11 +128,15 @@ struct ContentView: View {
 /// The toolbar's breadcrumb: the page's outline icon and its name (the v2 `.crumb`).
 private struct PageCrumb: View {
     var page: Page
+    @Environment(AppStore.self) private var store
 
     var body: some View {
         HStack(spacing: 7) {
             Image(systemName: page.systemImage).font(.system(size: 14, weight: .regular)).foregroundStyle(Palette.ink2)
             Text(page.title).font(.system(size: 14, weight: .semibold))
+            if let crumb = store.crumb, crumb.page == page {
+                Text("/ \(crumb.detail)").font(.system(size: 14, weight: .medium)).foregroundStyle(Palette.ink2)
+            }
         }
         .lineLimit(1)
         .fixedSize()

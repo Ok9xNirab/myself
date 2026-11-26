@@ -10,6 +10,8 @@ struct NoteEditor: View {
     var isFresh: Bool
     /// The Notes page's list toggle; nil in a note's own window, which has no list.
     var showsBrowser: Binding<Bool>?
+    /// The list is a page of its own (Notes), so the toggle is a Back button rather than a sidebar switch.
+    var backToList = false
     var onDuplicate: () -> Void
     var onDelete: () -> Void
 
@@ -1017,8 +1019,13 @@ struct NoteEditor: View {
     private var toolbar: some View {
         HStack(spacing: 1) {
             if let showsBrowser {
-                toolButton("Show Note List", "sidebar.left", on: !showsBrowser.wrappedValue) { showsBrowser.wrappedValue.toggle() }
-                    .help(showsBrowser.wrappedValue ? "Hide note list" : "Show note list")
+                if backToList {
+                    toolButton("All Notes", "chevron.left") { showsBrowser.wrappedValue = true }
+                        .help("Back to all notes")
+                } else {
+                    toolButton("Show Note List", "sidebar.left", on: !showsBrowser.wrappedValue) { showsBrowser.wrappedValue.toggle() }
+                        .help(showsBrowser.wrappedValue ? "Hide note list" : "Show note list")
+                }
                 separator
             }
             if reading {
