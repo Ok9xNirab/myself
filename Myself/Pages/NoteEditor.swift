@@ -1006,6 +1006,18 @@ struct NoteEditor: View {
                 }
             }
         }
+        #if os(macOS)
+        // Only on a page: a note in its own window is already there.
+        if showsBrowser != nil {
+            ToolbarItem(placement: .primaryAction) {
+                Button("Open in New Window", systemImage: "macwindow") {
+                    store.saveUnsavedNotes()
+                    openWindow(id: NoteWindow.id, value: note.id)
+                }
+                .help("Open this note in a new window")
+            }
+        }
+        #endif
         ToolbarItem(placement: .primaryAction) {
             Button(reading ? "Turn Off Reader Mode" : "Reader Mode", systemImage: reading ? "book.fill" : "book", action: toggleReader)
                 .keyboardShortcut("r", modifiers: [.command, .shift])
