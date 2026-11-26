@@ -19,6 +19,21 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
+    /// The short part after the slash in the toolbar's breadcrumb ("Office / Tasks").
+    var crumb: String {
+        switch self {
+        case .dashboard: "Today"
+        case .todos: "All tasks"
+        case .university: "Classes"
+        case .office: "Tasks"
+        case .jobStudy: "Revision"
+        case .products: "Boards"
+        case .workout: "Program"
+        case .notes: "Pages"
+        case .books: "Library"
+        }
+    }
+
     var subtitle: String {
         switch self {
         case .dashboard: "Everything that matters, at a glance"

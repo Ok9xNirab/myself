@@ -100,13 +100,20 @@ struct ContentView: View {
             .id(store.page)
             .navigationTitle(store.page.title)
             #if os(macOS)
-            .navigationSubtitle(store.page.subtitle)
+            // The window keeps its title (Window menu, Mission Control); the toolbar shows the v2 breadcrumb instead.
+            .toolbar(removing: .title)
             #endif
             .toolbar { toolbar }
     }
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
+        #if os(macOS)
+        ToolbarItem(placement: .navigation) {
+            PageCrumb(page: store.page)
+        }
+        .sharedBackgroundVisibility(.hidden)
+        #endif
         // No Back / Forward buttons (the v2 design has none); Go › Back / Forward (⌘[ / ⌘]) still navigate.
         ToolbarItem(placement: .primaryAction) {
             Button("Search", systemImage: "magnifyingglass") { store.isQuickOpenPresented = true }
@@ -114,6 +121,25 @@ struct ContentView: View {
         }
     }
 }
+
+#if os(macOS)
+/// The toolbar's breadcrumb: the page's outline icon, its name, and "/ crumb" in grey (the v2 `.crumb`).
+private struct PageCrumb: View {
+    var page: Page
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: page.systemImage).font(.system(size: 14, weight: .regular)).foregroundStyle(Palette.ink2)
+            Text(page.title).font(.system(size: 14, weight: .semibold))
+            Text("/ \(page.crumb)").font(.system(size: 14, weight: .medium)).foregroundStyle(Palette.ink2)
+        }
+        .lineLimit(1)
+        .fixedSize()
+        .padding(.leading, 6)
+        .accessibilityElement(children: .combine)
+    }
+}
+#endif
 
 private struct PageView: View {
     var page: Page
