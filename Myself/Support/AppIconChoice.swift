@@ -3,11 +3,11 @@ import SwiftUI
 /// The app icon picked in Settings › Appearance › App icon, saved per device (`PrefKey.appIcon`).
 ///
 /// The alternates are Icon Composer bundles next to `AppIcon.icon` (`AppIconOctopus.icon`, `AppIconSpaces.icon`),
-/// listed in `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES`. The default tile draws `AppIcon` from the asset
-/// catalog, so it follows `AppIcon.icon` whenever that changes.
+/// listed in `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES` (not for macOS).
 ///
-/// iOS and visionOS switch the home screen icon. macOS has no alternate icon API: the Dock shows the choice while
-/// MySelf runs (`NSApp.applicationIconImage`), and Finder and the Dock show the default icon once it quits.
+/// iOS, iPadOS and visionOS only: the system switches the home screen icon and draws it in every style (dark,
+/// clear, tinted). macOS has no alternate icon API, and a Dock image set while the app runs can't follow the Mac's
+/// icon style, so the Mac always shows the default icon and has no picker.
 enum AppIconChoice: String, CaseIterable, Identifiable {
     case standard = ""
     case octopus = "AppIconOctopus"
@@ -28,35 +28,15 @@ enum AppIconChoice: String, CaseIterable, Identifiable {
     /// The asset catalog's name for this icon, or nil for the primary one.
     var assetName: String? { self == .standard ? nil : rawValue }
 
+    /// A picture of the icon for the picker (`Assets.xcassets/AppIconPreview…`, light and dark), since iOS can't
+    /// load an app icon as an image. Re-export it with `ictool` when the icon changes.
+    var previewName: String { "AppIconPreview" + title }
+
     static var saved: AppIconChoice {
         AppIconChoice(rawValue: UserDefaults.standard.string(forKey: PrefKey.appIcon) ?? "") ?? .standard
     }
 
-    #if os(macOS)
-    /// The icon from the app's asset catalog. Not `NSWorkspace.icon(forFile:)`: Icon Services caches that per
-    /// bundle, so it can show an older build's icon.
-    var image: NSImage {
-        NSImage(named: assetName ?? "AppIcon") ?? NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)
-    }
-
-    /// Shows the saved icon in the Dock; called at launch and when the setting changes. The default leaves the Dock
-    /// to the system, which draws the bundle's layered icon in the Mac's icon style (default, dark, clear or
-    /// tinted). An alternate is a flat image, so it can't follow that style.
-    static func applySaved() {
-        NSApp.applicationIconImage = saved.assetName == nil ? nil : saved.dockImage
-    }
-
-    /// The catalog image fills its whole canvas, but a Dock icon sits inside the macOS icon grid: an 824 pt tile
-    /// centred on a 1024 pt canvas. Without that margin it shows larger than every other icon.
-    private var dockImage: NSImage? {
-        guard let icon = NSImage(named: assetName ?? "AppIcon") else { return nil }
-        let canvas = NSSize(width: 1024, height: 1024)
-        return NSImage(size: canvas, flipped: false) { rect in
-            icon.draw(in: rect.insetBy(dx: 100, dy: 100))
-            return true
-        }
-    }
-    #elseif canImport(UIKit)
+    #if canImport(UIKit)
     static func applySaved() {
         let name = saved.assetName
         guard UIApplication.shared.supportsAlternateIcons, UIApplication.shared.alternateIconName != name else { return }
@@ -65,6 +45,7 @@ enum AppIconChoice: String, CaseIterable, Identifiable {
     #endif
 }
 
+#if canImport(UIKit)
 /// Settings › Appearance › App icon: one tile per icon, the selected one ringed in the accent colour.
 struct AppIconPicker: View {
     /// Plain state written through to UserDefaults on a click: `@AppStorage` here sometimes kept the earlier
@@ -105,14 +86,7 @@ struct AppIconPicker: View {
 
     @ViewBuilder
     private func preview(_ icon: AppIconChoice) -> some View {
-        #if os(macOS)
-        Image(nsImage: icon.image).resizable().interpolation(.high)
-        #else
-        if let image = UIImage(named: icon.assetName ?? "AppIcon") {
-            Image(uiImage: image).resizable().clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        } else {
-            RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.quaternary)
-        }
-        #endif
+        Image(icon.previewName).resizable().interpolation(.high)
     }
 }
+#endif

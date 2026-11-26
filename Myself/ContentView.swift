@@ -30,7 +30,6 @@ struct ContentView: View {
             SearchShortcut.shared.openMainWindow = { openWindow(id: "main") }
             SearchShortcut.shared.openNoteWindow = { openWindow(id: NoteWindow.id, value: $0) }
             SearchShortcut.shared.start(store: store)
-            AppIconChoice.applySaved()
             #if DIRECT_DISTRIBUTION
             UpdateChecker.shared.checkAutomatically()
             #endif
