@@ -1,20 +1,18 @@
 import SwiftUI
 
-/// Add / edit sheet for an office task. A task that isn't in the store yet is added on save.
+/// Add / edit sheet for an office task, in the v2 quick-add style. A task that isn't in the store yet is added on save.
 struct OfficeEditorSheet: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     /// The page's undo manager, so ⌘Z in the main window undoes the save.
     var undoManager: UndoManager?
     @State private var draft: OfficeTask
-    @State private var hasDue: Bool
     @State private var link: String
     @FocusState private var titleFocused: Bool
 
     init(task: OfficeTask, undoManager: UndoManager?) {
         self.undoManager = undoManager
         _draft = State(initialValue: task)
-        _hasDue = State(initialValue: task.due != nil)
         _link = State(initialValue: task.refURL?.absoluteString ?? "")
     }
 
@@ -31,70 +29,61 @@ struct OfficeEditorSheet: View {
     }
 
     private var linkIsInvalid: Bool { !trimmedLink.isEmpty && linkURL == nil }
-
-    private var due: Binding<Date> {
-        Binding(get: { draft.due ?? Day.offset(0) }, set: { draft.due = Day.calendar.startOfDay(for: $0) })
-    }
+    private var canSave: Bool { !trimmedTitle.isEmpty && !linkIsInvalid }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    TextField("Title", text: $draft.title, prompt: Text("What needs doing at work?"))
-                        .focused($titleFocused)
-                    TextField("Notes", text: $draft.desc, prompt: Text("Notes (optional)"), axis: .vertical)
-                        .lineLimit(2...5)
-                }
-
-                Section {
-                    TextField("Link", text: $link, prompt: Text("https://github.com/org/repo/issues/123"))
+        QuickSheet(isNew: isNew, addTitle: "Add task", canSave: canSave, onSave: save) {
+            SheetCheckbox(isOn: draft.done) { draft.done.toggle() }
+                .padding(.top, 6)
+                .disabled(isNew)
+        } header: {
+            SheetTitleField(title: "Title", prompt: "What needs doing at work?", text: $draft.title, onSubmit: submit)
+                .focused($titleFocused)
+            TextField("Notes", text: $draft.desc, prompt: Text("Add notes"), axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.system(size: 14))
+                .lineLimit(1...5)
+        } rows: {
+            SheetRow(title: "Link", systemImage: "link") {
+                HStack(spacing: 8) {
+                    SheetTextField(title: "Link", prompt: "github.com/org/repo/issues/123", text: $link, maxWidth: 340)
                         .autocorrectionDisabled()
                         #if os(iOS)
                         .textInputAutocapitalization(.never)
                         .keyboardType(.URL)
                         #endif
-                } header: {
-                    Text("Reference")
-                } footer: {
-                    if linkIsInvalid {
-                        Text("That doesn\u{2019}t look like a web link.").foregroundStyle(Palette.red)
+                    if let url = linkURL {
+                        Link(destination: url) { Image(systemName: "arrow.up.right.square") }
+                            .help("Open \(url.host() ?? "link")")
                     }
                 }
-
-                Section {
-                    LabeledContent("Priority") { PriorityBadge(priority: .high, locked: true) }
-                    Toggle("Due date", isOn: $hasDue.animation())
-                    if hasDue {
-                        DatePicker("Date", selection: due, displayedComponents: .date)
-                    }
+                if linkIsInvalid {
+                    Text("That doesn\u{2019}t look like a web link.").font(.system(size: 12)).foregroundStyle(Palette.red)
                 }
             }
-            .formStyle(.grouped)
-            .navigationTitle(isNew ? "New Office Task" : "Edit Office Task")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(isNew ? "Add" : "Save", action: save)
-                        .disabled(trimmedTitle.isEmpty || linkIsInvalid)
-                }
+            SheetRow(title: "Due", systemImage: "calendar") {
+                DateChips(date: $draft.due, options: [("Today", 0), ("Tomorrow", 1), ("In a week", 7)])
+            }
+            SheetRow(title: "Priority", systemImage: "flag", last: true) {
+                Badge(text: "High \u{00B7} locked", systemImage: "flag.fill", color: Palette.red)
             }
         }
-        #if os(macOS)
-        .frame(width: 460)
-        #endif
         .onAppear { titleFocused = isNew }
     }
 
+    private func submit() {
+        guard canSave else { return }
+        save()
+        dismiss()
+    }
+
     private func save() {
-        guard !trimmedTitle.isEmpty, !linkIsInvalid else { return }
+        guard canSave else { return }
         draft.title = trimmedTitle
         draft.desc = draft.desc.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.refURL = linkURL
-        draft.due = hasDue ? (draft.due ?? Day.offset(0)) : nil
+        draft.completedAt = draft.done ? (draft.completedAt ?? .now) : nil
         store.saveOfficeTask(draft, undoManager: undoManager)
-        dismiss()
     }
 }
 
