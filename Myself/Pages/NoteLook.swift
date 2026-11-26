@@ -250,6 +250,81 @@ private struct PickerChrome<Content: View>: View {
     }
 }
 
+/// Every SF Symbol (`SymbolCatalog`), searchable by name and keyword and filtered by category; the design's
+/// twelve come first while nothing is searched or filtered.
+private struct SymbolGrid: View {
+    var selected: String?
+    var onPick: (String) -> Void
+    @State private var catalog: SymbolCatalog?
+    @State private var query = ""
+    @State private var category: String?
+
+    var body: some View {
+        let shown = symbols
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                NoteSearchField(placeholder: "Search \(catalog.map { $0.names.count.formatted() } ?? "") symbols", text: $query)
+                if let catalog, !catalog.categories.isEmpty {
+                    Menu {
+                        Picker("Category", selection: $category) {
+                            Label("All", systemImage: "square.grid.2x2").tag(String?.none)
+                            Divider()
+                            ForEach(catalog.categories) { Label($0.title, systemImage: $0.icon).tag(String?.some($0.id)) }
+                        }
+                        .pickerStyle(.inline)
+                    } label: {
+                        Image(systemName: catalog.categories.first { $0.id == category }?.icon ?? "line.3.horizontal.decrease")
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.borderless)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help(catalog.categories.first { $0.id == category }?.title ?? "Category")
+                }
+            }
+            .padding(.top, 10)
+            pickerHeading(category.flatMap { id in catalog?.categories.first { $0.id == id }?.title } ?? (query.isEmpty ? "Symbol" : "\(shown.count.formatted()) found"))
+            ScrollView {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 7), spacing: 6) {
+                    ForEach(shown, id: \.self) { symbol in
+                        let on = selected == symbol
+                        Button { onPick(symbol) } label: {
+                            Image(systemName: symbol)
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundStyle(on ? Palette.surface : .primary)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 38)
+                                .background(on ? Color.primary : Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help(symbol)
+                    }
+                }
+                if shown.isEmpty {
+                    Text("No symbols match \u{201C}\(query)\u{201D}")
+                        .font(.system(size: 12.5)).foregroundStyle(Palette.ink2)
+                        .frame(maxWidth: .infinity).padding(.vertical, 30)
+                }
+            }
+            .frame(height: 220)
+        }
+        .task { if catalog == nil { catalog = await SymbolCatalog.load() } }
+    }
+
+    private var symbols: [String] {
+        guard let catalog, !catalog.names.isEmpty else {
+            let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+            return NoteIcon.symbols.filter { q.isEmpty || $0.contains(q) }
+        }
+        let found = catalog.symbols(in: category, matching: query)
+        guard query.isEmpty, category == nil else { return found }
+        // The design's set first, then the rest in the SF Symbols order.
+        let suggested = NoteIcon.symbols + (selected.map { [$0] } ?? [])
+        return Array(NSOrderedSet(array: suggested + found)) as? [String] ?? found
+    }
+}
+
 private func pickerHeading(_ text: String) -> some View {
     Text(text)
         .font(.system(size: 11, weight: .bold))
@@ -357,25 +432,10 @@ struct NoteIconPicker: View {
     var body: some View {
         PickerChrome(tab: $tab, tabs: ["Symbols", "Upload"]) {
             if tab == 0 {
-                pickerHeading("Symbol")
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 6), spacing: 6) {
-                    ForEach(NoteIcon.symbols, id: \.self) { symbol in
-                        let on = note.iconImage == nil && note.icon == symbol
-                        Button {
-                            store.setNoteLook(note.id, actionName: "Change Icon", undoManager: undoManager) {
-                                ($0.icon, $0.iconImage) = (symbol, nil)
-                                if $0.iconColor == nil { $0.iconColor = 0 }
-                            }
-                        } label: {
-                            Image(systemName: symbol)
-                                .font(.system(size: 17, weight: .medium))
-                                .foregroundStyle(on ? Palette.surface : .primary)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 40)
-                                .background(on ? Color.primary : Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
+                SymbolGrid(selected: note.iconImage == nil ? note.icon : nil) { symbol in
+                    store.setNoteLook(note.id, actionName: "Change Icon", undoManager: undoManager) {
+                        ($0.icon, $0.iconImage) = (symbol, nil)
+                        if $0.iconColor == nil { $0.iconColor = 0 }
                     }
                 }
                 pickerHeading("Color")
