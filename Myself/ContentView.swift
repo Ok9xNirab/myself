@@ -205,7 +205,8 @@ private struct Sidebar: View {
                         .padding(.horizontal, 12)
                         .padding(.bottom, 10)
                 }
-                footer
+                // With manual sync the footer is hidden: Sync Now (⌘S) reports through a toast, and Settings is ⌘,.
+                if !store.sync.isManual { footer }
             }
         }
     }
@@ -225,12 +226,7 @@ private struct Sidebar: View {
     private var footer: some View {
         let sync = store.sync
         return HStack(spacing: 9) {
-            // With manual sync the status is hidden: Sync Now (⌘S) reports through a toast instead.
-            if sync.isManual {
-                Spacer()
-            } else {
-                status(sync)
-            }
+            status(sync)
             Button("Settings", systemImage: "gearshape") { store.openSettings(.appearance) }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
