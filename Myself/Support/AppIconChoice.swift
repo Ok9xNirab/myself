@@ -3,8 +3,8 @@ import SwiftUI
 /// The app icon picked in Settings › Appearance › App icon, saved per device (`PrefKey.appIcon`).
 ///
 /// The alternates are Icon Composer bundles next to `AppIcon.icon` (`AppIconOctopus.icon`, `AppIconSpaces.icon`),
-/// listed in `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES`. The default tile draws the bundle's own icon, so it
-/// follows `AppIcon.icon` whenever that changes.
+/// listed in `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES`. The default tile draws `AppIcon` from the asset
+/// catalog, so it follows `AppIcon.icon` whenever that changes.
 ///
 /// iOS and visionOS switch the home screen icon. macOS has no alternate icon API: the Dock shows the choice while
 /// MySelf runs (`NSApp.applicationIconImage`), and Finder and the Dock show the default icon once it quits.
@@ -33,15 +33,16 @@ enum AppIconChoice: String, CaseIterable, Identifiable {
     }
 
     #if os(macOS)
-    /// The icon as an image: the bundle's icon for the default, the compiled alternate otherwise.
+    /// The icon from the app's asset catalog. Not `NSWorkspace.icon(forFile:)`: Icon Services caches that per
+    /// bundle, so it can show an older build's icon.
     var image: NSImage {
-        if let assetName, let image = NSImage(named: assetName) { return image }
-        return NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)
+        NSImage(named: assetName ?? "AppIcon") ?? NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)
     }
 
-    /// Shows the saved icon in the Dock; called at launch and when the setting changes.
+    /// Shows the saved icon in the Dock; called at launch and when the setting changes. The default is set too,
+    /// so a Dock tile cached from an older build is replaced.
     static func applySaved() {
-        NSApp.applicationIconImage = saved.assetName.flatMap { NSImage(named: $0) }
+        NSApp.applicationIconImage = NSImage(named: saved.assetName ?? "AppIcon")
     }
     #elseif canImport(UIKit)
     static func applySaved() {
