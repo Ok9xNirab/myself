@@ -107,26 +107,18 @@ struct NotesView: View {
                 .help("Sort notes")
             }
         }
-        // On the list it's the last item, so it stands on its own rather than pressed against the end of the shared
-        // glass capsule. In the editor the editor's buttons follow it, so it stays in the capsule.
-        if showsList {
-            ToolbarSpacer(.fixed, placement: .primaryAction)
-        }
+        // A plain toolbar button on the list, like the other pages; the accent pill only in the editor.
         ToolbarItem(placement: .primaryAction) {
-            Button { addNote() } label: {
-                Label("New note", systemImage: "square.and.pencil")
+            if showsList {
+                Button("New note", systemImage: "square.and.pencil") { addNote() }
                     .labelStyle(.titleAndIcon)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(SystemAccent.shared.onFill)
-                    .padding(.horizontal, 12)
-                    .frame(height: 28)
-                    .background(SystemAccent.shared.fill, in: Capsule())
-                    .contentShape(Capsule())
+                    .help("New note (⌥⌘N)")
+            } else {
+                Button { addNote() } label: { ToolbarPill(title: "New note", systemImage: "square.and.pencil") }
+                    .buttonStyle(.plain)
+                    .help("New note (⌥⌘N)")
             }
-            .buttonStyle(.plain)
-            .help("New note (⌥⌘N)")
         }
-        .sharedBackgroundVisibility(showsList ? .hidden : .automatic)
     }
 
     // MARK: Derived

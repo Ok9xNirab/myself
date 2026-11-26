@@ -71,18 +71,9 @@ struct TodosView: View {
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button(action: store.newTodo) {
-                    Label("Task", systemImage: "plus")
-                        .labelStyle(.titleAndIcon)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Palette.surface)
-                        .padding(.horizontal, 12)
-                        .frame(height: 28)
-                        .background(Color.primary, in: Capsule())
-                        .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .help("New todo (\u{2318}N)")
+                Button("Task", systemImage: "plus", action: store.newTodo)
+                    .labelStyle(.titleAndIcon)
+                    .help("New todo (\u{2318}N)")
             }
         }
         .sheet(item: $store.editingTodo) { TodoEditorSheet(todo: $0, undoManager: undoManager) }

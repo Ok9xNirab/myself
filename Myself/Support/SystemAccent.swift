@@ -33,3 +33,21 @@ final class SystemAccent {
     var fill: Color { isMulticolor ? .primary : .accentColor }
     var onFill: Color { isMulticolor ? Palette.surface : .white }
 }
+
+/// Label of the note editor's New note button: a pill in the Mac's accent colour, black under Multicolor. Other pages
+/// use a plain title-and-icon toolbar button instead.
+struct ToolbarPill: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        Label(title, systemImage: systemImage)
+            .labelStyle(.titleAndIcon)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(SystemAccent.shared.onFill)
+            .padding(.horizontal, 12)
+            .frame(height: 28)
+            .background(SystemAccent.shared.fill, in: Capsule())
+            .contentShape(Capsule())
+    }
+}

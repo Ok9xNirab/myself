@@ -188,11 +188,6 @@ private struct Sidebar: View {
                         .padding(.bottom, 6)
                     ForEach(spaces) { row($0, space: true) }
                 }
-                if store.isEnabled(.university), let next = store.nextClass() {
-                    UpNextCard(session: next)
-                        .padding(.top, 14)
-                        .onTapGesture { store.go(.university) }
-                }
             }
             .padding(.horizontal, 12)
             .padding(.top, 6)
@@ -200,7 +195,18 @@ private struct Sidebar: View {
         }
         .scrollIndicators(.never)
         .modifier(SidebarBackground(style: style))
-        .safeAreaInset(edge: .bottom, spacing: 0) { footer }
+        // Up next stays at the bottom, just above the iCloud footer, however long the list is.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                if store.isEnabled(.university), let next = store.nextClass() {
+                    UpNextCard(session: next)
+                        .onTapGesture { store.go(.university) }
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 10)
+                }
+                footer
+            }
+        }
     }
 
     private func row(_ page: Page, space: Bool) -> some View {

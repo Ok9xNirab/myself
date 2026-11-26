@@ -159,18 +159,9 @@ private struct BookLibrary: View {
             .help("Sort books, manage categories")
         }
         ToolbarItem(placement: .primaryAction) {
-            Button(action: addBook) {
-                Label("Add book", systemImage: "plus")
-                    .labelStyle(.titleAndIcon)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Palette.surface)
-                    .padding(.horizontal, 12)
-                    .frame(height: 28)
-                    .background(Color.primary, in: Capsule())
-                    .contentShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .help("Add a book")
+            Button("Add book", systemImage: "plus", action: addBook)
+                .labelStyle(.titleAndIcon)
+                .help("Add a book")
         }
     }
 
