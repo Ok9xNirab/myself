@@ -25,14 +25,14 @@ struct NoteEditor: View {
     #endif
     /// Block (or `titleID`) whose text view is showing.
     @State private var editingID: ID?
-    /// Last block that had focus, for the toolbar's block buttons.
+    /// Last block that had focus.
     @State private var activeID: ID?
     @State private var pendingFocus: PendingFocus?
     @State private var slash: SlashMenu?
     @State private var textFocus = NoteTextFocus()
     @State private var paperWidth: CGFloat = 780
     @State private var scrollHeight: CGFloat = 0
-    /// Width of the editor below the toolbar, which decides whether the side rail fits.
+    /// Width of the editor, which decides whether the side rail fits.
     @State private var editorWidth: CGFloat = 0
     @AppStorage(PrefKey.paperWidth) private var paperWidthSetting = PaperWidth.comfortable
     /// Pointer over the top of the note, which shows Add icon / Add cover.
@@ -92,8 +92,6 @@ struct NoteEditor: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            toolbar
-            Divider()
             ScrollViewReader { proxy in
                 HStack(alignment: .top, spacing: 0) {
                     ScrollView {
@@ -154,6 +152,7 @@ struct NoteEditor: View {
             statusBar
         }
         .scapeBackground(height: 260)
+        .toolbar { toolbar }
         .onAppear {
             splitPastedDocuments()
             if isFresh && !reading { focus(Self.titleID, caret: nil) }
@@ -992,33 +991,27 @@ struct NoteEditor: View {
 
     // MARK: Toolbar
 
-    private var toolbar: some View {
-        HStack(spacing: 1) {
-            if let showsBrowser {
+    /// Back, Reader mode and the page menu sit in the window's toolbar: the editor has no bar of its own, since
+    /// formatting is markdown and shortcuts (Help › Markdown Guidelines).
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        if let showsBrowser {
+            ToolbarItem(placement: .navigation) {
                 if backToList {
-                    toolButton("All Notes", "chevron.left") { showsBrowser.wrappedValue = true }
+                    Button("All Notes", systemImage: "chevron.left") { showsBrowser.wrappedValue = true }
                         .help("Back to all notes")
                 } else {
-                    toolButton("Show Note List", "sidebar.left", on: !showsBrowser.wrappedValue) { showsBrowser.wrappedValue.toggle() }
+                    Button("Show Note List", systemImage: "sidebar.left") { showsBrowser.wrappedValue.toggle() }
                         .help(showsBrowser.wrappedValue ? "Hide note list" : "Show note list")
                 }
             }
-            if reading {
-                if showsBrowser != nil { separator }
-                Label("Reader mode", systemImage: "book")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Palette.ink3)
-                    .padding(.horizontal, 6)
-            }
-            Spacer()
-            toolButton(reading ? "Turn Off Reader Mode (⇧⌘R)" : "Reader Mode (⇧⌘R)", reading ? "book.fill" : "book", on: reading, action: toggleReader)
-                .keyboardShortcut("r", modifiers: [.command, .shift])
-            pageMenu
         }
-        .buttonStyle(.borderless)
-        .foregroundStyle(Palette.ink2)
-        .padding(.horizontal, 10)
-        .frame(height: 42)
+        ToolbarItem(placement: .primaryAction) {
+            Button(reading ? "Turn Off Reader Mode" : "Reader Mode", systemImage: reading ? "book.fill" : "book", action: toggleReader)
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .help(reading ? "Turn off reader mode (⇧⌘R)" : "Reader mode (⇧⌘R)")
+        }
+        ToolbarItem(placement: .primaryAction) { pageMenu }
     }
 
     /// Entering reader mode leaves any text being typed (saving it) and drops a block selection.
@@ -1029,23 +1022,6 @@ struct NoteEditor: View {
             store.saveUnsavedNotes()
         }
         store.setReaderMode(note.id, !reading)
-    }
-
-    private var separator: some View {
-        Rectangle().fill(Palette.border).frame(width: 1, height: 18).padding(.horizontal, 6)
-    }
-
-    private func toolButton(_ title: String, _ systemImage: String, on: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 13, weight: .medium))
-                .frame(width: 28, height: 28)
-                .foregroundStyle(on ? Color.accentColor : Palette.ink2)
-                .background(on ? Color.accentColor.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 6))
-                .contentShape(Rectangle())
-        }
-        .help(title)
-        .accessibilityLabel(title)
     }
 
     private var pageMenu: some View {
@@ -1063,11 +1039,9 @@ struct NoteEditor: View {
             Button("Duplicate Page", systemImage: "plus.square.on.square", action: onDuplicate)
             Button("Delete Page", systemImage: "trash", role: .destructive, action: onDelete)
         } label: {
-            Image(systemName: "ellipsis").frame(width: 28, height: 28)
+            Label("Page Options", systemImage: "ellipsis")
         }
-        .menuStyle(.button)
         .menuIndicator(.hidden)
-        .fixedSize()
         .help("Page options")
     }
 
