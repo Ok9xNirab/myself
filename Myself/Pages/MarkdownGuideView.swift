@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Help › MySelf Help: what the note editor understands, since its toolbar has no formatting buttons.
+/// Help › Markdown Guidelines: what the note editor understands, since its toolbar has no formatting buttons.
 struct MarkdownGuideView: View {
     static let windowID = "markdownGuide"
 
@@ -119,7 +119,7 @@ struct HelpCommands: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Button("\(AppInfo.name) Help") { openWindow(id: MarkdownGuideView.windowID) }
+        Button("Markdown Guidelines") { openWindow(id: MarkdownGuideView.windowID) }
             .keyboardShortcut("?", modifiers: .command)
     }
 }

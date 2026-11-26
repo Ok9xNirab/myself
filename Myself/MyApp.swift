@@ -71,7 +71,7 @@ import SwiftUI
         .defaultSize(width: 900, height: 700)
         .handlesExternalEvents(matching: [])
 
-        Window("Markdown Guide", id: MarkdownGuideView.windowID) {
+        Window("Markdown Guidelines", id: MarkdownGuideView.windowID) {
             MarkdownGuideView()
                 .appPreferences()
         }
