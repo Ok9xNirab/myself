@@ -4,7 +4,7 @@
 
 # MySelf: a personal productivity app for macOS
 
-**One native Mac app for your to-dos, notes, university classes, office tasks, interview prep, product boards and book notes, with desktop widgets. Built with SwiftUI and SwiftData, synced through iCloud.**
+**One native Mac app for your to-dos, notes, university classes, office tasks, interview prep, product boards and book notes, with themes and desktop widgets. Built with SwiftUI and SwiftData, synced through iCloud.**
 
 [![macOS 26+](https://img.shields.io/badge/macOS-26%2B-000000?logo=apple&logoColor=white)](#requirements)
 [![Swift](https://img.shields.io/badge/Swift-5-F05138?logo=swift&logoColor=white)](https://www.swift.org)
@@ -15,11 +15,33 @@
 
 <a href="https://apps.apple.com/us/app/myself-todos-notes-study/id6829809152"><img src="docs/mac-app-store-badge.svg" alt="Download on the Mac App Store" height="44"></a>
 
-[**⬇ Download the DMG**](https://github.com/Ok9xNirab/myself/releases/latest) · [Features](#features) · [Install](#installation) · [Build from source](#build-from-source) · [iCloud sync](#icloud-sync)
+[**⬇ Download the DMG**](https://github.com/Ok9xNirab/myself/releases/latest) · [Website](https://quorrelapps.com/myself) · [What's new](#whats-new-in-20) · [Features](#features) · [Install](#installation) · [Build from source](#build-from-source) · [iCloud sync](#icloud-sync)
 
 <img src="screenshot.png" alt="MySelf dashboard on macOS showing open todos, office tasks, assignments and Job Study topics due, today's focus, classes today, a deadline countdown, product activity and syllabus progress" width="860">
 
 </div>
+
+## What's new in 2.0
+
+MySelf 2.0 redraws the whole app: every page, sheet and Quick Open, with a colour for each space and a soft theme band behind the top of every page.
+
+- 🎨 **Space themes**: eight backgrounds (Dawn, Dusk, Ember, Lagoon, Meadow, Orchid, Paper and the dark Ink) and a Comfortable or Wide paper width, in **Settings › Appearance**.
+- ✅ **All tasks in one list**: TODOs also shows the dated office tasks, assignments and product cards from your other spaces, with label, priority and space filters.
+- 🖼️ **Note icons and covers**: any SF Symbol or your own image as a note's icon, and a gradient or photo cover. Formatting is markdown and the `/` menu, with **Help › Markdown Guidelines** (<kbd>⌘?</kbd>).
+- 📚 **Book categories**: rename, recolour, reorder and delete shelves in **Manage Categories…**.
+- ☁️ **Sync on your terms**: turn off automatic iCloud sync and sync with **File › Sync Now** (<kbd>⌘S</kbd>) instead.
+- 🔵 **A new app icon** that follows the Mac's Default, Dark, Clear and Tinted styles.
+
+<table>
+<tr>
+<td><img src="docs/shots/todos.webp" alt="TODOs: tasks from every space grouped into Overdue, Today and Upcoming"></td>
+<td><img src="docs/shots/note-editor.webp" alt="A note with LaTeX, code and a checklist, and an On this page rail"></td>
+</tr>
+<tr>
+<td><img src="docs/shots/products.webp" alt="A Product Dev Kanban board"></td>
+<td><img src="docs/shots/books.webp" alt="The Book Notes library"></td>
+</tr>
+</table>
 
 ## Why MySelf?
 
@@ -36,13 +58,13 @@ Most people track their life across five apps: a todo list, a notes app, a Kanba
 | Section | What it does |
 | --- | --- |
 | 📊 **Dashboard** | *Today's focus* (todos and office tasks due today or overdue, plus assignments due by tomorrow), classes today, deadline countdown, syllabus progress and product activity. |
-| ✅ **TODOs** | Tasks with priorities, colour labels and due dates ("Today", "Tomorrow", "2d overdue"). |
+| ✅ **TODOs** | Tasks with priorities, colour labels and due dates ("Today", "Tomorrow", "2d overdue"), listed with everything due across your other spaces. Filter by label, priority or space. |
 | 🎓 **University** | Classes with a weekly schedule, syllabus subjects and topics, assignments and exams. |
 | 💼 **Office Tasks** | Work tasks with notes, a reference link and a due date. Always high priority. |
 | 📖 **Job Study** | Interview-prep subjects with a revision checklist. A topic is due again 7 days after you last revised it, and topics can link to notes. |
-| 📝 **Notes** | A block editor with headings, lists, checklists, quotes, syntax-highlighted code, **LaTeX math**, **tables**, **images** (paste, drop or pick one; click to zoom) and Bengali set in the system's SF Bangla. Paste markdown and it becomes blocks. Select blocks like in Notion (<kbd>Esc</kbd>, <kbd>⌘A</kbd> twice, drag or Shift-click) and delete them with undo. **Reader mode** (<kbd>⇧⌘R</kbd>) locks a note and shows it as one page you can select and copy across. Notes are sorted into categories, and any note can open in its own window. **Export to PDF**: one note, a selection or a whole category, from the right-click menu; a category can also export as one PDF per note. |
+| 📝 **Notes** | A block editor with headings, lists, checklists, quotes, syntax-highlighted code, **LaTeX math**, **tables**, **images** (paste, drop or pick one; click to zoom) and Bengali set in the system's SF Bangla. Paste markdown and it becomes blocks. Select blocks like in Notion (<kbd>Esc</kbd>, <kbd>⌘A</kbd> twice, drag or Shift-click) and delete them with undo. **Reader mode** (<kbd>⇧⌘R</kbd>) locks a note and shows it as one page you can select and copy across. Notes are sorted into categories, can have an icon and a cover, and any note can open in its own window. Type `[[` to link notes; a side rail shows the headings and the links in and out. **Export to PDF**: one note, a selection or a whole category, from the right-click menu; a category can also export as one PDF per note. |
 | 🗂️ **Product Dev** | Kanban boards per project with Backlog, In Progress, Review and Done columns. Drag cards between columns, and tag them with Product Dev's own labels, kept separate from your TODO labels. |
-| 📚 **Book Notes** | A library of books on shelves, with status, page progress and covers. Each book has its own reading notes, with a page or chapter on each. |
+| 📚 **Book Notes** | A library of books on shelves you name and order, with status, page progress and covers. Each book has its own reading notes, with a page or chapter on each. |
 | 🏋️ **Workout** | Week-by-week training programs. *Coming soon.* |
 | 🧩 **Widgets** | Ten desktop and Notification Center widgets, in small, medium and large, for your focus list, classes, exams, syllabus and revisions. Tick a task or log a revision right from the widget. |
 
@@ -51,8 +73,8 @@ Most people track their life across five apps: a todo list, a notes app, a Kanba
 - **Quick Open** (<kbd>⌘K</kbd>) jumps to any page, task or note.
 - **Search MySelf from any app** (<kbd>⌥⌘K</kbd>, changeable) opens a Spotlight-style panel over whatever you're doing. No Accessibility permission needed.
 - **Menu bar icon** for quick access: New Todo, New Office Task, New Note, Search and Go To.
-- **Shortcuts**: <kbd>⌘N</kbd> new todo, <kbd>⇧⌘N</kbd> new office task, <kbd>⌥⌘N</kbd> new note, <kbd>⌘1</kbd>–<kbd>⌘8</kbd> switch pages, <kbd>⌘[</kbd> / <kbd>⌘]</kbd> back and forward, <kbd>⇧⌘R</kbd> reader mode for a note, <kbd>⌃⌘S</kbd> show or hide the sidebar.
-- **Looks at home on macOS**: light and dark mode, your system accent colour, sidebar style and row density options, and an adaptive app icon with dark, clear and tinted variants.
+- **Shortcuts**: <kbd>⌘N</kbd> new todo, <kbd>⇧⌘N</kbd> new office task, <kbd>⌥⌘N</kbd> new note, <kbd>⌘1</kbd>–<kbd>⌘9</kbd> switch pages, <kbd>⌘[</kbd> / <kbd>⌘]</kbd> back and forward, <kbd>⇧⌘R</kbd> reader mode for a note, <kbd>⌃⌘S</kbd> show or hide the sidebar.
+- **Looks at home on macOS**: light and dark mode, eight space themes, your system accent colour, sidebar style and row density options, and an adaptive app icon with dark, clear and tinted variants.
 
 ## Requirements
 
@@ -81,7 +103,7 @@ Get MySelf from the [Mac App Store](https://apps.apple.com/us/app/myself-todos-n
 
 ## iCloud sync
 
-MySelf keeps its data in a SwiftData store on each device and syncs it through **your private iCloud database** (CloudKit), so every device signed in to the same Apple Account sees the same todos, notes, classes and boards. It's on by default; turn it off in **Settings › iCloud**. Appearance and feature visibility can sync too.
+MySelf keeps its data in a SwiftData store on each device and syncs it through **your private iCloud database** (CloudKit), so every device signed in to the same Apple Account sees the same todos, notes, classes and boards. It's on by default. In **Settings › iCloud** you can turn off **Sync automatically** and sync only with **File › Sync Now** (<kbd>⌘S</kbd>), or turn iCloud off. Appearance and feature visibility can sync too.
 
 There's nothing to set up: no folder to pick. If the same item was changed on two devices, the newer change wins. Your data counts towards your own iCloud storage, and nobody else, including the developer, can read it.
 
@@ -137,6 +159,7 @@ scripts/make-dmg.sh      Builds the release DMG
 - [x] Desktop widgets
 - [x] Book Notes and links between notes
 - [x] PDF export for notes and categories
+- [x] The v2 redesign, space themes, and note icons and covers
 - [ ] Workout programs, saved and synced
 
 ## Contributing

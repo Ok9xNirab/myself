@@ -4,158 +4,117 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MySelf for Mac — your whole life, in one quiet window</title>
-<meta name="description" content="MySelf is a free, open-source native Mac app for your to-dos, university classes, office tasks, interview prep, product boards, notes and book notes, with LaTeX, code, Bengali and desktop widgets. Your data stays on your Mac and syncs through your private iCloud database.">
+<meta name="description" content="MySelf is a free, open-source native Mac app for your to-dos, university classes, office tasks, interview prep, product boards, notes and book notes, with LaTeX, code, Bengali, themes and desktop widgets. Your data stays on your Mac and syncs through your private iCloud database.">
 <meta property="og:title" content="MySelf for Mac — your whole life, in one quiet window">
 <meta property="og:description" content="To-dos, classes, office work, interview prep, side projects, notes and book notes in one native Mac app, with desktop widgets. Free and open source.">
 <meta property="og:type" content="website">
+<meta property="og:image" content="screenshot.png">
+<meta name="theme-color" content="#f7f5f1">
 <link rel="icon" href="icon.png">
 <link rel="apple-touch-icon" href="icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;600&display=swap">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 <link rel="stylesheet" href="landing.css">
 </head>
 <body>
-<nav class="nav"><div class="wrap"><a class="brand" href="#top"><img src="icon.png" alt="">MySelf</a><div class="nav-links"><a href="#modules">Modules</a><a href="#features">Features</a><a href="#notes">Notes</a><a href="#widgets">Widgets</a><a href="#mac">Built for Mac</a><a href="#icon">Icon</a><a href="#privacy">Privacy</a><a href="#faq">FAQ</a></div><a class="btn pri sm" href="#download">Download</a></div></nav>
+<nav class="nav"><div class="wrap"><a class="brand" href="#top"><img src="icon.png" alt="">MySelf</a><div class="nav-links"><a href="#new">What's new</a><a href="#modules">Spaces</a><a href="#notes">Notes</a><a href="#themes">Themes</a><a href="#widgets">Widgets</a><a href="#mac">Built for Mac</a><a href="#privacy">Privacy</a><a href="#faq">FAQ</a></div><a class="btn pri sm" href="#download">Download</a></div></nav>
 
-<header class="hero" id="top" data-screen-label="Hero">
+<header class="hero" id="top">
+<div class="band" aria-hidden="true"></div>
 <div class="wrap hero-top">
-<img class="hero-icon" src="icon.png" alt="MySelf app icon">
+<a class="new-pill" href="#new"><b>2.0</b>A redesigned MySelf, with themes</a>
+<img class="hero-icon" src="icon.png" width="132" height="132" alt="MySelf app icon">
 <h1>Your whole life. One quiet Mac app.</h1>
-<p class="lede">To-dos, classes, office work, interview prep, side projects, notes and books — in one native window that lives on your Mac, not someone else's server. Workouts are coming soon.</p>
+<p class="lede">To-dos, classes, office work, interview prep, side projects, notes and books — in one native window that lives on your Mac, not someone else's server.</p>
 <div class="hero-cta"><a class="store" href="https://apps.apple.com/us/app/myself-todos-notes-study/id6829809152"><img src="mac-app-store-badge.svg" alt="Download on the Mac App Store" width="172" height="44"></a><a class="btn sec2" href="https://github.com/Ok9xNirab/myself/releases/latest"><span data-i="download" data-s="18"></span>Download the DMG</a></div>
 <div class="hero-meta">Free and open source · macOS 26 Tahoe or later · Apple silicon and Intel</div>
 </div>
 <div class="wrap hero-stage">
-<img class="hero-shot" src="screenshot.png" width="2910" height="2112" alt="MySelf's Dashboard on macOS: today's focus with todos, office tasks and assignments, stat cards for open todos, office tasks due, assignments and Job Study topics due, a deadline countdown, syllabus progress and product activity, with Notes and Book Notes in the sidebar">
+<img class="hero-shot" src="shots/dashboard.webp" width="2882" height="2358" fetchpriority="high" alt="MySelf's Dashboard on macOS: a good-morning greeting with today's progress rings, stat cards for open tasks, office tasks due, assignments and Job Study topics due, today's focus, classes, a deadline countdown, Job Study and syllabus progress">
 </div>
 </header>
 
-<section class="sec" id="modules" data-screen-label="Modules" style="padding-top:60px">
+<section class="sec" id="new" style="padding-top:40px">
 <div class="wrap">
-<div class="sec-head c"><div class="eyebrow">Eight spaces, one sidebar</div><h2 class="h2">Every part of you,<br>finally in one place.</h2><p class="lede">Stop splitting yourself across a task app, a class planner, a study tracker, a Kanban board, a notes app and a reading log. MySelf gives each part of your life its own page — and one dashboard that ties them together. Turn off the ones you don't need.</p></div>
+<div class="sec-head c"><div class="eyebrow">New in MySelf 2.0</div><h2 class="h2">Same app. A whole new feel.</h2><p class="lede">Every page has been redrawn: softer, calmer and easier to scan, with a colour of its own for each space and a theme band behind the top of every page.</p></div>
+<div class="news">
+<div class="nw"><span class="tile" style="background:var(--indigo)" data-i="sparkle" data-s="22"></span><h3>Redesigned, page by page</h3><p>New Dashboard, All tasks, University, Office, Job Study, Product Dev, Notes and Book Notes, plus a new Quick Open.</p></div>
+<div class="nw"><span class="tile" style="background:linear-gradient(135deg,#f59e6b,#8b9cf5)" data-i="palette" data-s="22"></span><h3>Space themes</h3><p>Eight soft backgrounds, from Dawn to Ink, and a Comfortable or Wide paper width.</p></div>
+<div class="nw"><span class="tile" style="background:var(--teal)" data-i="image" data-s="22"></span><h3>Icons and covers for notes</h3><p>Give any note an SF Symbol or your own image, and a gradient or photo cover.</p></div>
+<div class="nw"><span class="tile" style="background:var(--blue)" data-i="cloud" data-s="22"></span><h3>Sync on your terms</h3><p>Keep iCloud sync automatic, or turn it off and sync only when you press ⌘S.</p></div>
+</div>
+</div>
+</section>
+
+<section class="sec" id="modules" style="padding-top:20px">
+<div class="wrap">
+<div class="sec-head c"><div class="eyebrow">Spaces, one sidebar</div><h2 class="h2">Every part of you,<br>finally in one place.</h2><p class="lede">Stop splitting yourself across a task app, a class planner, a study tracker, a Kanban board, a notes app and a reading log. Each part of your life gets its own space, and one Dashboard ties them together. Turn off the ones you don't need.</p></div>
 <div class="mods">
-<a class="mod" href="#f-dashboard"><span class="tile" style="background:var(--blue)" data-i="dashboard" data-s="22"></span><h3>Dashboard</h3><p>Everything that matters today — due tasks, today's classes, the next deadline — at a glance.</p><span class="kbd k" style="width:max-content">⌘1</span></a>
-<a class="mod" href="#f-todos"><span class="tile" style="background:var(--cyan)" data-i="todos" data-s="22"></span><h3>TODOs</h3><p>A personal task list with priorities, colour labels, due dates and nothing you don't need.</p><span class="kbd k" style="width:max-content">⌘2</span></a>
-<a class="mod" href="#f-uni"><span class="tile" style="background:var(--violet)" data-i="university" data-s="22"></span><h3>University</h3><p>Classes on a weekly schedule, syllabus progress, assignments and exams.</p><span class="kbd k" style="width:max-content">⌘3</span></a>
-<a class="mod" href="#f-todos"><span class="tile" style="background:var(--amber)" data-i="office" data-s="22"></span><h3>Office Tasks</h3><p>Work items, kept separate from life — and always treated as high priority.</p><span class="kbd k" style="width:max-content">⌘4</span></a>
-<a class="mod" href="#f-job"><span class="tile" style="background:var(--green)" data-i="book" data-s="22"></span><h3>Job Study</h3><p>Interview prep with a revision checklist, so nothing you learn quietly fades.</p><span class="kbd k" style="width:max-content">⌘5</span></a>
-<a class="mod" href="#f-prod"><span class="tile" style="background:var(--magenta)" data-i="products" data-s="22"></span><h3>Product Dev</h3><p>Run your solo company on Kanban boards — one per product.</p><span class="kbd k" style="width:max-content">⌘6</span></a>
-<a class="mod" href="#notes"><span class="tile" style="background:#1d1d1f" data-i="note" data-s="22"></span><h3>Notes</h3><p>Pages by category with LaTeX, code blocks, tables, images and first-class বাংলা.</p><span class="kbd k" style="width:max-content">⌘8</span></a>
-<a class="mod" href="#f-books"><span class="tile" style="background:#a2845e" data-i="bookpages" data-s="22"></span><h3>Book Notes</h3><p>A library of what you're reading, with notes per book, linked to everything else you know.</p><span class="kbd k" style="width:max-content">⌘9</span></a>
+<a class="mod" href="#f-dashboard"><span class="tile" style="background:var(--indigo)" data-i="dashboard" data-s="22"></span><h3>Dashboard</h3><p>Everything that matters today — due tasks, today's classes, the next deadline — at a glance.</p><kbd class="k">⌘1</kbd></a>
+<a class="mod" href="#f-todos"><span class="tile" style="background:var(--green)" data-i="todos" data-s="22"></span><h3>TODOs</h3><p>Your own tasks, plus everything due across your spaces, in one list.</p><kbd class="k">⌘2</kbd></a>
+<a class="mod" href="#f-uni"><span class="tile" style="background:var(--violet)" data-i="university" data-s="22"></span><h3>University</h3><p>Classes on a weekly schedule, syllabus progress, assignments and exams.</p><kbd class="k">⌘3</kbd></a>
+<a class="mod" href="#f-office"><span class="tile" style="background:var(--blue)" data-i="office" data-s="22"></span><h3>Office Tasks</h3><p>Work items, kept separate from life — and always treated as high priority.</p><kbd class="k">⌘4</kbd></a>
+<a class="mod" href="#f-job"><span class="tile" style="background:var(--amber)" data-i="book" data-s="22"></span><h3>Job Study</h3><p>Interview prep with a revision checklist, so nothing you learn quietly fades.</p><kbd class="k">⌘5</kbd></a>
+<a class="mod" href="#f-prod"><span class="tile" style="background:#1f8a4f" data-i="products" data-s="22"></span><h3>Product Dev</h3><p>Run your solo company on Kanban boards — one per product.</p><kbd class="k">⌘6</kbd></a>
+<a class="mod" href="#notes"><span class="tile" style="background:var(--teal)" data-i="note" data-s="22"></span><h3>Notes</h3><p>Pages by category with LaTeX, code, tables, images and first-class বাংলা.</p><kbd class="k">⌘8</kbd></a>
+<a class="mod" href="#f-books"><span class="tile" style="background:var(--brown)" data-i="bookpages" data-s="22"></span><h3>Book Notes</h3><p>A library of what you're reading, with notes per book, linked to everything else you know.</p><kbd class="k">⌘9</kbd></a>
 <a class="mod soon" href="#f-work"><span class="tile" style="background:var(--red)" data-i="workout" data-s="22"></span><h3>Workout</h3><p>Week-by-week training programs that show up next to everything else.</p><span class="soon-tag">Coming soon</span></a>
 </div>
 </div>
 </section>
 
-<section id="features" data-screen-label="Features" style="background:var(--surface)">
+<section class="features" id="features">
 <div class="wrap">
 
-<div class="feat" id="f-dashboard">
-<div class="copy"><div class="eyebrow">Dashboard</div><h3>Open it in the morning. Know your day in five seconds.</h3><p>The Dashboard reads from every page and surfaces only what needs you: what's due, what's overdue, today's classes, the next deadline and where each syllabus stands.</p>
-<ul class="ticks"><li><span data-i="check" data-s="18" data-w="2.2"></span>Today's focus: todos and office tasks due today or overdue, plus assignments due by tomorrow</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Stat cards for open todos, office deadlines, assignments and Job Study topics due</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Click an item to jump straight to its page</li></ul></div>
-<div class="shot">
-<div class="shot-h"><span class="t">Today</span></div>
-<div class="grid2">
-<div class="sub-card"><div class="mut">Next deadline</div><div style="font-family:var(--display);font-size:30px;font-weight:700;letter-spacing:-.03em">2<span class="mut" style="font-size:14px;font-weight:500"> days</span></div><div class="mut">DSA assignment 4</div></div>
-<div class="sub-card"><div class="mut">Syllabus</div><div style="font-family:var(--display);font-size:30px;font-weight:700;letter-spacing:-.03em">45<span class="mut" style="font-size:14px;font-weight:500"> %</span></div><div class="prog"><i style="width:45%;background:var(--violet)"></i></div></div>
-</div>
-<div style="margin-top:16px" class="ch">Today’s focus<span>5</span></div>
-<div class="li"><span class="cb"></span><span class="t">Q4 roadmap review deck</span><span class="pill p-red">Overdue</span></div>
-<div class="li"><span class="cb"></span><span class="t">Expense report — September</span><span class="pill p-amber">Office</span></div>
-<div class="li"><span class="cb"></span><span class="t">DSA assignment 4 · linked lists</span><span class="pill p-violet">Assignment</span></div>
-<div class="li"><span class="cb"></span><span class="t">Book flights for the conference</span><span class="pill p-gray">TODO</span></div>
-<div class="li"><span class="cb"></span><span class="t">Call the dentist</span><span class="pill p-blue">TODO</span></div>
-</div>
+<div class="feat" id="f-dashboard" style="--tint:var(--indigo)">
+<div class="copy"><div class="eyebrow"><span class="tile" style="background:var(--indigo)" data-i="dashboard" data-s="15"></span>Dashboard</div><h3>Open it in the morning. Know your day in five seconds.</h3><p>The Dashboard reads from every space and surfaces only what needs you: what's due, what's overdue, today's classes, the next deadline and where each syllabus stands.</p>
+<ul class="ticks"><li><span data-i="check" data-s="18" data-w="2.2"></span>Today's focus: todos and office tasks due today or overdue, plus assignments due by tomorrow</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Rings for Job Study, your syllabus and today's todos</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Click anything to jump straight to its page</li></ul></div>
+<figure class="shot"><img src="shots/dashboard.webp" width="2882" height="2358" loading="lazy" alt="The Dashboard with today's focus, classes, a deadline countdown and Job Study and syllabus progress"></figure>
 </div>
 
-<div class="feat flip" id="f-todos">
-<div class="copy"><div class="eyebrow">TODOs &amp; Office Tasks</div><h3>Life and work, side by side — never tangled.</h3><p>Personal tasks live in TODOs with low, medium and high priority. Work lives in Office Tasks, where everything is high priority by design and carries a link to its ticket or doc, so a deadline at work never hides behind “buy milk.”</p>
-<ul class="ticks"><li><span data-i="check" data-s="18" data-w="2.2"></span>Priorities, colour labels and due dates on every task</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Due dates that read “Today”, “Tomorrow” or “2d overdue”</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Counts in the sidebar so you always know what's open</li></ul></div>
-<div class="shot">
-<div class="shot-h"><span class="tile" style="width:30px;height:30px;border-radius:8px;margin:0;background:var(--amber)" data-i="office" data-s="16"></span><span class="t">Office Tasks</span><div class="r"><span class="btn pri sm" style="height:26px;padding:0 10px;font-size:12px"><span data-i="plus" data-s="13" data-w="2.2"></span>Add task</span></div></div>
-<div class="li"><span class="cb"></span><span class="t">Q4 roadmap review deck</span><span class="pill p-red">High</span><span class="tm">Yesterday</span></div>
-<div class="li"><span class="cb"></span><span class="t">Expense report — September</span><span class="pill p-red">High</span><span class="tm">Today</span></div>
-<div class="li"><span class="cb"></span><span class="t">Review Priya's PR #482</span><span class="pill p-red">High</span><span class="tm">Wed</span></div>
-<div class="li"><span class="cb"></span><span class="t">Prep interview loop for designer role</span><span class="pill p-red">High</span><span class="tm">Fri</span></div>
-<div class="li done"><span class="cb on" data-i="check" data-s="10" data-w="3"></span><span class="t">1:1 with Sam</span><span class="pill p-gray">Done</span><span class="tm">Today</span></div>
-<div style="margin-top:18px;display:flex;align-items:center;gap:10px"><span class="tile" style="width:30px;height:30px;border-radius:8px;margin:0;background:var(--cyan)" data-i="todos" data-s="16"></span><span style="font-family:var(--display);font-size:17px;font-weight:700">TODOs</span></div>
-<div class="li" style="margin-top:6px"><span class="cb"></span><span class="t">Call the dentist</span><span class="pill p-amber">Medium</span><span class="tm">Today</span></div>
-<div class="li"><span class="cb"></span><span class="t">Renew passport</span><span class="pill p-red">High</span><span class="tm">Nov 2</span></div>
-<div class="li"><span class="cb"></span><span class="t">Read 20 pages</span><span class="pill p-blue">Low</span><span class="tm">9:30 PM</span></div>
-</div>
+<div class="feat flip" id="f-todos" style="--tint:var(--green)">
+<div class="copy"><div class="eyebrow"><span class="tile" style="background:var(--green)" data-i="todos" data-s="15"></span>TODOs</div><h3>One list for everything that's due.</h3><p>Your personal tasks sit next to the office tasks, assignments and product cards that have a date, grouped into Overdue, Today, Upcoming and No date. Tick any of them off right here.</p>
+<ul class="ticks"><li><span data-i="check" data-s="18" data-w="2.2"></span>Filter by label, priority or space, or show only Today or Upcoming</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Priorities, colour labels and dates that read “Today”, “Yesterday” or “3d overdue”</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Add a task from anywhere with ⌘N</li></ul></div>
+<figure class="shot"><img src="shots/todos.webp" width="1800" height="1473" loading="lazy" alt="The TODOs page listing overdue, today and upcoming tasks from Office, University, Personal and a product board, with labels and priority flags"></figure>
 </div>
 
-<div class="feat" id="f-uni">
-<div class="copy"><div class="eyebrow">University</div><h3>Your semester, mapped. Every class, deadline and exam.</h3><p>Add your classes once with their days and times, and MySelf keeps the upcoming sessions in order. Track how much of each syllabus you've covered, and keep every assignment and exam in one place with its date.</p>
-<ul class="ticks"><li><span data-i="check" data-s="18" data-w="2.2"></span>Weekly class schedule with rooms and times</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Syllabus progress per subject, topic by topic</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Assignments and exams, with the next deadline on your Dashboard</li></ul></div>
-<div class="shot">
-<div class="shot-h"><span class="t">Upcoming classes</span></div>
-<div class="cls"><span class="bar" style="background:var(--violet)"></span><div><div class="t">Operating Systems</div><div class="s">Today · 9:00 – 10:30 AM · Rm 210</div></div></div>
-<div class="cls"><span class="bar" style="background:var(--green)"></span><div><div class="t">DSA Lab</div><div class="s">Today · 11:00 AM – 1:00 PM · Lab 3</div></div></div>
-<div class="cls"><span class="bar" style="background:var(--amber)"></span><div><div class="t">Signal Processing</div><div class="s">Tomorrow · 3:30 – 5:00 PM · Rm 402</div></div></div>
-<div class="cls"><span class="bar" style="background:var(--blue)"></span><div><div class="t">Linear Algebra</div><div class="s">Wednesday · 9:00 – 10:30 AM · Hall B</div></div></div>
-<div class="grid2" style="margin-top:14px">
-<div class="sub-card"><div class="cnt"><span class="big">6</span><div><div style="font-weight:600">days to OS midterm</div><div class="mut">Hall B · 10:00 AM</div></div></div><div class="prog"><i style="width:57%;background:var(--red)"></i></div></div>
-<div class="sub-card"><div style="display:flex;justify-content:space-between"><b style="font-weight:600">Syllabus</b><span class="mut">45%</span></div>
-<div class="mut" style="margin-top:6px">Operating Systems</div><div class="prog"><i style="width:62%;background:var(--violet)"></i></div>
-<div class="mut" style="margin-top:6px">Signal Processing</div><div class="prog"><i style="width:31%;background:var(--amber)"></i></div></div>
-</div>
-</div>
+<div class="feat" id="f-office" style="--tint:var(--blue)">
+<div class="copy"><div class="eyebrow"><span class="tile" style="background:var(--blue)" data-i="office" data-s="15"></span>Office Tasks</div><h3>Life and work, side by side — never tangled.</h3><p>Work lives in its own space, where every task is high priority by design and carries a link to its ticket, doc or pull request, so a deadline at work never hides behind “buy milk.”</p>
+<ul class="ticks"><li><span data-i="check" data-s="18" data-w="2.2"></span>A reference link on every task, one click away</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Open, overdue and done counts at the top</li><li><span data-i="check" data-s="18" data-w="2.2"></span>New office task from anywhere with ⇧⌘N</li></ul></div>
+<figure class="shot"><img src="shots/office.webp" width="1800" height="1473" loading="lazy" alt="The Office Tasks page with overdue, today, upcoming and done tasks, each with a link to a doc, GitHub or Notion"></figure>
 </div>
 
-<div class="feat flip" id="f-job">
-<div class="copy"><div class="eyebrow">Job Study</div><h3>Prep for interviews like you'll actually remember it.</h3><p>Break prep into subjects and topics — algorithms, system design, behavioral — and tick a topic each time you revise it. MySelf counts the revisions, remembers when you last went over it, and marks it due again after a week.</p>
-<ul class="ticks"><li><span data-i="check" data-s="18" data-w="2.2"></span>Revision count and last-revised date per topic</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Link notes to a topic and open them beside the checklist</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Topics due show on your Dashboard and in the sidebar</li></ul></div>
-<div class="shot">
-<div class="shot-h"><span class="t">Interview prep</span><div class="r"><span class="pill p-green">12 topics</span><span class="pill p-amber">3 due</span></div></div>
-<div class="topic"><div><div style="font-weight:500">Graph algorithms — BFS, DFS, Dijkstra</div><div class="mut">Revised 4× · last on Oct 14</div></div><span class="pill p-amber">Due</span></div>
-<div class="topic"><div><div style="font-weight:500">Dynamic programming patterns</div><div class="mut">Revised 2× · last on Oct 9</div></div><span class="pill p-amber">Due</span></div>
-<div class="topic"><div><div style="font-weight:500">System design — rate limiter</div><div class="mut">Revised 3× · last on Oct 17</div></div><span class="pill p-gray">3d ago</span></div>
-<div class="topic"><div><div style="font-weight:500">Behavioral — conflict stories</div><div class="mut">Revised 5× · last on Oct 18</div></div><span class="pill p-green">Today</span></div>
-<div class="topic"><div><div style="font-weight:500">SQL window functions</div><div class="mut">Revised 1× · last on Oct 2</div></div><span class="pill p-amber">Due</span></div>
-</div>
+<div class="feat flip" id="f-uni" style="--tint:var(--violet)">
+<div class="copy"><div class="eyebrow"><span class="tile" style="background:var(--violet)" data-i="university" data-s="15"></span>University</div><h3>Your semester, mapped. Every class, deadline and exam.</h3><p>Add your classes once with their days and times, and MySelf keeps the upcoming sessions in order. Track each syllabus topic by topic, count down to every exam, and keep assignments and notes for the semester in one place.</p>
+<ul class="ticks"><li><span data-i="check" data-s="18" data-w="2.2"></span>Upcoming classes with course codes, times and rooms</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Exam countdown with how prepared you are</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Syllabus completion per course</li></ul></div>
+<figure class="shot"><img src="shots/university.webp" width="1800" height="1473" loading="lazy" alt="The University page with classes per week, syllabus done, assignments due, the next exam, upcoming classes and an exam countdown"></figure>
 </div>
 
-<div class="feat" id="f-prod">
-<div class="copy"><div class="eyebrow">Product Dev</div><h3>Your solo company, on a board you'll actually open.</h3><p>Each product gets its own Kanban board. Drag cards from Backlog to In Progress, Review and Done, tag them, and see side projects next to the rest of your life — so they don't only happen on weekends you forgot to plan.</p>
-<ul class="ticks"><li><span data-i="check" data-s="18" data-w="2.2"></span>One board per product</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Drag cards between columns</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Labels of its own, kept apart from your TODO labels</li></ul></div>
-<div class="shot">
-<div class="shot-h"><span class="t">Lumen</span><span class="mut">· habit app</span><div class="r"><div class="seg"><span class="on">Lumen</span><span>Atlas</span><span>+</span></div></div></div>
-<div class="kan">
-<div class="col"><div class="col-h"><i style="background:var(--ink-3)"></i>Backlog<b>3</b></div><div class="kc"><span class="t">Apple Watch companion</span><div class="m"><span class="pill p-blue">Feature</span></div></div><div class="kc"><span class="t">Localize to বাংলা</span><div class="m"><span class="pill p-blue">Feature</span></div></div></div>
-<div class="col"><div class="col-h"><i style="background:var(--blue)"></i>In Progress<b>2</b></div><div class="kc"><span class="t">Onboarding v2</span><div class="m"><span class="pill p-blue">Feature</span><span class="tm">Fri</span></div></div><div class="kc"><span class="t">Landing page copy</span><div class="m"><span class="pill p-violet">Growth</span></div></div></div>
-<div class="col"><div class="col-h"><i style="background:var(--amber)"></i>Review<b>1</b></div><div class="kc"><span class="t">Referral program</span><div class="m"><span class="pill p-violet">Growth</span></div></div></div>
-<div class="col"><div class="col-h"><i style="background:var(--green)"></i>Done<b>9</b></div><div class="kc"><span class="t">Streak freeze</span><div class="m"><span class="pill p-green">Feature</span></div></div><div class="kc"><span class="t">Fix sync crash</span><div class="m"><span class="pill p-red">Bug</span></div></div></div>
-</div>
-</div>
+<div class="feat" id="f-job" style="--tint:var(--amber)">
+<div class="copy"><div class="eyebrow"><span class="tile" style="background:var(--amber)" data-i="book" data-s="15"></span>Job Study</div><h3>Prep for interviews like you'll actually remember it.</h3><p>Break prep into subjects and topics — algorithms, system design, behavioral — and tick a topic each time you revise it. MySelf counts the revisions, remembers when you last went over it, and marks it due again after a week.</p>
+<ul class="ticks"><li><span data-i="check" data-s="18" data-w="2.2"></span>Revision count and last-revised date per topic</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Link notes to a topic, or start a new one from it</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Drag topics into the order you'll study them</li></ul></div>
+<figure class="shot"><img src="shots/jobstudy.webp" width="1800" height="1473" loading="lazy" alt="The Job Study page with subjects on the left and the System Design revision checklist with counts and last-revised dates"></figure>
 </div>
 
-<div class="feat flip" id="f-books">
-<div class="copy"><div class="eyebrow">Book Notes</div><h3>Every book you read, and what you took from it.</h3><p>Keep a library on shelves: continue reading, want to read and your own categories. Open a book and its reading notes sit right beside its details, in the same editor as the rest of your notes.</p>
-<ul class="ticks"><li><span data-i="check" data-s="18" data-w="2.2"></span>Status, page progress and your own cover, or a generated one in a colour you pick</li><li><span data-i="check" data-s="18" data-w="2.2"></span>A page or chapter on every reading note</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Type [[ to link any note to another, with a preview on hover</li></ul></div>
-<div class="shot">
-<div class="shot-h"><span class="tile" style="width:30px;height:30px;border-radius:8px;margin:0;background:#a2845e" data-i="bookpages" data-s="16"></span><span class="t">Book Notes</span><div class="r"><span class="pill p-green">2 reading</span></div></div>
-<div class="ch">Continue reading<span>2</span></div>
-<div class="grid2">
-<div class="bk"><span class="bk-cover" style="background:#2f5d8e">On Democracy<small>Robert A. Dahl</small></span><div class="bk-info"><div class="bk-t">On Democracy</div><div class="mut">Robert A. Dahl</div><div class="prog"><i style="width:19%;background:var(--accent)"></i></div><div class="mut" style="margin-top:4px">p. 43 of 224</div></div></div>
-<div class="bk"><span class="bk-cover" style="background:#7a5a2f">Sapiens<small>Yuval Noah Harari</small></span><div class="bk-info"><div class="bk-t">Sapiens</div><div class="mut">Yuval Noah Harari</div><div class="prog"><i style="width:17%;background:var(--accent)"></i></div><div class="mut" style="margin-top:4px">p. 74 of 443</div></div></div>
-</div>
-<div style="margin-top:16px" class="ch">On Democracy · reading notes<span>3</span></div>
-<div class="li"><span class="t">Ch. 4 — What is democracy?</span><span class="tm">pp. 35–43</span></div>
-<div class="li"><span class="t">Ch. 2 — Where and how did democracy develop?</span><span class="tm">pp. 7–25</span></div>
-<div class="li"><span class="t">Ch. 1 — Do we really need a guide?</span><span class="tm">pp. 1–6</span></div>
-<div style="margin-top:12px" class="sub-card">Equality here builds on <span class="bk-link">Political equality</span>, a concept note from another category.</div>
-</div>
+<div class="feat flip" id="f-prod" style="--tint:#1f8a4f">
+<div class="copy"><div class="eyebrow"><span class="tile" style="background:#1f8a4f" data-i="products" data-s="15"></span>Product Dev</div><h3>Your solo company, on a board you'll actually open.</h3><p>Each product gets its own Kanban board. Drag cards from Backlog to In Progress, Review and Done, tag them, and see side projects next to the rest of your life — so they don't only happen on weekends you forgot to plan.</p>
+<ul class="ticks"><li><span data-i="check" data-s="18" data-w="2.2"></span>One board per product, with its own icon and colour</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Priority, due date and labels on every card</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Labels of its own, kept apart from your TODO labels</li></ul></div>
+<figure class="shot"><img src="shots/products.webp" width="1800" height="1473" loading="lazy" alt="A Product Dev Kanban board with Backlog, In progress, Review and Done columns of cards"></figure>
 </div>
 
-<div class="feat" id="f-work">
-<div class="copy"><div class="eyebrow">Workout <span class="soon-tag">Coming soon</span></div><h3>Training that keeps pace with the rest of your week.</h3><p>Week-by-week training programs are on the way. Because they'll sit next to your classes and deadlines, you'll see exactly where the gym fits — and when it doesn't.</p>
+<div class="feat" id="f-books" style="--tint:var(--brown)">
+<div class="copy"><div class="eyebrow"><span class="tile" style="background:var(--brown)" data-i="bookpages" data-s="15"></span>Book Notes</div><h3>Every book you read, and what you took from it.</h3><p>A library of what you're reading, what you want to read and what you've finished, on shelves you name yourself. Open a book and its reading notes sit right beside it, in the same editor as the rest of your notes.</p>
+<ul class="ticks"><li><span data-i="check" data-s="18" data-w="2.2"></span>Now reading, with pages left and a Resume button</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Your own cover, or a generated one in a colour you pick</li><li><span data-i="check" data-s="18" data-w="2.2"></span>A page or chapter on every reading note</li></ul></div>
+<figure class="shot"><img src="shots/books.webp" width="1800" height="1473" loading="lazy" alt="The Book Notes library with two books now reading and shelves for Politics and Philosophy"></figure>
+</div>
+
+<div class="feat flip" id="f-work" style="--tint:var(--red)">
+<div class="copy"><div class="eyebrow"><span class="tile" style="background:var(--red)" data-i="workout" data-s="15"></span>Workout <span class="soon-tag">Coming soon</span></div><h3>Training that keeps pace with the rest of your week.</h3><p>Week-by-week training programs are on the way. Because they'll sit next to your classes and deadlines, you'll see exactly where the gym fits — and when it doesn't.</p>
 <ul class="ticks"><li><span data-i="check" data-s="18" data-w="2.2"></span>Programs laid out week by week</li><li><span data-i="check" data-s="18" data-w="2.2"></span>Finish a week to unlock the next one</li><li><span data-i="check" data-s="18" data-w="2.2"></span>On your Dashboard, next to classes and deadlines</li></ul></div>
-<div class="shot soon">
+<div class="mock">
 <div class="soon-over"><span>Coming soon</span></div>
-<div class="wk-top"><div class="streak"><b>12</b><span>day streak</span></div><div><div class="ch">This week<span>4 of 5 sessions</span></div><div class="days"><div><i class="on" data-i="check" data-s="12" data-w="3"></i>M</div><div><i class="on" data-i="check" data-s="12" data-w="3"></i>T</div><div><i class="on" data-i="check" data-s="12" data-w="3"></i>W</div><div><i></i>T</div><div><i class="on" data-i="check" data-s="12" data-w="3"></i>F</div><div><i></i>S</div><div><i class="today"></i>S</div></div></div></div>
+<div class="wk-top"><div class="streak"><b>12</b><span>day streak</span></div><div><div class="ch">This week<span>4 of 5 sessions</span></div><div class="days"><div><i class="on" data-i="check" data-s="12" data-w="3"></i>M</div><div><i class="on" data-i="check" data-s="12" data-w="3"></i>T</div><div><i class="on" data-i="check" data-s="12" data-w="3"></i>W</div><div><i></i>T</div><div><i class="on" data-i="check" data-s="12" data-w="3"></i>F</div><div><i></i>S</div><div><i></i>S</div></div></div></div>
 <div class="grid2" style="margin-top:16px">
 <div class="sub-card"><div style="display:flex;justify-content:space-between"><b style="font-weight:600">Squat · 1RM</b><span class="mut">8 weeks</span></div><div class="chart"><i style="height:40%"></i><i style="height:46%"></i><i style="height:50%"></i><i style="height:55%"></i><i style="height:60%"></i><i style="height:66%"></i><i style="height:72%"></i><i class="hi" style="height:84%"></i></div></div>
 <div class="sub-card"><b style="font-weight:600">Push / Pull / Legs</b><div class="mut">Week 6 of 10</div>
@@ -169,78 +128,72 @@
 </div>
 </section>
 
-<section class="sec dark-sec" id="notes" data-screen-label="Notes">
+<section class="sec notes-sec" id="notes">
+<div class="band" aria-hidden="true"></div>
 <div class="wrap">
-<div class="sec-head c"><div class="eyebrow">Notes</div><h2 class="h2">Write the way you think — in math, code, or বাংলা.</h2><p class="lede">Notes are pages, organized by category. Type an equation and it renders. Paste code and it's highlighted. Write in Bengali and it's set with proper Bengali typography. Add tables and images, switch to reader mode to read a note as one page, open it in its own window beside your work, or export a note or a whole category as a PDF, or as one PDF per note.</p></div>
-<div class="editor">
-<aside class="ed-side"><div class="tl"><span></span><span></span><span></span></div>
-<div class="w-h">Categories</div>
-<div class="w-row"><span data-i="folder" data-s="15"></span>All notes<b>48</b></div>
-<div class="w-row on"><span data-i="folder" data-s="15"></span>Math<b>11</b></div>
-<div class="w-row"><span data-i="folder" data-s="15"></span>Interview<b>17</b></div>
-<div class="w-row"><span data-i="folder" data-s="15"></span>Language<b>8</b></div>
-<div class="w-row"><span data-i="folder" data-s="15"></span>Ideas<b>12</b></div>
-<div class="w-h">Pinned</div>
-<div class="w-row"><span data-i="pin" data-s="15"></span>Fourier series</div>
-<div class="w-row"><span data-i="pin" data-s="15"></span>সন্ধি — নিয়ম</div>
-</aside>
-<div class="ed-main">
-<div class="ed-tb"><i data-i="heading" data-s="16"></i><i data-i="bold" data-s="16"></i><i data-i="italic" data-s="16"></i><span class="sp"></span><i data-i="list" data-s="16"></i><i data-i="quote" data-s="16"></i><span class="sp"></span><i class="on" data-i="sigma" data-s="16"></i><i data-i="codeblock" data-s="16"></i><span style="margin-left:auto;font-size:12px">Edited just now</span></div>
-<div class="ed-doc">
-<div class="crumb">Math › Signals</div>
-<h4>Fourier series — cheat sheet</h4>
-<p>Any periodic signal with period <i>T</i> can be written as a sum of sinusoids. The coefficients tell you how much of each frequency is present:</p>
-<div class="math" data-tex="x(t)=\sum_{k=-\infty}^{\infty} c_k\, e^{\,j k \omega_0 t},\qquad c_k=\frac{1}{T}\int_{0}^{T} x(t)\,e^{-j k \omega_0 t}\,dt">x(t) = Σ c<sub>k</sub> e<sup>jkω₀t</sup></div>
-<div class="code"><div class="code-h"><span>python</span><span>Copy</span></div><span class="k">import</span> numpy <span class="k">as</span> np
-
-<span class="k">def</span> <span class="f">coeff</span>(x, T, k, n=<span class="n">2048</span>):
-    t = np.linspace(<span class="n">0</span>, T, n, endpoint=<span class="k">False</span>)
-    w0 = <span class="n">2</span> * np.pi / T
-    <span class="k">return</span> np.mean(x(t) * np.exp(-<span class="n">1j</span> * k * w0 * t))  <span class="c"># c_k</span></div>
-<p class="bn">সহজ ভাষায়: যেকোনো পর্যায়বৃত্ত সংকেতকে অনেকগুলো সাইন ও কোসাইন তরঙ্গের যোগফল হিসেবে লেখা যায়।</p>
-<div class="callout"><span data-i="sparkle" data-s="16"></span><span>Revise before the DSP quiz on Thursday.</span></div>
-</div>
-</div>
+<div class="sec-head c"><div class="eyebrow" style="color:var(--teal)">Notes</div><h2 class="h2">Write the way you think — in math, code, or বাংলা.</h2><p class="lede">Notes are pages, sorted into categories. Type an equation and it renders. Paste code and it's highlighted. Write in Bengali and it's set with proper Bengali typography. Formatting is just markdown, with a <kbd>/</kbd> menu for everything else.</p></div>
+<div class="notes-stage">
+<figure class="shot"><img src="shots/notes.webp" width="1800" height="1473" loading="lazy" alt="The Notes list with category chips, two pinned notes with gradient covers, and notes grouped by date with math, code and checklist badges"></figure>
+<figure class="shot"><img src="shots/note-editor.webp" width="1800" height="1473" loading="lazy" alt="A note on eigenvalues with rendered LaTeX, a Python code block and a checklist, with On this page and Linked from in a side rail"></figure>
 </div>
 <div class="notes-feats">
 <div class="nf"><span data-i="sigma" data-s="24"></span><h3>LaTeX that just renders</h3><p>Inline or display equations, typeset as you write. Built for problem sets and formula sheets.</p></div>
-<div class="nf"><span data-i="code" data-s="24"></span><h3>Code blocks, highlighted</h3><p>Syntax highlighting for the languages you study and ship, with one-click copy.</p></div>
-<div class="nf"><span data-i="note" data-s="24"></span><h3>বাংলা, done properly</h3><p>Bengali is set in the system's SF Bangla with its own line spacing — not a fallback that breaks conjuncts.</p></div>
-<div class="nf"><span data-i="windows" data-s="24"></span><h3>Notes in their own windows</h3><p>Pop a note out, keep several open, and find them all in the Window menu.</p></div>
+<div class="nf"><span data-i="code" data-s="24"></span><h3>Code, tables and images</h3><p>Highlighted code blocks, markdown tables and images you paste or drop in, with a zoomable viewer.</p></div>
+<div class="nf"><span data-i="note" data-s="24"></span><h3 class="bn">বাংলা, done properly</h3><p>Bengali is set in the system's SF Bangla, so conjuncts and vowel signs come out right.</p></div>
+<div class="nf"><span data-i="link" data-s="24"></span><h3>Linked notes</h3><p>Type [[ to link one note to another. Hover for a preview, and see what links back in the side rail.</p></div>
+<div class="nf"><span data-i="bookpages" data-s="24"></span><h3>Reader mode and PDF</h3><p>Read a note as one page with ⇧⌘R, and export a note or a whole category as PDF.</p></div>
+<div class="nf"><span data-i="windows" data-s="24"></span><h3>Notes in their own windows</h3><p>Pop a note out, keep several open beside your work, and give each one an icon and a cover.</p></div>
 </div>
 </div>
 </section>
 
-<section class="wdesk" id="widgets" data-screen-label="Widgets">
+<section class="sec themes" id="themes">
+<div class="wrap">
+<div class="sec-head c"><div class="eyebrow">Themes</div><h2 class="h2">Make it feel like yours.</h2><p class="lede">Pick a space background in Settings › Appearance. It washes the top of every page in a soft gradient; Ink is the dark one. Try one — this page changes too.</p></div>
+<div class="th-stage" id="thStage">
+<div class="band" aria-hidden="true"></div>
+<div class="th-copy"><h3 id="thName">Dawn</h3><p id="thDesc">Peach, periwinkle and a little pink. The default.</p></div>
+<div class="th-pick" id="thPick" role="group" aria-label="Space theme"></div>
+<img class="th-shot" src="shots/jobstudy.webp" width="1800" height="1473" loading="lazy" alt="The Job Study page under the chosen theme">
+</div>
+<div class="th-notes">
+<div><b>Eight backgrounds</b>Dawn, Dusk, Ember, Lagoon, Meadow, Orchid, Paper and Ink.</div>
+<div><b>Match system appearance</b>Follow light and dark mode, or let the theme decide.</div>
+<div><b>Paper width</b>Comfortable for reading, or Wide for big tables and boards.</div>
+</div>
+</div>
+</section>
+
+<section class="wdesk" id="widgets">
 <div class="wrap">
 <div class="sec-head c"><div class="eyebrow">Widgets</div><h2 class="h2">Your day, without opening anything.</h2><p class="lede">Ten widgets for your desktop and Notification Center, in small, medium and large. Tick off a task or log a revision right from the widget, and click anywhere else to jump to its page. Try the ones below.</p>
 <div class="seg wg-mode" role="group" aria-label="Widget appearance"><button class="on" data-wg-mode="light">Light</button><button data-wg-mode="dark">Dark</button></div></div>
 <div class="wg-grid">
 <div class="wg wg-l">
-<div class="wg-cap"><i style="background:var(--w-blue)"></i>This week<span>2 – 8 Nov</span></div>
+<div class="wg-cap"><i style="background:var(--w-blue)"></i>This week<span>23 – 29 Nov</span></div>
 <div class="wg-days">
-<div class="wg-day now">MON<b>2</b><div class="wg-pips"><i style="background:var(--w-red)"></i></div></div>
-<div class="wg-day">TUE<b>3</b><div class="wg-pips"><i style="background:var(--w-violet)"></i><i style="background:var(--w-orange)"></i></div></div>
-<div class="wg-day">WED<b>4</b><div class="wg-pips"><i style="background:var(--w-red)"></i><i style="background:var(--w-violet)"></i></div></div>
-<div class="wg-day">THU<b>5</b><div class="wg-pips"></div></div>
-<div class="wg-day">FRI<b>6</b><div class="wg-pips"></div></div>
-<div class="wg-day">SAT<b>7</b><div class="wg-pips"><i style="background:var(--w-orange)"></i><i style="background:var(--w-blue)"></i></div></div>
-<div class="wg-day">SUN<b>8</b><div class="wg-pips"><i style="background:var(--w-green)"></i></div></div>
+<div class="wg-day">MON<b>23</b><div class="wg-pips"><i style="background:var(--w-red)"></i></div></div>
+<div class="wg-day">TUE<b>24</b><div class="wg-pips"><i style="background:var(--w-violet)"></i><i style="background:var(--w-orange)"></i></div></div>
+<div class="wg-day">WED<b>25</b><div class="wg-pips"><i style="background:var(--w-red)"></i></div></div>
+<div class="wg-day now">THU<b>26</b><div class="wg-pips"><i style="background:var(--w-violet)"></i></div></div>
+<div class="wg-day">FRI<b>27</b><div class="wg-pips"><i style="background:var(--w-red)"></i></div></div>
+<div class="wg-day">SAT<b>28</b><div class="wg-pips"><i style="background:var(--w-violet)"></i><i style="background:var(--w-blue)"></i></div></div>
+<div class="wg-day">SUN<b>29</b><div class="wg-pips"><i style="background:var(--w-orange)"></i></div></div>
 </div>
 <div class="wg-evs">
-<div class="wg-ev"><span style="background:var(--w-violet)"></span><div><div class="wg-t">Operating Systems</div><div class="wg-s">Class · Rm 210</div></div><div class="wg-when"><div class="wg-t">Tue</div><div class="wg-s">9:00 AM</div></div></div>
-<div class="wg-ev"><span style="background:var(--w-orange)"></span><div><div class="wg-t">Signal Processing</div><div class="wg-s">Class · Rm 402</div></div><div class="wg-when"><div class="wg-t">Tue</div><div class="wg-s">3:30 PM</div></div></div>
-<div class="wg-ev"><span style="background:var(--w-red)"></span><div><div class="wg-t">DSA assignment 4</div><div class="wg-s">Assignment due</div></div><div class="wg-when"><div class="wg-t" style="color:var(--w-red)">Wed</div><div class="wg-s">11:59 PM</div></div></div>
-<div class="wg-ev"><span style="background:var(--w-violet)"></span><div><div class="wg-t">Linear Algebra</div><div class="wg-s">Class · Hall B</div></div><div class="wg-when"><div class="wg-t">Wed</div><div class="wg-s">9:00 AM</div></div></div>
+<div class="wg-ev"><span style="background:var(--w-violet)"></span><div><div class="wg-t">Linear Algebra</div><div class="wg-s">Class · Room 112</div></div><div class="wg-when"><div class="wg-t">Today</div><div class="wg-s">10:30 AM</div></div></div>
+<div class="wg-ev"><span style="background:var(--w-red)"></span><div><div class="wg-t">DSA: Implement an AVL tree</div><div class="wg-s">Assignment due</div></div><div class="wg-when"><div class="wg-t" style="color:var(--w-red)">Fri</div><div class="wg-s">11:59 PM</div></div></div>
+<div class="wg-ev"><span style="background:var(--w-violet)"></span><div><div class="wg-t">Data Structures &amp; Algorithms</div><div class="wg-s">Class · Room 401</div></div><div class="wg-when"><div class="wg-t">Sat</div><div class="wg-s">9:00 AM</div></div></div>
+<div class="wg-ev"><span style="background:var(--w-orange)"></span><div><div class="wg-t">Software Engineering</div><div class="wg-s">Class test</div></div><div class="wg-when"><div class="wg-t">Sun</div><div class="wg-s">2:00 PM</div></div></div>
 </div>
-<div class="wg-foot wg-s"><span>8 classes · 2 deadlines</span><span style="color:var(--w-red);font-weight:600">1 overdue today</span></div>
+<div class="wg-foot wg-s"><span>6 classes · 4 deadlines</span><span style="color:var(--w-red);font-weight:600">2 overdue</span></div>
 </div>
 <div class="wg wg-m" data-wg-focus>
 <div class="wg-cap"><i style="background:var(--w-blue)"></i>Today's focus<span data-wg-left>5 left</span></div>
 <div class="wg-list">
-<div class="wg-row"><button class="wg-ck" aria-label="Tick off Q4 roadmap review deck"></button><span class="wg-t">Q4 roadmap review deck</span><span class="wg-chip">Yesterday</span></div>
-<div class="wg-row"><button class="wg-ck" aria-label="Tick off Expense report"></button><span class="wg-t">Expense report — September</span><span class="wg-chip">Today</span></div>
-<div class="wg-row"><button class="wg-ck" aria-label="Tick off DSA assignment 4"></button><span class="wg-t">Assignment · DSA linked lists</span><span class="wg-chip">Tomorrow</span></div>
+<div class="wg-row"><button class="wg-ck" aria-label="Tick off Sign off Q2 OKR document"></button><span class="wg-t">Sign off Q2 OKR document</span><span class="wg-chip">3d overdue</span></div>
+<div class="wg-row"><button class="wg-ck" aria-label="Tick off Prepare sprint demo"></button><span class="wg-t">Prepare sprint demo for stakeholders</span><span class="wg-chip">Today</span></div>
+<div class="wg-row"><button class="wg-ck" aria-label="Tick off DSA: Implement an AVL tree"></button><span class="wg-t">DSA: Implement an AVL tree</span><span class="wg-chip">Tomorrow</span></div>
 </div>
 </div>
 <div class="wg">
@@ -251,20 +204,20 @@
 </div>
 <div class="wg wg-exam">
 <div class="wg-cap">Next exam</div>
-<div style="margin-top:auto"><div class="wg-big" style="font-size:56px">6<span style="font-size:22px;font-weight:600;margin-left:2px">days</span></div>
-<div class="wg-t" style="margin-top:8px">Operating Systems</div><div class="wg-s">Midterm · Hall B</div></div>
+<div style="margin-top:auto"><div class="wg-big" style="font-size:56px">3<span style="font-size:22px;font-weight:600;margin-left:2px">days</span></div>
+<div class="wg-t" style="margin-top:8px">Software Engineering</div><div class="wg-s">Class test · Sun</div></div>
 </div>
 <div class="wg wg-m">
 <div class="wg-cap"><i style="background:var(--w-violet)"></i>Next classes<span>Today</span></div>
 <div class="wg-classes">
-<div class="wg-cl"><b>9:00 AM</b><span style="background:var(--w-violet)"></span><div><div class="wg-t">Operating Systems</div><div class="wg-s">CSE-301 · Rm 210</div></div></div>
-<div class="wg-cl"><b>11:00 AM</b><span style="background:var(--w-green)"></span><div><div class="wg-t">DSA Lab</div><div class="wg-s">CSE-204 · Lab 3</div></div></div>
+<div class="wg-cl"><b>10:30 AM</b><span style="background:var(--w-violet)"></span><div><div class="wg-t">Linear Algebra</div><div class="wg-s">MAT 2101 · Room 112</div></div></div>
+<div class="wg-cl"><b>2:00 PM</b><span style="background:var(--w-green)"></span><div><div class="wg-t">Database Systems</div><div class="wg-s">CSE 2103 · Lab 2</div></div></div>
 </div>
 </div>
 <div class="wg">
 <div class="wg-cap"><i style="background:var(--w-orange)"></i>Job Study</div>
-<div style="margin-top:auto"><div class="wg-big" style="color:var(--w-orange)">3</div><div class="wg-s" style="margin-top:4px">topics due for revision</div></div>
-<div style="margin-top:12px"><div class="wg-bar"><i style="width:75%;background:var(--w-orange)"></i></div><div class="wg-foot wg-s" style="margin-top:6px"><span>75% covered</span><span>1 today</span></div></div>
+<div style="margin-top:auto"><div class="wg-big" style="color:var(--w-orange)">6</div><div class="wg-s" style="margin-top:4px">topics due for revision</div></div>
+<div style="margin-top:12px"><div class="wg-bar"><i style="width:71%;background:var(--w-orange)"></i></div><div class="wg-foot wg-s" style="margin-top:6px"><span>71% covered</span><span>0 today</span></div></div>
 </div>
 <div class="wg">
 <div class="wg-cap"><i style="background:var(--w-violet)"></i>Capture</div>
@@ -272,76 +225,78 @@
 <div class="wg-qa"><span>Note</span><span>Todo</span></div>
 </div>
 <div class="wg wg-m">
-<div class="wg-cap"><i style="background:var(--w-green)"></i>Syllabus<span>45% overall</span></div>
+<div class="wg-cap"><i style="background:var(--w-green)"></i>Syllabus<span>47% overall</span></div>
 <div class="wg-sy">
-<div><span>Operating Systems</span><span>62%</span><div class="wg-bar"><i style="width:62%;background:var(--w-blue)"></i></div></div>
-<div><span>Linear Algebra</span><span>43%</span><div class="wg-bar"><i style="width:43%;background:var(--w-blue)"></i></div></div>
-<div><span>Signal Processing</span><span>31%</span><div class="wg-bar"><i style="width:31%;background:var(--w-blue)"></i></div></div>
+<div><span>Data Structures &amp; Algorithms</span><span>50%</span><div class="wg-bar"><i style="width:50%;background:var(--w-blue)"></i></div></div>
+<div><span>Database Systems</span><span>60%</span><div class="wg-bar"><i style="width:60%;background:var(--w-blue)"></i></div></div>
+<div><span>Linear Algebra</span><span>25%</span><div class="wg-bar"><i style="width:25%;background:var(--w-blue)"></i></div></div>
 </div>
 </div>
 <div class="wg wg-m">
-<div class="wg-cap"><i style="background:var(--w-orange)"></i>Revise next<span>English Literature</span></div>
+<div class="wg-cap"><i style="background:var(--w-orange)"></i>Revise next<span>System Design</span></div>
 <div class="wg-list">
-<div class="wg-row"><span class="wg-t">Romantic poets — Wordsworth</span><span class="wg-cnt">0×</span><button class="wg-plus" data-wg-plus aria-label="Log a revision">+</button></div>
-<div class="wg-row"><span class="wg-t">Victorian novel — Dickens</span><span class="wg-cnt">0×</span><button class="wg-plus" data-wg-plus aria-label="Log a revision">+</button></div>
-<div class="wg-row"><span class="wg-t">Modernism — Woolf &amp; Joyce</span><span class="wg-cnt">0×</span><button class="wg-plus" data-wg-plus aria-label="Log a revision">+</button></div>
+<div class="wg-row"><span class="wg-t">Rate limiter design</span><span class="wg-cnt">0×</span><button class="wg-plus" data-wg-plus aria-label="Log a revision">+</button></div>
+<div class="wg-row"><span class="wg-t">Distributed message queue</span><span class="wg-cnt">0×</span><button class="wg-plus" data-wg-plus aria-label="Log a revision">+</button></div>
+<div class="wg-row"><span class="wg-t">Load balancing basics</span><span class="wg-cnt">5×</span><button class="wg-plus" data-wg-plus aria-label="Log a revision">+</button></div>
 </div>
 </div>
 <div class="wg">
 <div class="wg-cap"><i style="background:var(--w-blue)"></i>Office</div>
 <div style="margin-top:auto"><div class="wg-big" style="color:var(--w-blue)">4</div><div class="wg-s" style="margin-top:4px">due or overdue</div></div>
-<div class="wg-foot" style="margin-top:12px"><span class="wg-chip">Oldest 1d</span></div>
+<div class="wg-foot" style="margin-top:12px"><span class="wg-chip">Oldest 3d</span></div>
 </div>
 </div>
 </div>
 </section>
 
-<section class="sec" id="mac" data-screen-label="Built for Mac">
+<section class="sec" id="mac">
 <div class="wrap">
 <div class="sec-head"><div class="eyebrow">Built for Mac</div><h2 class="h2">Feels like it shipped with your Mac.</h2><p class="lede">Real menus, real shortcuts, translucent sidebars and system appearance. MySelf behaves the way every good Mac app does — so there's nothing new to learn.</p></div>
 <div class="bento">
 <div class="bx s4"><h3>Quick Open. Anything, in a keystroke.</h3><p>Press ⌘K to jump to any page, note, task or topic — or ⌥⌘K to search MySelf from any app. Try it: type below and use the arrow keys.</p>
 <div class="qo-wrap"><div class="qo"><div class="qo-in"><span data-i="search" data-s="18"></span><input id="qoIn" placeholder="Search pages, notes, tasks…" autocomplete="off" aria-label="Search"><span class="kbd">esc</span></div><div class="qo-list" id="qoList"></div><div class="qo-foot"><span>↑↓ navigate</span><span>↵ open</span><span>esc close</span></div></div></div></div>
 <div class="bx s2"><h3>A real menu bar.</h3><p>File, View, Go and Window menus with the shortcuts you'd expect, plus a menu bar icon for quick adds.</p>
-<div class="mb"><div class="mb-bar"><span class="app">MySelf</span><span>File</span><span class="on">View</span><span>Go</span><span>Window</span></div>
-<div class="mb-menu"><div class="mi">Hide Sidebar<em>⌃⌘S</em></div><div class="msep"></div><div class="mi on"><span class="chk" data-i="check" data-s="12" data-w="2.4"></span>Light Appearance</div><div class="mi">Dark Appearance</div></div></div></div>
-<div class="bx s3"><h3>Light and Dark.</h3><p>Follows your system appearance, or pick Light or Dark yourself in View › Appearance.</p>
+<div class="mb"><div class="mb-bar"><span class="app">MySelf</span><span class="on">File</span><span>View</span><span>Go</span><span>Window</span></div>
+<div class="mb-menu"><div class="mi">New Todo<em>⌘N</em></div><div class="mi">New Office Task<em>⇧⌘N</em></div><div class="mi">New Note<em>⌥⌘N</em></div><div class="msep"></div><div class="mi on">Sync Now<em>⌘S</em></div></div></div></div>
+<div class="bx s2"><h3>Markdown, all the way.</h3><p>No toolbar to hunt through. Type it, or press / for the block menu. Help › Markdown Guidelines has the rest.</p>
+<div class="md"><b>#</b> Heading<br><b>-</b> List · <b>[ ]</b> Checklist<br><b>**</b>bold<b>**</b> · <b>`</b>code<b>`</b><br><b>$</b>x^2<b>$</b> math · <b>[[</b> link to a note</div></div>
+<div class="bx s2"><h3>Light and Dark.</h3><p>Follows your system appearance, or pick Light or Dark yourself.</p>
 <div class="appear">
-<button class="ap on" data-theme-btn="light"><span class="pv" style="background:#f5f5f7;color:#1d1d1f"><span class="a" style="background:#e8e8ed"><i></i><i></i><i></i><i></i></span><span class="b"><i style="background:#fff"></i><i style="background:#fff"></i><i style="background:#fff;width:60%"></i></span></span>Light</button>
+<button class="ap on" data-theme-btn="light"><span class="pv" style="background:#f7f5f1;color:#1d1d1f"><span class="a" style="background:#ebe7df"><i></i><i></i><i></i><i></i></span><span class="b"><i style="background:#fff"></i><i style="background:#fff"></i><i style="background:#fff;width:60%"></i></span></span>Light</button>
 <button class="ap" data-theme-btn="dark"><span class="pv" style="background:#1e1e20;color:#fff"><span class="a" style="background:#2c2c30"><i></i><i></i><i></i><i></i></span><span class="b"><i style="background:#2a2a2c"></i><i style="background:#2a2a2c"></i><i style="background:#2a2a2c;width:60%"></i></span></span>Dark</button>
 </div></div>
-<div class="bx s3"><h3>Your accent, everywhere.</h3><p>MySelf follows the accent colour you choose in System Settings, through selections, buttons and icons. Try one on this page.</p><div class="swatches" id="swatches" style="margin-top:auto"></div></div>
-<div class="bx s3" style="grid-column:1/-1"><h3>Hands on the keyboard.</h3><p>Every page has a shortcut, and history works like a browser.</p>
-<div class="keys"><div class="key">Quick Open<kbd>⌘K</kbd></div><div class="key">New Note<kbd>⌥⌘N</kbd></div><div class="key">Toggle Sidebar<kbd>⌃⌘S</kbd></div><div class="key">Settings<kbd>⌘,</kbd></div><div class="key">Back<kbd>⌘[</kbd></div><div class="key">Forward<kbd>⌘]</kbd></div><div class="key">Search from any app<kbd>⌥⌘K</kbd></div><div class="key">Reader mode<kbd>⇧⌘R</kbd></div><div class="key">Jump to page<kbd>⌘1–9</kbd></div></div></div>
+<div class="bx s2"><h3>Your accent, everywhere.</h3><p>MySelf follows the accent colour you choose in System Settings. Try one on this page.</p><div class="swatches" id="swatches" style="margin-top:auto"></div></div>
+<div class="bx s6"><h3>Hands on the keyboard.</h3><p>Every page has a shortcut, and history works like a browser.</p>
+<div class="keys"><div class="key">Quick Open<kbd>⌘K</kbd></div><div class="key">Search from any app<kbd>⌥⌘K</kbd></div><div class="key">New Todo<kbd>⌘N</kbd></div><div class="key">New Note<kbd>⌥⌘N</kbd></div><div class="key">Jump to page<kbd>⌘1–9</kbd></div><div class="key">Back<kbd>⌘[</kbd></div><div class="key">Forward<kbd>⌘]</kbd></div><div class="key">Reader mode<kbd>⇧⌘R</kbd></div><div class="key">Toggle Sidebar<kbd>⌃⌘S</kbd></div><div class="key">Settings<kbd>⌘,</kbd></div></div></div>
 </div>
 </div>
 </section>
 
-<section class="sec" id="icon" data-screen-label="Icon" style="background:var(--surface)">
+<section class="sec" id="icon" style="background:var(--surface)">
 <div class="wrap">
-<div class="sec-head c"><div class="eyebrow">App icon</div><h2 class="h2">At home in your Dock.</h2><p class="lede">The icon follows your system's Default, Dark, Clear and Tinted styles, and Tinted picks up your Mac's colour.</p></div>
+<div class="sec-head c"><div class="eyebrow">App icon</div><h2 class="h2">At home in your Dock.</h2><p class="lede">The new icon follows your Mac's Default, Dark, Clear and Tinted styles, and Tinted picks up your colour.</p></div>
 <div class="icons-row">
-<div class="ic-opt on"><span class="ic"><img src="icon.png" alt="Default icon"></span>Default</div>
-<div class="ic-opt"><span class="ic"><img src="icon-dark.png" alt="Dark icon"></span>Dark</div>
-<div class="ic-opt"><span class="ic clr"><img src="icon-clear.png" alt="Clear icon"></span>Clear</div>
-<div class="ic-opt"><span class="ic"><img src="icon-tinted.png" alt="Tinted icon"></span>Tinted</div>
+<div class="ic-opt"><span class="ic"><img src="icon.png" width="132" height="132" alt="Default icon"></span>Default</div>
+<div class="ic-opt"><span class="ic"><img src="icon-dark.png" width="132" height="132" alt="Dark icon"></span>Dark</div>
+<div class="ic-opt"><span class="ic clr"><img src="icon-clear.png" width="132" height="132" alt="Clear icon"></span>Clear</div>
+<div class="ic-opt"><span class="ic"><img src="icon-tinted.png" width="132" height="132" alt="Tinted icon"></span>Tinted</div>
 </div>
 </div>
 </section>
 
-<section class="sec" id="privacy" data-screen-label="Privacy">
+<section class="sec" id="privacy">
 <div class="wrap">
 <div class="sec-head"><div class="eyebrow">Privacy</div><h2 class="h2">It's about you. So it stays with you.</h2><p class="lede">Your tasks, classes and late-night notes are some of the most personal data you have. MySelf keeps all of it on your Mac and in your own iCloud account.</p></div>
 <div class="priv">
 <div class="pv-card"><span class="tile" data-i="lock" data-s="22"></span><h3>Your data, your iCloud</h3><p>Everything lives in a database on your Mac and syncs through your private iCloud database between your Macs. There's no MySelf server.</p></div>
 <div class="pv-card"><span class="tile" data-i="eye" data-s="22"></span><h3>No account, no tracking</h3><p>Open the app and start. No sign-up, no analytics, no ads. The Mac App Store version makes no requests of its own; the GitHub download only checks once a day for a newer version, which you can turn off.</p></div>
-<div class="pv-card"><span class="tile" data-i="wifi" data-s="22"></span><h3>Works offline</h3><p>On a plane, in a lecture hall with bad Wi-Fi — MySelf doesn't notice.</p></div>
-<div class="pv-card"><span class="tile" data-i="bolt" data-s="22"></span><h3>Instant, always</h3><p>No loading spinners. Your data is already on your Mac, so pages open without waiting on a server.</p></div>
+<div class="pv-card"><span class="tile" data-i="cloud" data-s="22"></span><h3>Sync when you say</h3><p>Leave sync automatic, or turn it off in Settings › iCloud and sync only when you choose File › Sync Now.</p></div>
+<div class="pv-card"><span class="tile" data-i="wifi" data-s="22"></span><h3>Works offline</h3><p>On a plane, in a lecture hall with bad Wi-Fi — MySelf doesn't notice. Pages open without waiting on a server.</p></div>
 </div>
 </div>
 </section>
 
-<section class="sec" id="download" data-screen-label="Requirements" style="padding-top:0">
+<section class="sec" id="download" style="padding-top:0">
 <div class="wrap">
 <div class="sec-head"><div class="eyebrow">Download</div><h2 class="h2" style="font-size:clamp(28px,3.6vw,40px)">What you need.</h2></div>
 <div class="specs">
@@ -355,39 +310,39 @@
 </div>
 </section>
 
-<section class="sec" id="faq" data-screen-label="FAQ" style="background:var(--surface)">
+<section class="sec" id="faq" style="background:var(--surface)">
 <div class="wrap">
 <div class="sec-head c"><div class="eyebrow">FAQ</div><h2 class="h2">Questions, answered.</h2></div>
 <div class="faq">
 <details open=""><summary>Do I need an account?<span data-i="plus" data-s="20"></span></summary><p>No. Download, open, and start using it. MySelf starts empty; to look around first, load the sample data from Settings.</p></details>
-<details><summary>Where is my data stored?<span data-i="plus" data-s="20"></span></summary><p>In a database on your Mac, synced through your private iCloud database to your other Macs on the same Apple Account, with nothing to set up. You can turn sync off in Settings › iCloud. MySelf never sends your data anywhere else.</p></details>
-<details><summary>Can I hide modules I don't use?<span data-i="plus" data-s="20"></span></summary><p>Yes. Not at university? Turn University off in Settings › Features and it disappears from the sidebar, the Dashboard, Quick Open and the Go menu.</p></details>
+<details><summary>Where is my data stored?<span data-i="plus" data-s="20"></span></summary><p>In a database on your Mac, synced through your private iCloud database to your other Macs on the same Apple Account, with nothing to set up. You can sync only when you choose, or turn iCloud off, in Settings › iCloud. MySelf never sends your data anywhere else.</p></details>
+<details><summary>Can I hide spaces I don't use?<span data-i="plus" data-s="20"></span></summary><p>Yes. Not at university? Turn University off in Settings › Features and it disappears from the sidebar, the Dashboard, Quick Open and the Go menu.</p></details>
 <details><summary>Does it support Bengali?<span data-i="plus" data-s="20"></span></summary><p>Notes are designed for বাংলা from the ground up, set in the system's SF Bangla with comfortable line spacing, alongside LaTeX and code blocks.</p></details>
+<details><summary>I'm updating from 1.x. Is my data safe?<span data-i="plus" data-s="20"></span></summary><p>Yes. 2.0 is a new look on the same data: your todos, notes, books and boards carry over as they are and keep syncing with your other Macs.</p></details>
 <details><summary>Is there an iPhone or Windows version?<span data-i="plus" data-s="20"></span></summary><p>MySelf is built for the Mac. There's no iPhone, iPad or Windows release, and sync works between Macs only.</p></details>
 <details><summary>Mac App Store or the DMG?<span data-i="plus" data-s="20"></span></summary><p>They're the same app and sync the same data through iCloud. The Mac App Store version updates itself. The DMG from GitHub checks for a new release once a day and links it, and also shows Workout, which is still in progress.</p></details>
-<details><summary>Why does macOS say it can't verify MySelf?<span data-i="plus" data-s="20"></span></summary><p>Versions up to 1.3.1 weren't notarized by Apple, so macOS blocks them. Download the latest version, which is signed and notarized and opens without a warning.</p></details>
-<details><summary>Is Workout available?<span data-i="plus" data-s="20"></span></summary><p>Not yet. Workout is coming soon; its page is in the sidebar but doesn't save anything yet.</p></details>
+<details><summary>Is Workout available?<span data-i="plus" data-s="20"></span></summary><p>Not yet. Workout is coming soon; in the DMG its page is in the sidebar but doesn't save anything yet.</p></details>
 </div>
 </div>
 </section>
 
-<section class="sec" data-screen-label="Final CTA">
+<section class="sec">
 <div class="wrap">
-<div class="cta"><img src="icon.png" alt=""><h2>Meet yourself, organized.</h2><p>One sidebar, zero accounts. Free and open source for macOS.</p><div class="hero-cta"><a class="store" href="https://apps.apple.com/us/app/myself-todos-notes-study/id6829809152"><img src="mac-app-store-badge.svg" alt="Download on the Mac App Store" width="172" height="44"></a></div><div class="hero-meta">macOS 26 or later · Apple silicon and Intel</div></div>
+<div class="cta"><img src="icon.png" width="120" height="120" alt=""><h2>Meet yourself, organized.</h2><p>One sidebar, zero accounts. Free and open source for macOS.</p><div class="hero-cta"><a class="store" href="https://apps.apple.com/us/app/myself-todos-notes-study/id6829809152"><img src="mac-app-store-badge.svg" alt="Download on the Mac App Store" width="172" height="44"></a><a class="btn sec2" href="https://github.com/Ok9xNirab/myself/releases/latest"><span data-i="download" data-s="18"></span>Download the DMG</a></div><div class="hero-meta">macOS 26 or later · Apple silicon and Intel</div></div>
 </div>
 </section>
 
 <footer><div class="wrap">
 <div class="f-grid">
 <div class="about"><a class="brand" href="#top"><img src="icon.png" alt="">MySelf</a><p>A personal operating system for students, makers and anyone holding too many things at once.</p></div>
-<div><h4>Product</h4><ul><li><a href="#modules">Modules</a></li><li><a href="#notes">Notes</a></li><li><a href="#f-books">Book Notes</a></li><li><a href="#widgets">Widgets</a></li><li><a href="#icon">Icon</a></li><li><a href="#download">Download</a></li></ul></div>
+<div><h4>Product</h4><ul><li><a href="#new">What's new</a></li><li><a href="#modules">Spaces</a></li><li><a href="#notes">Notes</a></li><li><a href="#themes">Themes</a></li><li><a href="#widgets">Widgets</a></li><li><a href="#download">Download</a></li></ul></div>
 <div><h4>Learn</h4><ul><li><a href="#mac">Keyboard shortcuts</a></li><li><a href="#faq">FAQ</a></li><li><a href="https://github.com/Ok9xNirab/myself/releases">Release notes</a></li></ul></div>
 <div><h4>Project</h4><ul><li><a href="https://github.com/Ok9xNirab/myself">Source code</a></li><li><a href="https://github.com/Ok9xNirab/myself/issues">Report an issue</a></li><li><a href="#privacy">Privacy</a></li><li><a href="privacy.html">Privacy policy</a></li></ul></div>
 </div>
 <div class="f-bot"><span>© 2026 Istiaq Nirab · MIT License</span><span>Apple, the Apple logo and Mac are trademarks of Apple Inc., registered in the U.S. and other countries. App Store is a service mark of Apple Inc., registered in the U.S. and other countries.</span></div>
 </div></footer>
 
-<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<dialog class="zoom" id="zoom"><img alt=""></dialog>
 <script src="landing.js"></script>
 </body>
 </html>
