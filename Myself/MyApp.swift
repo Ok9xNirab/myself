@@ -29,6 +29,7 @@ import SwiftUI
             #endif
             SidebarCommands()
             CommandGroup(replacing: .newItem) { NewItemCommands(store: store) }
+            CommandGroup(after: .saveItem) { SyncCommands(store: store) }
             CommandGroup(after: .toolbar) {
                 Picker("Appearance", selection: $appearance) {
                     Text("System").tag("")
@@ -118,6 +119,19 @@ private struct NewItemCommands: View {
         }
         Button("Quick Open…") { store.isQuickOpenPresented = true }
             .keyboardShortcut("k")
+    }
+}
+
+/// Sync Now (⌘S), shown when Settings › iCloud › Sync automatically is off.
+private struct SyncCommands: View {
+    var store: AppStore
+
+    var body: some View {
+        if store.sync.isManual {
+            Button("Sync Now", action: store.syncNow)
+                .keyboardShortcut("s")
+                .disabled(store.sync.isManualSyncing)
+        }
     }
 }
 

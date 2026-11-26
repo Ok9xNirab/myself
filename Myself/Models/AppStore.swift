@@ -193,6 +193,9 @@ final class AppStore {
 
 
     let sync = CloudStore()
+    /// The small message at the bottom of the main window ("iCloud synced"); `showToast` sets it.
+    private(set) var toast: Toast?
+    @ObservationIgnored private var toastDismiss: Task<Void, Never>?
     /// Last appearance/feature snapshot pushed to or pulled from iCloud key-value storage.
     @ObservationIgnored private var syncedSettings: SyncedSettings?
     @ObservationIgnored private var applyingRemoteSettings = false
@@ -1373,6 +1376,45 @@ final class AppStore {
         sync.setCloudEnabled(on)
         syncedSettings = nil
         reloadSynced()
+    }
+
+    /// Settings › iCloud › Sync automatically. Off, data syncs only when the user picks Sync Now (⌘S).
+    func setAutoSync(_ on: Bool) {
+        saveTypedText()
+        sync.setAutoSync(on)
+        reloadSynced()
+    }
+
+    /// Sync Now (⌘S), when automatic sync is off: writes pending typing, syncs with iCloud, then reloads.
+    func syncNow() {
+        guard sync.isManual, !sync.isManualSyncing else { return }
+        saveTypedText()
+        showToast(Toast(text: "Syncing with iCloud\u{2026}", systemImage: "arrow.triangle.2.circlepath.icloud", isProgress: true), for: nil)
+        Task {
+            let failure = await sync.syncNow { [weak self] in
+                guard let self else { return }
+                reloadSynced()
+                pushSettings()
+            }
+            reloadSynced()
+            if let failure {
+                showToast(Toast(text: failure, systemImage: "exclamationmark.icloud", isError: true), for: .seconds(5))
+            } else {
+                showToast(Toast(text: "iCloud synced", systemImage: "checkmark.icloud"), for: .seconds(2))
+            }
+        }
+    }
+
+    /// Shows a toast; it hides after `duration`, or stays until the next one when that's nil.
+    func showToast(_ toast: Toast, for duration: Duration?) {
+        toastDismiss?.cancel()
+        self.toast = toast
+        guard let duration else { return }
+        toastDismiss = Task { [weak self] in
+            try? await Task.sleep(for: duration)
+            guard !Task.isCancelled else { return }
+            self?.toast = nil
+        }
     }
 
     /// Imports the pre-CloudKit local folder (`Application Support/<bundle id>/`) the first time this version runs.

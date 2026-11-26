@@ -281,8 +281,18 @@ private struct ICloudSettings: View {
                 }
                 .toggleStyle(.switch)
 
+                Toggle(isOn: Binding(get: { sync.isAutoSync }, set: { on in withAnimation { store.setAutoSync(on) } })) {
+                    Text("Sync automatically")
+                    Text("When off, changes sync only when you choose File \u{203A} Sync Now (\u{2318}S).")
+                }
+                .toggleStyle(.switch)
+                .disabled(!sync.isCloudEnabled || sync.isManualSyncing)
+
                 LabeledContent {
-                    EmptyView()
+                    if sync.isManual {
+                        Button("Sync Now", action: store.syncNow)
+                            .disabled(sync.isManualSyncing)
+                    }
                 } label: {
                     HStack(spacing: 6) {
                         Circle().fill(sync.status.color).frame(width: 7, height: 7)
@@ -311,7 +321,7 @@ private struct ICloudSettings: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .toggleStyle(.switch)
-            .disabled(!sync.usesCloud)
+            .disabled(!sync.usesCloud && !sync.isManual)
 
             Section {
                 LabeledContent {
@@ -363,6 +373,7 @@ private struct ICloudSettings: View {
         case .noAccount: "Not signed in to iCloud"
         case .syncing: "Syncing\u{2026}"
         case .upToDate: "Up to date"
+        case .manual: "Syncs when you press \u{2318}S"
         case .failed: "Sync problem"
         }
     }
@@ -372,8 +383,8 @@ private struct ICloudSettings: View {
         case .local: return "Data stays on this device."
         case .noAccount: return "Sign in to iCloud in System Settings to sync. Until then, changes are saved on this device."
         case .failed(let message): return message
-        case .syncing, .upToDate:
-            guard let date = sync.lastSynced else { return "Waiting for iCloud" }
+        case .syncing, .upToDate, .manual:
+            guard let date = sync.lastSynced else { return sync.status == .manual ? "Not synced yet" : "Waiting for iCloud" }
             if now.timeIntervalSince(date) < 45 { return "Last synced just now" }
             return "Last synced " + RelativeDateTimeFormatter().localizedString(for: date, relativeTo: now)
         }

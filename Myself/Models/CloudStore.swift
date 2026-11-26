@@ -21,6 +21,8 @@ struct SyncedSettings: Codable, Equatable {
 final class CloudStore {
     enum Status: Equatable {
         case local, noAccount, syncing, upToDate
+        /// Sync is on but not automatic: nothing reaches iCloud until the user syncs (⌘S).
+        case manual
         case failed(String)
     }
 
@@ -32,6 +34,13 @@ final class CloudStore {
     private(set) var lastSynced: Date?
     /// Settings › iCloud › Sync with iCloud.
     private(set) var isCloudEnabled: Bool
+    /// Settings › iCloud › Sync automatically. When off, the store runs locally and is mirrored to CloudKit only
+    /// while a manual sync (`syncNow`) runs.
+    private(set) var isAutoSync: Bool
+    /// True while `syncNow` has the store mirrored to CloudKit.
+    private(set) var isManualSyncing = false
+    /// Sync is on and waits for the user to start it.
+    var isManual: Bool { isCloudEnabled && !isAutoSync }
     /// True while the store is mirrored to CloudKit: sync is on and the build is signed for iCloud.
     private(set) var usesCloud = false
 
@@ -48,6 +57,9 @@ final class CloudStore {
     @ObservationIgnored private var inFlight: Set<UUID> = []
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
+    /// For `syncNow`: whether an import finished since the container opened, and when the last event arrived.
+    @ObservationIgnored private var sawImport = false
+    @ObservationIgnored private var lastEventAt = Date.distantPast
 
     /// The key-value store has no Development environment, so test builds keep their settings under their own key.
     private static let settingsKey = SharedStore.scoped("settings")
@@ -60,6 +72,7 @@ final class CloudStore {
         url = Self.storeURL
         let defaults = UserDefaults.standard
         isCloudEnabled = defaults.object(forKey: PrefKey.iCloudSync) as? Bool ?? true
+        isAutoSync = defaults.object(forKey: PrefKey.autoSync) as? Bool ?? true
         let last = defaults.double(forKey: PrefKey.lastSynced)
         lastSynced = last > 0 ? Date(timeIntervalSince1970: last) : nil
         openContainer()
@@ -71,6 +84,7 @@ final class CloudStore {
     init(testStoreAt url: URL) {
         self.url = url
         isCloudEnabled = false
+        isAutoSync = true
         openContainer()
     }
     #endif
@@ -97,7 +111,8 @@ final class CloudStore {
         index = [:]
         inFlight = []
         syncError = nil
-        let cloud = isCloudEnabled && Self.canUseCloudKit
+        sawImport = false
+        let cloud = isCloudEnabled && Self.canUseCloudKit && (isAutoSync || isManualSyncing)
         func make(_ cloud: Bool) throws -> ModelContainer {
             let configuration = ModelConfiguration("MySelf", schema: cloudSchema, url: url,
                                                    cloudKitDatabase: cloud ? .private(Self.containerID) : .none)
@@ -119,7 +134,7 @@ final class CloudStore {
             }
         }
         if opened, url == Self.storeURL, SharedStore.markStoreOpened() { WidgetRefresh.schedule() }
-        if isCloudEnabled, !cloud, syncError == nil {
+        if isCloudEnabled, !Self.canUseCloudKit, syncError == nil {
             syncError = "This copy of MySelf isn\u{2019}t signed for iCloud, so changes stay on this device."
         }
         newContext()
@@ -139,6 +154,45 @@ final class CloudStore {
         isCloudEnabled = on
         UserDefaults.standard.set(on, forKey: PrefKey.iCloudSync)
         openContainer()
+    }
+
+    func setAutoSync(_ on: Bool) {
+        guard on != isAutoSync, !isManualSyncing else { return }
+        save()
+        isAutoSync = on
+        UserDefaults.standard.set(on, forKey: PrefKey.autoSync)
+        if isCloudEnabled { openContainer() }
+    }
+
+    /// A manual sync: mirrors the store to CloudKit until its setup, import and export have finished and nothing
+    /// has happened for a few seconds, calls `whileConnected` (reload the store, push settings) and goes back to the
+    /// local store. Returns an error message, or nil when it synced.
+    func syncNow(whileConnected: () -> Void) async -> String? {
+        guard isManual, !isManualSyncing else { return nil }
+        guard Self.canUseCloudKit else { return "This copy of MySelf isn\u{2019}t signed for iCloud." }
+        save()
+        isManualSyncing = true
+        openContainer()
+        let start = Date.now
+        var failure: String?
+        while true {
+            try? await Task.sleep(for: .milliseconds(500))
+            if !accountAvailable { failure = "Sign in to iCloud in System Settings to sync."; break }
+            if let syncError { failure = syncError; break }
+            let quiet = Date.now.timeIntervalSince(lastEventAt) > 3
+            if sawImport, inFlight.isEmpty, quiet { break }
+            if Date.now.timeIntervalSince(start) > 120 {
+                failure = "iCloud didn\u{2019}t finish in time. Try again in a moment."
+                break
+            }
+        }
+        if failure == nil { whileConnected() }
+        save()
+        isManualSyncing = false
+        openContainer()
+        // Keep the reason visible in Settings › iCloud until the next sync.
+        if let failure { syncError = failure; updateStatus() }
+        return failure
     }
 
     // MARK: Reading
@@ -352,6 +406,7 @@ final class CloudStore {
 
     private func handle(_ event: NSPersistentCloudKitContainer.Event) {
         guard usesCloud else { return }
+        lastEventAt = .now
         if event.endDate == nil {
             inFlight.insert(event.identifier)
         } else {
@@ -365,6 +420,7 @@ final class CloudStore {
                     UserDefaults.standard.set(end.timeIntervalSince1970, forKey: PrefKey.lastSynced)
                 }
                 if event.type == .import {
+                    sawImport = true
                     scheduleReload()
                     WidgetRefresh.schedule()
                 }
@@ -419,9 +475,11 @@ final class CloudStore {
             .local
         } else if usesCloud, !accountAvailable {
             .noAccount
+        } else if isManual, !isManualSyncing, syncError == nil {
+            .manual
         } else if let syncError {
             .failed(syncError)
-        } else if !inFlight.isEmpty {
+        } else if !inFlight.isEmpty || isManualSyncing {
             .syncing
         } else {
             .upToDate
@@ -437,6 +495,7 @@ extension CloudStore.Status {
         case .noAccount: "Not signed in to iCloud"
         case .syncing: "Syncing\u{2026}"
         case .upToDate: "Synced with iCloud"
+        case .manual: "Manual sync"
         case .failed: "Sync problem"
         }
     }
@@ -446,13 +505,13 @@ extension CloudStore.Status {
         case .local: "desktopcomputer"
         case .noAccount, .failed: "exclamationmark.icloud"
         case .syncing: "arrow.triangle.2.circlepath.icloud"
-        case .upToDate: "icloud"
+        case .upToDate, .manual: "icloud"
         }
     }
 
     var color: Color {
         switch self {
-        case .local: Palette.ink3
+        case .local, .manual: Palette.ink3
         case .noAccount, .syncing: Palette.amber
         case .upToDate: Palette.green
         case .failed: Palette.red

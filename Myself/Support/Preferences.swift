@@ -9,6 +9,7 @@ enum PrefKey {
     static let themeAppearance = "themeAppearance" // ThemeAppearance raw value: match the system, or let the theme decide
     static let paperWidth = "paperWidth"          // PaperWidth raw value
     static let iCloudSync = "iCloudSync"
+    static let autoSync = "iCloudAutoSync"        // off: sync only on ⌘S (Sync Now)
     static let syncFeatures = "syncFeatureVisibility"
     static let syncAppearance = "syncAppearance"
     static let menuBarIcon = "showMenuBarIcon"

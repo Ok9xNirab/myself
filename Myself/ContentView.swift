@@ -61,6 +61,7 @@ struct ContentView: View {
             if scenePhase == .active { store.reloadSynced() } else { store.saveTypedText() }
         }
         .overlay { QuickOpenOverlay() }
+        .overlay(alignment: .bottom) { ToastOverlay() }
         // Widget links (`myself://todos`, `myself://notes/new`, …) go to this window rather than a new one.
         .onOpenURL { url in
             if let link = DeepLink(url) { store.open(link) }
@@ -220,37 +221,16 @@ private struct Sidebar: View {
         return count > 0 ? "\(count)" : nil
     }
 
-    /// iCloud sync status; clicking it opens Settings › iCloud.
+    /// iCloud sync status and the Settings button.
     private var footer: some View {
         let sync = store.sync
         return HStack(spacing: 9) {
-            Button { store.openSettings(.iCloud) } label: {
-                HStack(spacing: 9) {
-                    Image(systemName: sync.status.systemImage)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 30, height: 30)
-                        .background(LinearGradient(colors: [Color(hex: 0x5E8BFF), Color(hex: 0xA35BD8)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                                    in: Circle())
-                        .overlay(Circle().strokeBorder(Palette.surface, lineWidth: 2))
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(sync.status.title).font(.system(size: 13, weight: .semibold))
-                        TimelineView(.periodic(from: .now, by: 30)) { context in
-                            HStack(spacing: 5) {
-                                Circle().fill(sync.status.color).frame(width: 6, height: 6)
-                                Text(detail(sync, now: context.date))
-                            }
-                            .font(.system(size: 11))
-                            .foregroundStyle(Palette.ink2)
-                        }
-                    }
-                    .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
+            // With manual sync the status is hidden: Sync Now (⌘S) reports through a toast instead.
+            if sync.isManual {
+                Spacer()
+            } else {
+                status(sync)
             }
-            .buttonStyle(.plain)
-            .help("iCloud settings")
             Button("Settings", systemImage: "gearshape") { store.openSettings(.appearance) }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
@@ -264,9 +244,41 @@ private struct Sidebar: View {
         .overlay(alignment: .top) { Rectangle().fill(Color.primary.opacity(0.07)).frame(height: 0.5).padding(.horizontal, 10) }
     }
 
+    /// iCloud sync status; clicking it opens Settings › iCloud.
+    private func status(_ sync: CloudStore) -> some View {
+        Button { store.openSettings(.iCloud) } label: {
+            HStack(spacing: 9) {
+                Image(systemName: sync.status.systemImage)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 30, height: 30)
+                    .background(LinearGradient(colors: [Color(hex: 0x5E8BFF), Color(hex: 0xA35BD8)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                                in: Circle())
+                    .overlay(Circle().strokeBorder(Palette.surface, lineWidth: 2))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(sync.status.title).font(.system(size: 13, weight: .semibold))
+                    TimelineView(.periodic(from: .now, by: 30)) { context in
+                        HStack(spacing: 5) {
+                            Circle().fill(sync.status.color).frame(width: 6, height: 6)
+                            Text(detail(sync, now: context.date))
+                        }
+                        .font(.system(size: 11))
+                        .foregroundStyle(Palette.ink2)
+                    }
+                }
+                .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("iCloud settings")
+    }
+
     private func detail(_ sync: CloudStore, now: Date) -> String {
         switch sync.status {
         case .local: return "Turn on in Settings"
+        case .manual: return "Press \u{2318}S to sync"
         case .noAccount: return "Sign in to sync"
         case .failed: return "Click for details"
         case .syncing, .upToDate:
